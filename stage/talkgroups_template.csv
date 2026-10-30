@@ -1,0 +1,4 @@
+Decimal,Hex,Alpha Tag,Mode,Description,Tag,Category
+1001,3E9,EXAMPLE Disp,D,Example row - replace with your system,Law Dispatch,Example County Sheriff
+1002,3EA,EXAMPLE Fire,D,Example row - replace with your system,Fire Dispatch,Example County Fire
+1003,3EB,EXAMPLE Tac Enc,DE,Example encrypted row,Law Tac,Example County Sheriff

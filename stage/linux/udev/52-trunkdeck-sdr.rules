@@ -1,0 +1,8 @@
+# TrunkDeck: let logged-in users open SDR receivers without root.
+# Airspy R2 / Airspy Mini
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="60a1", MODE="0666", TAG+="uaccess"
+# RTL-SDR dongles (RTL2832U / RTL2838 - covers RTL-SDR Blog V3/V4, NooElec, generic)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="2838", MODE="0666", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="2832", MODE="0666", TAG+="uaccess"
+# HackRF One (not used by TrunkDeck yet; harmless)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="6089", MODE="0666", TAG+="uaccess"

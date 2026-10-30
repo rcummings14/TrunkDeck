@@ -1,0 +1,21 @@
+TRUNKDECK 1.5.0 - P25 Phase 1 and Phase 2 trunking monitor
+==========================================================
+
+WINDOWS:  open the "windows" folder and double-click Install.bat
+LINUX:    open a terminal in the "linux" folder and run:  ./install.sh
+
+Then start TrunkDeck from the Start Menu / app menu or the Desktop icon.
+Full step-by-step guide (drivers, first start, CSV import, streaming): README.md
+
+NEW IN 1.5.0: DISPLAY ONLY. The "Display only" button in the header (or Ctrl+D) shrinks the window to just the big
+scanner display - all its colours, the backlight on calls and the SCANNING ticker included. Resize it and the display
+grows with it; drag it by the display. Double-click it (or Esc, Ctrl+D) for the full window again; right-click it for
+Full window, Always on top, Mute speaker, Minimize to tray and Quit. Its size, place and Always on top are remembered.
+Monitoring, the speaker, recordings, feeds and uploads keep running the whole time (nothing restarts).
+Monitor page -> Listening: "Close (X)" and "Minimize" can each be Normal, System tray or Display only (defaults as
+before: X -> System tray, Minimize -> Taskbar). The tray icon's menu has "Display only" too. Without a system tray
+"System tray" is greyed out, Display only still works.
+NEW DISPLAY COLOUR: Colors... -> Frame -> "Display border" colours the frame around the display (or None); Standard
+(the default) is the frame as before.
+
+The full manual is README.md (next to this file). Older release notes: the GitHub release history.

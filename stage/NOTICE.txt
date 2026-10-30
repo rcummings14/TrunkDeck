@@ -1,0 +1,34 @@
+TrunkDeck
+=========
+Copyright (c) 2026 TrunkDeck contributors. Licensed under the MIT License: licenses/TrunkDeck-LICENSE.txt.
+
+TrunkDeck's own code (the window, the P25 engine, the SDR drivers) is MIT-licensed. It was written from the published
+TIA-102 (APCO Project 25) standards:
+  TIA-102.BAAA-A  FDMA Common Air Interface (NID BCH code, trellis code and interleaver, Golay / Hamming / Reed-Solomon codes)
+  TIA-102.BAAC-A  CAI Reserved Values (Data Unit IDs and NID parity bits)
+  TIA-102.AABC    Trunking control channel messages
+  TIA-102.BBAB / TIA-102.BBAC / TIA-102.BBAC-1  Phase 2 TDMA physical and MAC layers (DUID and I-ISCH codes, RS(63,35)
+                  mother code, CRC-12, scrambling sequence, MAC messages)
+The error-correction and coding tables are built from these definitions when the program starts
+(source/src/p25monitor/p25/CodeTables.java). Each table names the standard section it comes from, and
+source/test/p25monitor/p25/CodeTablesTests.java checks them against the values printed in the standards.
+
+Third-party software
+--------------------
+The full list, with licence texts, is in licenses/THIRD-PARTY.txt. In short:
+
+* Bundled, unmodified, as separate libraries:
+  - FlatLaf (Apache-2.0).
+  - librtlsdr, RTL-SDR Blog v1.3.6 (GPL-2.0-or-later): app/native. Source in source/third-party.
+  - libusb 1.0.27 (LGPL-2.1-or-later): app/native/windows-x64/libusb-1.0.dll, a separate DLL loaded at run time that
+    you may replace with your own build. On Linux the system libusb is used. Source in source/third-party.
+  - java-lame (LGPL-3.0): source in source/third-party.
+  - JTransforms and JLargeArrays (BSD-2-Clause), Apache Commons Math (Apache-2.0), SLF4J API (MIT).
+* Not included; built on your computer only if you ask for voice:
+  - JMBE (GPL-3.0, https://github.com/DSheirer/jmbe). TrunkDeck downloads its source code and compiles it on your
+    computer, or uses a JMBE jar you choose. The IMBE and AMBE+2 vocoders it implements are subject to patents held by
+    Digital Voice Systems, Inc.
+* Downloaded by the installer: Eclipse Temurin JDK (GPL-2.0 with the Classpath Exception).
+* Reference only, no code included:
+  - libairspy / airspyone_host (BSD-3-Clause): the USB protocol reference for TrunkDeck's own Airspy driver. Its
+    gain-preset tables are used, with its copyright notice in licenses/airspyone_host-BSD-3-Clause.txt.
