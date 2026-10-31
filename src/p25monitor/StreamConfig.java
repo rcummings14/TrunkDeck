@@ -53,6 +53,24 @@ public class StreamConfig {
      */
     public int feedRate = 16000;
     public static final int[] FEED_RATES = {16000, 22050, 24000, 11025, 8000};
+    /**
+     * Feeds (1.5.1): "now playing" tags. When a call starts playing on the feed, its talkgroup (and optionally radio) is sent
+     * to the server as the stream title (Icecast /admin/metadata, a separate short request: the audio connection is never
+     * touched). Applies live, without reconnecting.
+     */
+    public boolean sendTags = true;
+    public enum TagFormat {
+        TG_NAME("Talkgroup name"), TG_NAME_RADIO("Talkgroup name + radio name"), TG_ID_NAME("Talkgroup ID + name"), CUSTOM("Custom\u2026");
+        public final String label;
+        TagFormat(String l) { label = l; }
+        @Override public String toString() { return label; }
+    }
+    public TagFormat tagFormat = TagFormat.TG_NAME;
+    /** Custom format: {tg} {tgname} {radio} {radioname} {group} {tag}. */
+    public static final String DEFAULT_TAG_TEMPLATE = "{tg} {tgname} - {radioname}";
+    public String tagTemplate = DEFAULT_TAG_TEMPLATE;
+    /** Sent when no call has played for a few seconds (e.g. "Scanning..."); empty = the last call's tag stays. */
+    public String tagIdle = "";
 
     /** A copy: the running streams work on copies, the Streams page edits the originals (1.4.4). */
     public StreamConfig copy() {
@@ -62,6 +80,7 @@ public class StreamConfig {
         s.rdioServer = rdioServer; s.sendTalkgroupNames = sendTalkgroupNames;
         s.host = host; s.port = port; s.mount = mount; s.password = password; s.feedId = feedId; s.userName = userName;
         s.bitrate = bitrate; s.delay = delay; s.feedRate = feedRate;
+        s.sendTags = sendTags; s.tagFormat = tagFormat; s.tagTemplate = tagTemplate; s.tagIdle = tagIdle;
         return s;
     }
 
@@ -123,6 +142,10 @@ public class StreamConfig {
             s.delay = parse(p.getProperty(k + "delay"), 0);
             s.feedRate = parse(p.getProperty(k + "feedRate"), 16000);
             if (Arrays.stream(FEED_RATES).noneMatch(r -> r == s.feedRate)) s.feedRate = 16000;
+            s.sendTags = Boolean.parseBoolean(p.getProperty(k + "sendTags", "true"));   // existing feeds: on (1.5.1)
+            try { s.tagFormat = TagFormat.valueOf(p.getProperty(k + "tagFormat", s.tagFormat.name())); } catch (Exception ignored) {}
+            s.tagTemplate = p.getProperty(k + "tagTemplate", DEFAULT_TAG_TEMPLATE);
+            s.tagIdle = p.getProperty(k + "tagIdle", "");
             l.add(s);
         }
         return l;
@@ -156,6 +179,12 @@ public class StreamConfig {
             p.setProperty(k + "bitrate", String.valueOf(s.bitrate));
             p.setProperty(k + "delay", String.valueOf(s.delay));
             p.setProperty(k + "feedRate", String.valueOf(s.feedRate));
+            if (!s.type.perCall()) {
+                p.setProperty(k + "sendTags", String.valueOf(s.sendTags));
+                p.setProperty(k + "tagFormat", s.tagFormat.name());
+                p.setProperty(k + "tagTemplate", s.tagTemplate);
+                p.setProperty(k + "tagIdle", s.tagIdle);
+            }
         }
         Files.createDirectories(file.toAbsolutePath().getParent());
         try (Writer w = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) { p.store(w, "TrunkDeck streams - contains secrets, keep private"); }

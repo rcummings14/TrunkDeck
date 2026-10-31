@@ -1,4 +1,4 @@
-TrunkDeck 1.5.0 - third-party components
+TrunkDeck 1.5.1 - third-party components
 =========================================
 
 Bundled in this zip

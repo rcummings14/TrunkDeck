@@ -30,6 +30,11 @@ public final class Streaming {
     volatile CallMixer.Mode feedMode;
     /** A queued call that would start more than this late is dropped from the feed (it is still recorded/uploaded). */
     volatile long maxDelayMs;
+    /** Radio names for the feeds' now-playing tags (1.5.1). */
+    volatile java.util.function.IntFunction<String> feedRadioName = id -> "";
+    /** What each call's now-playing tag is made from (talkgroup, radio), by call id; kept a while after the call ends, since a feed may play it later. */
+    final Map<Long, FeedTags.CallInfo> callInfo = new ConcurrentHashMap<>();
+    static final long CALL_INFO_KEEP_MS = 10 * 60_000;
     /** Test hook: (feed name, talkgroups in this 100 ms block) for every block sent to a feed. */
     public volatile java.util.function.BiConsumer<String, int[]> feedTap;
 
@@ -143,8 +148,35 @@ public final class Streaming {
     public synchronized void stop() { started = false; for (Feed f : feeds) f.stop(); for (BroadcastifyCalls c : calls) c.stop(); for (OpenMhzUploader o : openmhz) o.stop(); for (RdioScannerUploader r : rdio) r.stop(); }
 
     /** Live audio of one call (8 kHz). Every call has its own queue in each feed that wants its talkgroup. */
-    public void audio(long callId, p25monitor.Talkgroup t, int tg, float[] s, int n) {
-        for (Feed f : feeds) if (wants(f.cfg, t)) f.mixer.push(callId, tg, s, n);
+    public void audio(long callId, p25monitor.Talkgroup t, int tg, float[] s, int n) { audio(callId, t, tg, -1, s, n); }
+
+    /** The same with the radio heard (src, -1 = not known yet), for the feeds' now-playing tags. */
+    public void audio(long callId, p25monitor.Talkgroup t, int tg, int src, float[] s, int n) {
+        boolean any = false;
+        for (Feed f : feeds) if (wants(f.cfg, t)) { f.mixer.push(callId, tg, s, n); any = true; }
+        if (any) noteCall(callId, t, tg, src);
+    }
+
+    /** Keeps the call's talkgroup / radio for the tag; tells the feeds when the radio becomes known. Cheap when nothing changed. */
+    void noteCall(long callId, p25monitor.Talkgroup t, int tg, int src) {
+        FeedTags.CallInfo ci = callInfo.get(callId);
+        if (ci == null) {
+            if (callInfo.size() > 256) { long old = System.currentTimeMillis() - CALL_INFO_KEEP_MS; callInfo.values().removeIf(x -> x.at < old); }
+            callInfo.put(callId, new FeedTags.CallInfo(tg, t, src));
+        } else if (src > 0 && ci.src != src) {
+            boolean first = ci.src <= 0;
+            ci.src = src;
+            if (first) for (Feed f : feeds) f.tags.radioKnown(callId, ci);
+        }
+    }
+
+    /** Radio names for the feeds' now-playing tags. */
+    public void feedRadioNames(java.util.function.IntFunction<String> f) { feedRadioName = f == null ? id -> "" : f; }
+
+    /** Send test tag: a test title on the running feed with this name; null if no such feed is running. */
+    public java.util.concurrent.CompletableFuture<String> testTag(String feedName, String text) {
+        for (Feed f : feeds) if (f.cfg.name.equals(feedName)) return f.tags.test(text);
+        return null;
     }
 
     /** Back-compatible single-call form. */
@@ -196,7 +228,8 @@ public final class Streaming {
         for (Feed f : feeds) {
             int[] on = f.mixer.lastTalkgroups();
             s.add(f.cfg.name + ": " + f.describe() + (on.length > 0 && f.onAir() ? "  ON AIR TG " + Arrays.toString(on).replaceAll("[\\[\\]]", "") : "")
-                    + (f.mixer.calls() > 1 ? "  (" + (f.mixer.calls() - 1) + " queued)" : "") + (f.mixer.droppedCalls > 0 ? "  " + f.mixer.droppedCalls + " late calls skipped" : ""));
+                    + (f.mixer.calls() > 1 ? "  (" + (f.mixer.calls() - 1) + " queued)" : "") + (f.mixer.droppedCalls > 0 ? "  " + f.mixer.droppedCalls + " late calls skipped" : "")
+                    + "  \u00b7 " + f.tags.describe());
         }
         for (BroadcastifyCalls c : calls) s.add(c.cfg.name + ": Broadcastify Calls " + c.status());
         for (OpenMhzUploader o : openmhz) s.add(o.cfg.name + ": OpenMHz " + o.status());
@@ -232,10 +265,16 @@ public final class Streaming {
         volatile long connections, drops, bytesSent, blocks;
         volatile Socket sock;
         Thread th;
-        Feed(StreamConfig c) { cfg = c; }
+        /** Now-playing tags (1.5.1): their own thread and connections; reads this feed's live settings. */
+        final FeedTags tags;
+        Feed(StreamConfig c) {
+            cfg = c;
+            tags = new FeedTags(() -> this.cfg, () -> connectedSince > 0 && run, log);
+            tags.radioName = id -> feedRadioName.apply(id);
+        }
 
-        void start() { run = true; th = new Thread(this, "feed-" + cfg.name); th.setDaemon(true); th.start(); }
-        void stop() { run = false; closeQuietly(); if (th != null) th.interrupt(); }
+        void start() { run = true; tags.start(); th = new Thread(this, "feed-" + cfg.name); th.setDaemon(true); th.start(); }
+        void stop() { run = false; tags.stop(); closeQuietly(); if (th != null) th.interrupt(); }
         boolean onAir() { return System.currentTimeMillis() - lastAudioAt < 300; }
         int kbps() { return Math.max(8, Math.min(64, cfg.bitrate)); }
         int rate() { for (int r : StreamConfig.FEED_RATES) if (r == cfg.feedRate) return r; return FEED_RATE; }
@@ -303,8 +342,12 @@ public final class Streaming {
                     s.setSoTimeout(1000);
                     watch.start();
                     dropReason = "";
+                    tags.connected();
                     long t0 = System.nanoTime(), sentSamples = 0;
                     float[] silence = new float[800];
+                    // now-playing tags: which call start was last handed to the tag thread (null after a reconnect: the call
+                    // playing then is tagged again on its next block, the server having started the mount with no title)
+                    CallMixer seenMixer = null; long seenStarts = -1; boolean idleDone = false;
                     while (run) {
                         // real-time pacing at 8 kHz in: one 100 ms block whenever it is due (call audio from the mixer, else silence)
                         long due = (System.nanoTime() - t0) * 8000 / 1_000_000_000L;
@@ -313,8 +356,13 @@ public final class Streaming {
                             log.accept(cfg.name + ": stream fell " + (due - sentSamples) / 8000 + " s behind real time (computer paused or busy) - skipped ahead");
                             sentSamples = due - 800;
                         }
-                        float[] a = mixer.pull(800);
+                        CallMixer mx = mixer;
+                        float[] a = mx.pull(800);
                         if (a == null) a = silence; else lastAudioAt = System.currentTimeMillis();
+                        if (a != silence) {   // a call began playing: its tag goes to the tag thread (no I/O here)
+                            long st = mx.starts;
+                            if (mx != seenMixer || st != seenStarts) { seenMixer = mx; seenStarts = st; idleDone = false; long id = mx.lastStartedId; tags.callStarted(id, callInfo.get(id)); }
+                        } else if (!idleDone && System.currentTimeMillis() - Math.max(lastAudioAt, connectedSince) >= FeedTags.IDLE_AFTER_MS) { idleDone = true; tags.idle(); }
                         state = a == silence ? "sending silence between calls" : "on air";
                         var tap = feedTap; if (tap != null) tap.accept(cfg.name, a == silence ? new int[0] : mixer.lastTalkgroups());
                         float[] r = rs == null ? a : rs.process(a, a.length);   // 800 samples at 8 kHz -> 1600 at 16 kHz

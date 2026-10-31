@@ -49,6 +49,8 @@ public final class CallMixer {
     /** Statistics: calls dropped because they would have started too late; samples dropped (MIX backlog cap). */
     public long droppedCalls, droppedSamples, callsPlayed;
     int[] lastTgs = new int[0];
+    /** Calls (segments) that began playing so far, and the last one (1.5.1: a feed's now-playing tag follows them). */
+    public volatile long starts, lastStartedId = -1;
 
     public CallMixer(Mode mode, long maxDelayMs) { this(mode, maxDelayMs, 1600, System::currentTimeMillis); }
 
@@ -133,6 +135,7 @@ public final class CallMixer {
             }
             if (best == null) { lastTgs = new int[0]; return null; }
             active = best; best.started = true; callsPlayed++;
+            lastStartedId = best.id; starts++;
         }
         float[] out = new float[n];
         int got = take(active, out, n, false);
@@ -149,7 +152,7 @@ public final class CallMixer {
         for (Item it : new ArrayList<>(items.values())) {
             if (it.queued == 0) { if (it.ended) remove(it); else it.started = it.started && now - it.lastPushAt < 600; continue; }
             if (!ready(it)) continue;
-            if (!it.started) callsPlayed++;
+            if (!it.started) { callsPlayed++; lastStartedId = it.id; starts++; }
             it.started = true;
             if (out == null) out = new float[n];
             if (take(it, out, n, true) > 0) { k++; if (!tgs.contains(it.tg)) tgs.add(it.tg); }

@@ -33,6 +33,13 @@ public class StreamsPage extends JPanel {
     /** Feeds: MP3 sample rate (advanced; 16000 Hz = what SDRTrunk sends, plays at the right speed on Broadcastify). */
     final JComboBox<String> feedRate = new JComboBox<>(new String[]{"16000 Hz (default, same as SDRTrunk)", "22050 Hz", "24000 Hz", "11025 Hz", "8000 Hz (TrunkDeck 1.3.2 and earlier)"});
     final JButton testTone = MainFrame.button("Send test tone", Theme.Glyph.PLAY, Theme.CYAN);
+    // Feeds: now-playing tags (1.5.1)
+    final JCheckBox sendTags = new JCheckBox("Send tags (now playing)");
+    final JComboBox<StreamConfig.TagFormat> tagFormat = new JComboBox<>(StreamConfig.TagFormat.values());
+    final JTextField tagTemplate = new JTextField(), tagIdle = new JTextField();
+    final JButton testTag = MainFrame.button("Send test tag", Theme.Glyph.PLAY, Theme.CYAN);
+    final JLabel tagPreview = new JLabel(" ");
+    final JTextArea tagResult = Layouts.wrapText(" ", Theme.DIM, Theme.ui(Font.PLAIN, 11f));
     final JCheckBox enabled = new JCheckBox("Enabled"), unlisted = new JCheckBox("Also send unlisted talkgroups"),
             radioNames = new JCheckBox("Send radio names (as the source \"tag\", like trunk-recorder's unit tags)");
     final JSpinner bitrate = new JSpinner(new SpinnerNumberModel(16, 8, 64, 8)), delay = new JSpinner(new SpinnerNumberModel(0, 0, 600, 5));
@@ -209,6 +216,38 @@ public class StreamsPage extends JPanel {
         testTone.setToolTipText("Plays a calibration signal on this feed: 2 s of a 1 kHz tone, then 5 beeps exactly 1 second apart");
         testTone.addActionListener(e -> sendTestTone());
         y3 = row(feedPanel, c3, y3, "Calibration", ttRow);
+        sendTags.setOpaque(false);
+        sendTags.setToolTipText("When a call starts playing on this feed, its talkgroup is sent to the server as the stream title "
+                + "(a separate short request - the audio connection is never touched or slowed)");
+        y3 = row(feedPanel, c3, y3, "Now playing", sendTags);
+        tagFormat.setToolTipText("What the title shows. Talkgroup name = the alpha tag from your talkgroup list (else its description, else TG <number>). "
+                + "Radio name = the name from Talkgroups \u2192 Radio IDs, else the radio ID, if the radio is known.");
+        y3 = row(feedPanel, c3, y3, "Tag format", tagFormat);
+        tagTemplate.setToolTipText("Custom: {tg} talkgroup number, {tgname} talkgroup name, {radio} radio ID, {radioname} radio name, "
+                + "{group} category, {tag} service tag. Empty ones are left out with their separators.");
+        y3 = row(feedPanel, c3, y3, "Custom template", tagTemplate);
+        tagIdle.setToolTipText("Sent when no call has played for 3 seconds, e.g. Scanning... Leave empty to keep the last call's tag.");
+        y3 = row(feedPanel, c3, y3, "Between calls", tagIdle);
+        tagPreview.setForeground(Theme.CYAN);
+        tagPreview.setToolTipText("How a call looks with this format (fictional example: TG 2001 EX CO DISPATCH, radio 123456 EXAMPLE UNIT 7)");
+        y3 = row(feedPanel, c3, y3, "Example", tagPreview);
+        JPanel tgRow = Layouts.wrapRow(FlowLayout.LEFT, 6, 0);
+        tgRow.add(testTag);
+        testTag.setToolTipText("Sends the title \"TrunkDeck test tag\" with the time to the running feed now and shows the server's answer");
+        testTag.addActionListener(e -> sendTestTag());
+        y3 = row(feedPanel, c3, y3, "", tgRow);
+        y3 = row(feedPanel, c3, y3, "", tagResult);
+        tagFormat.addActionListener(e -> updateTagPreview());
+        sendTags.addActionListener(e -> updateTagPreview());
+        tagTemplate.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { updateTagPreview(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { updateTagPreview(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { updateTagPreview(); }
+        });
+        y3 = row(feedPanel, c3, y3, "", hint("Now playing: the talkgroup of each call is sent as the stream title when the call starts playing on "
+                + "the feed (in queue order, so it matches the audio), at most one every 1.5 s. Listeners see it in players that show "
+                + "stream titles (e.g. VLC, Winamp, scanner apps such as ScannerRadio); players with a long buffer show it a little before the audio. "
+                + "Only calls sent to this feed are tagged; encrypted calls are never sent. Changes apply when you press Save stream, without reconnecting."));
         y3 = row(feedPanel, c3, y3, "", hint("Broadcastify Feeds: copy Server, Port, Mount and Password from your feed's Technicals page. Keep 16 kbps. "
                 + "The connection stays open the whole time the engine runs (silence between calls) and reconnects by itself after a drop. "
                 + "Send test tone: listen on your feed's Broadcastify page (it arrives 15-30 s later). You should hear a steady 1 kHz tone for 2 seconds, "
@@ -292,6 +331,37 @@ public class StreamsPage extends JPanel {
         boolean ok = f.nativeEngine.feedTestTone(editing.name);
         feedStatus.setText(ok ? "Test tone queued: 2 s tone, then 5 beeps 1 s apart. Listen on your feed's page in 15-30 s."
                 : "This feed is not running - tick Enabled and press Save first.");
+    }
+
+    /** The tag format on a fictional call, and the custom template field only when it is used. */
+    void updateTagPreview() {
+        StreamConfig.TagFormat tf = (StreamConfig.TagFormat) tagFormat.getSelectedItem();
+        boolean on = editing != null && sendTags.isSelected();
+        tagTemplate.setEnabled(on && tf == StreamConfig.TagFormat.CUSTOM);
+        tagFormat.setEnabled(on); tagIdle.setEnabled(on);
+        StreamConfig t = new StreamConfig();
+        t.tagFormat = tf == null ? StreamConfig.TagFormat.TG_NAME : tf;
+        t.tagTemplate = tagTemplate.getText().trim().isEmpty() ? StreamConfig.DEFAULT_TAG_TEMPLATE : tagTemplate.getText().trim();
+        Talkgroup ex = new Talkgroup();
+        ex.decimal = 2001; ex.alphaTag = "EX CO DISPATCH"; ex.category = "Example County"; ex.tag = "Law Dispatch";
+        String txt = p25monitor.nativeengine.FeedTags.render(t, 2001, ex, 123456, id -> "EXAMPLE UNIT 7");
+        tagPreview.setText(on ? txt : "(tags off - the stream title is not changed)");
+    }
+
+    /** Send test tag: a test title on the running feed being edited, with the server's answer. */
+    void sendTestTag() {
+        if (editing == null) return;
+        if (!f.nativeEngine.isRunning()) { tagResult.setText("Start monitoring first - the test tag is sent on the running feed."); return; }
+        String text = "TrunkDeck test tag " + java.time.LocalTime.now().withNano(0);
+        var fut = f.nativeEngine.feedTestTag(editing.name, text);
+        if (fut == null) { tagResult.setText("This feed is not running - tick Enabled and press Save first."); return; }
+        tagResult.setText("Sending \"" + text + "\"\u2026");
+        testTag.setEnabled(false);
+        fut.orTimeout(15, java.util.concurrent.TimeUnit.SECONDS).whenComplete((r, ex) -> SwingUtilities.invokeLater(() -> {
+            testTag.setEnabled(editing != null);
+            tagResult.setText("Test tag \"" + text + "\": " + (ex != null ? "no answer" : r)
+                    + (ex == null && r.startsWith("accepted") ? ". Players that show stream titles show it as the title (it may take a few seconds)." : ""));
+        }));
     }
 
     /** Broadcastify's documented credential check (test=1 with the API key and system ID; nothing is uploaded). */
@@ -412,12 +482,14 @@ public class StreamsPage extends JPanel {
     void edit(StreamConfig s) {
         editing = s;
         boolean on = s != null;
-        for (JComponent c : new JComponent[]{name, apiKey, systemId, host, port, mount, password, feedId, user, enabled, unlisted, bitrate, delay, shortName, omzKey, uploadServer, radioNames, minCall, eot, testCalls, feedRate, testTone, rdioServer, rdioKey, rdioSystem, rdioTgNames, rdioRadioNames, rdioTest, rdioTestCall}) c.setEnabled(on);
+        for (JComponent c : new JComponent[]{name, apiKey, systemId, host, port, mount, password, feedId, user, enabled, unlisted, bitrate, delay, shortName, omzKey, uploadServer, radioNames, minCall, eot, testCalls, feedRate, testTone, sendTags, tagFormat, tagTemplate, tagIdle, testTag, rdioServer, rdioKey, rdioSystem, rdioTgNames, rdioRadioNames, rdioTest, rdioTestCall}) c.setEnabled(on);
         if (!on) { assigned.setText("Add a stream with the buttons above."); callsPanel.setVisible(false); feedPanel.setVisible(false); omzPanel.setVisible(false); rdioPanel.setVisible(false); perCallPanel.setVisible(false); return; }
         name.setText(s.name); type.setSelectedItem(s.type); enabled.setSelected(s.enabled); unlisted.setSelected(s.includeUnlisted);
         apiKey.setText(s.apiKey); systemId.setText(s.systemId); host.setText(s.host); port.setText(String.valueOf(s.port)); mount.setText(s.mount);
         password.setText(s.password); feedId.setText(s.feedId); user.setText(s.userName); bitrate.setValue(s.bitrate); delay.setValue(s.delay);
         { int ri = 0; for (int i = 0; i < StreamConfig.FEED_RATES.length; i++) if (StreamConfig.FEED_RATES[i] == s.feedRate) ri = i; feedRate.setSelectedIndex(ri); }
+        sendTags.setSelected(s.sendTags); tagFormat.setSelectedItem(s.tagFormat); tagTemplate.setText(s.tagTemplate); tagIdle.setText(s.tagIdle);
+        tagResult.setText(" "); updateTagPreview();
         shortName.setText(s.shortName); omzKey.setText(s.type == StreamConfig.Type.OPENMHZ ? s.apiKey : ""); uploadServer.setText(s.uploadServer); radioNames.setSelected(s.sendRadioNames); minCall.setValue(s.minCallSec);
         callsPanel.setVisible(s.type == StreamConfig.Type.BROADCASTIFY_CALLS);
         omzPanel.setVisible(s.type == StreamConfig.Type.OPENMHZ);
@@ -515,6 +587,12 @@ public class StreamsPage extends JPanel {
         editing.bitrate = (Integer) bitrate.getValue();
         editing.feedRate = StreamConfig.FEED_RATES[Math.max(0, feedRate.getSelectedIndex())];
         editing.delay = (Integer) delay.getValue();
+        if (!editing.type.perCall()) {
+            editing.sendTags = sendTags.isSelected();
+            editing.tagFormat = (StreamConfig.TagFormat) tagFormat.getSelectedItem();
+            editing.tagTemplate = tagTemplate.getText().trim().isEmpty() ? StreamConfig.DEFAULT_TAG_TEMPLATE : tagTemplate.getText().trim();
+            editing.tagIdle = tagIdle.getText().trim();
+        }
         List<String> problems = new ArrayList<>();
         if (editing.type == StreamConfig.Type.BROADCASTIFY_CALLS) {
             if (editing.apiKey.isEmpty()) problems.add("API key is empty");

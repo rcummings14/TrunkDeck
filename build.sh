@@ -8,7 +8,7 @@ JAVAC="${JAVAC:-javac}"; JAR="${JAR:-jar}"; JAVA="${JAVA:-java}"
 rm -rf build/classes build/test && mkdir -p build/classes build/test
 find src -name '*.java' > build/sources.txt
 "$JAVAC" --release 22 -encoding UTF-8 -Xlint:-options -cp lib/flatlaf-3.5.4.jar -d build/classes @build/sources.txt
-printf 'Main-Class: p25monitor.Main\nClass-Path: flatlaf-3.5.4.jar\nEnable-Native-Access: ALL-UNNAMED\nImplementation-Title: TrunkDeck\nImplementation-Version: 1.5.0\n' > build/manifest.txt
+printf 'Main-Class: p25monitor.Main\nClass-Path: flatlaf-3.5.4.jar\nEnable-Native-Access: ALL-UNNAMED\nImplementation-Title: TrunkDeck\nImplementation-Version: 1.5.1\n' > build/manifest.txt
 "$JAR" cfm build/trunkdeck.jar build/manifest.txt -C build/classes .
 echo "Built build/trunkdeck.jar  (copy it to app/ next to flatlaf-3.5.4.jar; the other lib/*.jar files go to app/lib/)"
 if [ "${1:-}" = "test" ]; then
@@ -24,6 +24,7 @@ if [ "${1:-}" = "test" ]; then
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.SpeakerQueueTests   # speaker Queue mode (1.4.2)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.SelfHealTests   # self-healing sample processing (1.4.3)
   "$JAVA" -Dtrunkdeck.lib=lib -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.LiveTalkgroupTests   # live talkgroup edits, feeds stay connected (1.4.4)
+  "$JAVA" -Dtrunkdeck.lib=lib -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.FeedTagTests   # now-playing tags on feeds (1.5.1)
   "$JAVA" ${TEST_OPTS:-} -cp build/classes:build/test p25monitor.p25.CodeTablesTests   # coding tables built from the TIA-102 standards = the earlier tables (1.4.6)
   "$JAVA" -Dtrunkdeck.lib=lib ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.ViewModeTests   # Simple / Advanced view, colours, scan animation (1.4.5; needs a display, skipped when headless)
   "$JAVA" -Dtrunkdeck.lib=lib ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.TrayTests   # system tray (1.4.7): logic always; window and real tray parts need a display / a tray

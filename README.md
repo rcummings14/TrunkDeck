@@ -23,6 +23,9 @@ stream them to Broadcastify, OpenMHz or your own Rdio Scanner server - all from 
 * **System tray:** close or minimize to the tray (or to Display only) - your choice.
 * **Streaming / uploads** (optional): **Broadcastify Calls**, **Broadcastify Feeds** / any Icecast server (MP3),
   **OpenMHz**, **Rdio Scanner**. Live talkgroup assignment, status and retry on the Streams page.
+* **Now-playing tags** on Broadcastify Feeds / Icecast (1.5.1): the talkgroup (optionally the radio) of the call playing
+  is sent as the stream title, in step with the audio - your choice of format, an optional text between calls, and a
+  *Send test tag* button. A separate short request: the audio connection is never touched.
 * Recordings of every call, call log, Active-calls table, control-channel decode meter, activity graph, per-call
   diagnostics, talkgroup CSV import (RadioReference format), Simple and Advanced views.
 
@@ -30,7 +33,7 @@ stream them to Broadcastify, OpenMHz or your own Rdio Scanner server - all from 
 |---|---|---|
 | ![Display only](docs/screenshots/display-only.png) | ![Streams page](docs/screenshots/streams.png) | ![Display colours](docs/screenshots/colors.png) |
 
-More: [Simple view](docs/screenshots/simple-view.png) · [Display only right-click menu](docs/screenshots/display-only-menu.png) · [Systems page](docs/screenshots/systems.png) · [Talkgroups page](docs/screenshots/talkgroups.png) · [Engine page](docs/screenshots/engine.png)
+More: [Now-playing tags](docs/screenshots/now-playing-tags.png) · [Simple view](docs/screenshots/simple-view.png) · [Display only right-click menu](docs/screenshots/display-only-menu.png) · [Systems page](docs/screenshots/systems.png) · [Talkgroups page](docs/screenshots/talkgroups.png) · [Engine page](docs/screenshots/engine.png)
 
 *All screenshots show a simulated signal and a fictional example system (made-up names, frequencies and IDs).*
 
@@ -40,7 +43,7 @@ Download the file for your system from the [Releases](../../releases) page.
 
 ### Windows 10/11 (64-bit)
 
-1. Unzip **`TrunkDeck-1.5.0-windows.zip`**, open `TrunkDeck\windows` and double-click **`Install.bat`**
+1. Unzip **`TrunkDeck-1.5.1-windows.zip`**, open `TrunkDeck\windows` and double-click **`Install.bat`**
    (SmartScreen: *More info → Run anyway*). It downloads the Eclipse Temurin Java runtime into TrunkDeck's own folder
    (checksum-verified) and adds Start Menu and Desktop shortcuts. Installs for your user only, no admin rights needed.
 2. **USB driver (once per receiver):** run [Zadig](https://zadig.akeo.ie), *Options → List All Devices*, pick the
@@ -53,7 +56,7 @@ Uninstall: *Settings → Apps → TrunkDeck*.
 ### Linux (Fedora, Ubuntu, Debian, Mint, Arch, Raspberry Pi OS 64-bit)
 
 ```bash
-tar xzf TrunkDeck-1.5.0-linux.tar.gz
+tar xzf TrunkDeck-1.5.1-linux.tar.gz
 cd TrunkDeck/linux
 ./install.sh
 ```

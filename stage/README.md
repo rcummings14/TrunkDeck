@@ -1,4 +1,4 @@
-# TrunkDeck 1.5.0 — P25 Phase 1 and Phase 2 trunking monitor (Windows & Linux)
+# TrunkDeck 1.5.1 — P25 Phase 1 and Phase 2 trunking monitor (Windows & Linux)
 
 TrunkDeck is a scanner-style dashboard for **P25 trunked radio systems** (Phase 1 control channel; Phase 1 and Phase 2 voice). Type in a control channel, load your
 talkgroups from a CSV file, plug in an Airspy R2 or one or two RTL-SDR dongles, press **START MONITORING**, and watch (and hear) the system
@@ -7,6 +7,26 @@ activity graph, and a table of **every call that is on the air right now**.
 
 TrunkDeck decodes everything itself with the **TrunkDeck engine**, its own P25 decoder written in Java from the TIA-102 standard.
 It talks to your Airspy R2 and RTL-SDR dongles directly. No other radio program is needed.
+
+**New in 1.5.1 – "now playing" tags on Broadcastify Feeds / Icecast**
+* When a call starts playing on a **Broadcastify Feed** or **Icecast** stream, its talkgroup is sent to the server as the
+  stream title ("now playing"), the way SDRTrunk and ProScan tag Broadcastify feeds: an Icecast 2 metadata update
+  (`/admin/metadata?mode=updinfo`, the feed's own server, port, mount and source password, `charset=UTF-8`). Listeners
+  see it in players that show stream titles (e.g. VLC, Winamp, scanner apps such as ScannerRadio; whether a given
+  web player shows it is up to that player).
+* It follows the audio: a call is tagged when it actually starts playing on the feed, so with calls waiting in the
+  feed's queue the title changes when each one comes on, not when it was received. Only calls sent to that feed are
+  tagged (talkgroup assignments, mutes and *Also send unlisted* apply as for the audio); encrypted calls are never sent.
+* Streams → your feed → **Now playing**: *Send tags (now playing)* (on), **Tag format**: *Talkgroup name* (default),
+  *Talkgroup name + radio name*, *Talkgroup ID + name* or *Custom…* with `{tg}` `{tgname}` `{radio}` `{radioname}`
+  `{group}` `{tag}` (empty ones are left out with their separators); **Between calls**: a text sent after 3 s without
+  a call (e.g. *Scanning...*; empty, the default = the last call's tag stays); **Send test tag** sends a test title now
+  and shows the server's answer. Changes apply when you press *Save stream*, without reconnecting.
+* Safe for the audio: each tag is its own short request on its own thread with short timeouts; the audio connection is
+  never touched, slowed or reconnected because of a tag, and a slow or failing server only means no title (logged once).
+  At most one update every 1.5 s; when calls come faster the newest wins. On by default, existing feeds included.
+* Talkgroup name = the alpha tag from your talkgroup list (else its description, else *TG 1234*); radio name = the
+  name from *Radio IDs*, else the radio ID once it is known. Nothing else is sent.
 
 **New in 1.5.0 – Display only, close / minimize choices, display border colour**
 * **Display only** (header button **Display only**, or **Ctrl+D**): the same window shrinks to just the big scanner
@@ -45,7 +65,7 @@ below. The Airspy Mini has the same USB ID and should work at its own rates but 
 
 ## Pick your system
 
-Download **TrunkDeck-1.5.0-windows.zip** (Windows) or **TrunkDeck-1.5.0-linux.tar.gz** (Linux) from the GitHub
+Download **TrunkDeck-1.5.1-windows.zip** (Windows) or **TrunkDeck-1.5.1-linux.tar.gz** (Linux) from the GitHub
 Release and unpack it. Inside the `TrunkDeck` folder you'll find (each download has only its own installer folder):
 
 ```
@@ -298,6 +318,7 @@ On **Streams**:
   names* (off) sends the names from *Radio IDs* with the radio IDs (Rdio Scanner 6.6.3 ignores them; the next version stores them).
 * **Add Broadcastify Feed** – enter the **Server host, Port, Mount point, Password** and **Feed ID** from your feed's *Technicals* page. Keep the bitrate at 16 kbps (TrunkDeck sends MP3 at 16000 Hz, mono, constant bitrate, like SDRTrunk). Use *Send test tone* to check the speed on your feed's page.
 * **Add Icecast** – any Icecast 2 server (host, port, mount, source user, password).
+* Feeds and Icecast send **now-playing tags** (the talkgroup of the call playing) as the stream title – see *New in 1.5.1*. Turn them off with *Send tags (now playing)*.
 
 Then choose which talkgroups go to each stream:
 * **Assign by category / tag…** – tick categories or tags from your CSV (for example everything tagged *Fire Dispatch*). Encrypted talkgroups are skipped by default.

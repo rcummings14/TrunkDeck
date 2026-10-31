@@ -238,6 +238,7 @@ public final class NativeEngine {
         streaming.unitTags(id -> { RadioSystem rs = sys; return rs == null ? "" : rs.radios.alias(id); });
         streaming.rdioUnitTags(id -> { RadioSystem rs = sys; return rs == null ? "" : rs.radios.alias(id); });
         streaming.rdioSystemLabel(() -> { RadioSystem rs = sys; return rs == null ? "" : rs.name; });
+        streaming.feedRadioNames(id -> { RadioSystem rs = sys; return rs == null ? "" : rs.radios.alias(id); });
         if (streaming.any()) { streaming.start(); log("Streaming: " + String.join(", ", streaming.status())); }
 
         switch (m) {
@@ -593,6 +594,7 @@ public final class NativeEngine {
         streaming.unitTags(id -> { RadioSystem rs = sys; return rs == null ? "" : rs.radios.alias(id); });
         streaming.rdioUnitTags(id -> { RadioSystem rs = sys; return rs == null ? "" : rs.radios.alias(id); });
         streaming.rdioSystemLabel(() -> { RadioSystem rs = sys; return rs == null ? "" : rs.name; });
+        streaming.feedRadioNames(id -> { RadioSystem rs = sys; return rs == null ? "" : rs.radios.alias(id); });
         if (streaming.any()) streaming.start();
         for (String l : out) log("Streaming: " + l);
         return out;
@@ -821,6 +823,9 @@ public final class NativeEngine {
 
     /** Feed calibration: sends the test tone on the feed with this name; returns false if no such feed is running. */
     public boolean feedTestTone(String name) { Streaming s = streaming; return s != null && s.testTone(name) > 0; }
+
+    /** Send test tag (1.5.1): a test now-playing title on the running feed with this name; null if no such feed is running. */
+    public java.util.concurrent.CompletableFuture<String> feedTestTag(String name, String text) { Streaming s = streaming; return s == null ? null : s.testTag(name, text); }
 
     /** Recent Broadcastify Calls uploads of the stream with this name (newest first), or empty. */
     public List<String> streamRecent(String name) {

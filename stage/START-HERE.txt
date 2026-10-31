@@ -1,4 +1,4 @@
-TRUNKDECK 1.5.0 - P25 Phase 1 and Phase 2 trunking monitor
+TRUNKDECK 1.5.1 - P25 Phase 1 and Phase 2 trunking monitor
 ==========================================================
 
 WINDOWS:  open the "windows" folder and double-click Install.bat
@@ -6,6 +6,13 @@ LINUX:    open a terminal in the "linux" folder and run:  ./install.sh
 
 Then start TrunkDeck from the Start Menu / app menu or the Desktop icon.
 Full step-by-step guide (drivers, first start, CSV import, streaming): README.md
+
+NEW IN 1.5.1: NOW-PLAYING TAGS ON FEEDS. Broadcastify Feed and Icecast streams send the talkgroup of each call as the
+stream title when the call starts playing on the feed (in queue order, so it matches the audio), like SDRTrunk does.
+Streams -> your feed -> Now playing: on/off, Tag format (Talkgroup name / + radio name / ID + name / Custom with
+{tg} {tgname} {radio} {radioname} {group} {tag}), Between calls (e.g. "Scanning...", empty = keep the last tag) and
+Send test tag. It is a separate short request: the audio connection is never touched, and a failing tag only means
+no title. At most one update every 1.5 s. Changes apply on Save stream without reconnecting.
 
 NEW IN 1.5.0: DISPLAY ONLY. The "Display only" button in the header (or Ctrl+D) shrinks the window to just the big
 scanner display - all its colours, the backlight on calls and the SCANNING ticker included. Resize it and the display

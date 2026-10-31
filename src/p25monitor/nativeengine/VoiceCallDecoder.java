@@ -148,7 +148,7 @@ final class VoiceCallDecoder {
         if (e.speaker.play(c, a, n)) { var tap = e.playTap; if (tap != null && tapInfo != null) tap.accept(tapInfo); }
         Streaming st = e.streaming;
         if (st != null) {
-            st.audio(c.id, c.t, c.tg, a, n);
+            st.audio(c.id, c.t, c.tg, c.src, a, n);
             // Broadcastify Calls: this transmission's own audio, MP3-encoded as it arrives (tapInfo == null: filler for a lost frame)
             boolean voice = tapInfo != null, opened = false;
             synchronized (c) {
