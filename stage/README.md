@@ -1,4 +1,4 @@
-# TrunkDeck 1.5.1 — P25 Phase 1 and Phase 2 trunking monitor (Windows & Linux)
+# TrunkDeck 1.6.0 — P25 Phase 1 and Phase 2 trunking monitor (Windows & Linux)
 
 TrunkDeck is a scanner-style dashboard for **P25 trunked radio systems** (Phase 1 control channel; Phase 1 and Phase 2 voice). Type in a control channel, load your
 talkgroups from a CSV file, plug in an Airspy R2 or one or two RTL-SDR dongles, press **START MONITORING**, and watch (and hear) the system
@@ -7,6 +7,29 @@ activity graph, and a table of **every call that is on the air right now**.
 
 TrunkDeck decodes everything itself with the **TrunkDeck engine**, its own P25 decoder written in Java from the TIA-102 standard.
 It talks to your Airspy R2 and RTL-SDR dongles directly. No other radio program is needed.
+
+**New in 1.6.0 – set up from RadioReference**
+* **Systems → Set up from RadioReference** (also *Setup & Help → Tools*, and offered on a new install) builds a system
+  from the RadioReference database in five steps: **Sign in** with your own RadioReference **Premium** account →
+  **System** (state → county → trunked system, a ZIP code, or a RadioReference system ID / P25 system ID) → **Site**
+  (the obvious one is ticked when there is only one; tick several and TrunkDeck tries their control channels in turn) →
+  **Talkgroups** (grouped by category with a tick box per category; everything that isn't encrypted is ticked;
+  encrypted ones are marked and unticked, and encrypted calls are still skipped) → **Finish**. You get the control
+  channels (primary first, then alternates), NAC, system ID / WACN, and every chosen talkgroup with its alpha tag,
+  description, tag, category and mode.
+* **Systems → Refresh from RadioReference** (systems set up this way) downloads the system again and merges it: new
+  talkgroups are offered, renamed ones are updated (untick *Update talkgroup names* to keep your own names), your
+  favourites, mutes, recording, priorities and stream assignments are kept, and nothing is deleted. A summary lists
+  what changed. On the system you are monitoring the talkgroup changes apply at once; if the control channels changed,
+  **Restart to apply** appears in the top bar for you to press when it suits you – feeds and uploads are never
+  restarted or interrupted by a refresh.
+* TrunkDeck only talks to RadioReference while the wizard is open (no background checks). Place lists (countries,
+  states, counties) are kept on your computer for 30 days; system data is fetched fresh each time.
+* **Remember me** is off by default. When ticked, the password is saved in the settings folder, scrambled and readable
+  only by your user account – this keeps it out of plain sight but is not strong protection against someone who can
+  read your files. *Engine → RadioReference app key → Forget saved RadioReference password* removes it.
+* It needs a **RadioReference app key** for TrunkDeck (see *Set up from RadioReference* below). A build without one
+  shows "RadioReference setup isn't available in this build" and everything else works as before.
 
 **New in 1.5.1 – "now playing" tags on Broadcastify Feeds / Icecast**
 * When a call starts playing on a **Broadcastify Feed** or **Icecast** stream, its talkgroup is sent to the server as the
@@ -228,6 +251,36 @@ Above the table: how many calls are decoding, how many are waiting for a tuner, 
 On **Systems**, type the frequency in MHz, e.g. `851.0125`. Add the alternate control channels separated by commas,
 e.g. `851.0125, 851.5125`. You'll find control channels on RadioReference: open the system page, look at the *Sites* table,
 and use the frequencies marked **c** / *Ctrl*.
+
+### Set up from RadioReference (1.6.0)
+With a **RadioReference Premium** account, TrunkDeck can fill in a system for you: **Systems → Set up from
+RadioReference**. Sign in, choose your state and county (or type a ZIP code, or the system ID at the end of the system's
+page address on the RadioReference website, e.g. `…/sid/1234`), pick the system, the site(s) you can receive and the talkgroups, and press
+**Create system**. Later, **Refresh from RadioReference** updates it without touching your own talkgroup settings.
+
+* Use your own account: RadioReference's terms allow its data for your own use only – please don't share, mirror or
+  republish it. TrunkDeck asks RadioReference only while the wizard is open.
+* Errors are explained in plain words: wrong username or password, no active Premium subscription, a missing or
+  rejected app key, no internet connection, or a message from RadioReference.
+* TrunkDeck decodes P25 systems only; other system types (EDACS, Motorola Type II, DMR …) are listed but can't be
+  imported.
+
+**The RadioReference app key.** RadioReference gives each *app* (not each user) a key for its web service. The key is
+not part of TrunkDeck's source code. TrunkDeck looks for it in this order:
+1. the environment variable `TRUNKDECK_RR_APP_KEY`;
+2. a file `rr-app-key.txt` (just the key) next to the app (the install folder or its `app` folder), or in the
+   TrunkDeck settings folder (Windows `%APPDATA%\TrunkDeck`, Linux `~/.trunkdeck`) – *Engine → RadioReference
+   app key → Save key* writes this file for you;
+3. a key built into the app when it was packaged (`RR_APP_KEY=... ./build.sh`).
+Without a key the wizard just says that RadioReference setup isn't available in this build.
+
+*Adding your key on Windows, the easy way:* start TrunkDeck → click **Advanced** at the top → **Engine** page → card
+**RadioReference app key** → paste the key into the box → **Save key**. The line above the box turns green
+("Key found"). Then **Systems → Set up from RadioReference**. *Using the file instead:* open Notepad, paste only the
+key, and save it as `rr-app-key.txt` in `%APPDATA%\TrunkDeck` (type that into the File Explorer address bar) – or
+next to the app in `%LOCALAPPDATA%\Programs\TrunkDeck`. Restart TrunkDeck afterwards. (Hidden file extensions making it
+`rr-app-key.txt.txt`, or Notepad's "Unicode"/"UTF-8 with BOM" encodings, are handled.) Never share the key or post it
+online.
 
 ### Talkgroup CSV files
 TrunkDeck reads almost any talkgroup CSV. It detects these columns automatically (upper/lower case and spaces don't matter):

@@ -113,7 +113,12 @@ public class MainFrame extends JFrame {
         pages.add(Layouts.fit(streamsPage, 700, 460), "Streams");
         pages.add(Layouts.fit(recordings, 600, 380), "Recordings");
         pages.add(Layouts.fit(help, 600, 380), "Setup & Help");
-        root.add(pages, BorderLayout.CENTER);
+        JPanel center = new JPanel(new BorderLayout());
+        center.setOpaque(false);
+        rrBanner = rrOffer();
+        if (rrBanner != null) center.add(rrBanner, BorderLayout.NORTH);
+        center.add(pages, BorderLayout.CENTER);
+        root.add(center, BorderLayout.CENTER);
 
         footer.setBorder(new EmptyBorder(6, 16, 6, 16));
         footer.setForeground(Theme.DIM);
@@ -614,6 +619,37 @@ public class MainFrame extends JFrame {
         tray.dispose();
         dispose();
         exitHook.accept(0);
+    }
+
+    // ------------------------------------------------------------------ 1.6.0: RadioReference offer on first run
+    JComponent rrBanner;
+
+    /**
+     * On a new profile (or with no system at all), when this build has a RadioReference app key: a banner offering
+     * "Set up from RadioReference". Shown until used or dismissed. Without a key nothing is shown.
+     */
+    JComponent rrOffer() {
+        if (!(app.firstRun || app.systems.isEmpty()) || "true".equals(app.settings.getProperty("rr.offerDone"))) return null;
+        if (p25monitor.rr.RrKeys.find(app.home, app.profile) == null) return null;
+        JPanel b = new JPanel(new BorderLayout(10, 0));
+        b.setBackground(Theme.PANEL2);
+        b.setBorder(new CompoundBorder(new EmptyBorder(0, 0, 10, 0), new CompoundBorder(new LineBorder(Theme.CYAN, 1, true), new EmptyBorder(8, 12, 8, 12))));
+        JLabel t = new JLabel("<html><b>New here?</b> Set up your radio system from RadioReference in a few steps - sign in with your RadioReference "
+                + "Premium account, pick your system and site, done.</html>");
+        t.setForeground(Theme.TEXT);
+        b.add(t, BorderLayout.CENTER);
+        JPanel bt = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0)); bt.setOpaque(false);
+        JButton go = button("Set up from RadioReference", Theme.Glyph.IMPORT, Theme.GREEN), later = button("Not now", null, Theme.DIM);
+        go.addActionListener(e -> { dismissRrOffer(); RrWizard.open(this, null); });
+        later.addActionListener(e -> dismissRrOffer());
+        bt.add(go); bt.add(later);
+        b.add(bt, BorderLayout.EAST);
+        return b;
+    }
+
+    void dismissRrOffer() {
+        app.settings.setProperty("rr.offerDone", "true"); app.saveSettings();
+        if (rrBanner != null) { Container p = rrBanner.getParent(); if (p != null) { p.remove(rrBanner); p.revalidate(); p.repaint(); } rrBanner = null; }
     }
 
     // ------------------------------------------------------------------ helpers shared by pages

@@ -38,6 +38,8 @@ public class NativePage extends JPanel {
     final DefaultTableModel diagModel = new DefaultTableModel(new String[]{"Voice call", "Value"}, 0) { public boolean isCellEditable(int r, int c) { return false; } };
     final Layouts.FitTable diagTable = new Layouts.FitTable(diagModel), tuneTable = new Layouts.FitTable(tuneModel);
     final JButton applyAdv = MainFrame.button("Apply", null, Theme.AMBER);
+    final JLabel rrKeyStatus = new JLabel();
+    final JPasswordField rrKeyField = new JPasswordField(24);
     final JCheckBox recordIq = new JCheckBox("Record voice-channel I/Q (next 5 calls, 30 s each)");
     static final int[] GAINS = {-1, 0, 9, 14, 27, 37, 77, 87, 125, 144, 157, 166, 197, 207, 229, 254, 280, 297, 328, 338, 364, 372, 386, 402, 421, 434, 439, 445, 480, 496};
 
@@ -124,6 +126,42 @@ public class NativePage extends JPanel {
         for (JComponent x : new JComponent[]{crow, codecPath, codecHelp, cbtn, recordAll, feedMix, mdRow, sqRow}) { c.gridy++; cb.add(x, c); }
         cc.add(cb, BorderLayout.CENTER);
         left.addCard(cc);
+
+        // 1.6.0: RadioReference app key (Advanced view only - this page is not in the Simple view)
+        JPanel rrc = MainFrame.card("RadioReference app key");
+        JPanel rg = new JPanel(new GridBagLayout()); rg.setOpaque(false);
+        GridBagConstraints rk = new GridBagConstraints();
+        rk.gridx = 0; rk.weightx = 1; rk.fill = GridBagConstraints.HORIZONTAL; rk.anchor = GridBagConstraints.WEST; rk.insets = new Insets(0, 0, 6, 0);
+        rrKeyStatus.setFont(Theme.ui(Font.PLAIN, 12f));
+        rrKeyField.putClientProperty("JTextField.placeholderText", "paste the key RadioReference gave you for TrunkDeck");
+        JButton rrSave = MainFrame.button("Save key", Theme.Glyph.APPLY, Theme.GREEN), rrDel = MainFrame.button("Remove", Theme.Glyph.TRASH, Theme.DIM);
+        rrSave.addActionListener(e -> {
+            String v = new String(rrKeyField.getPassword()).trim();
+            if (v.isEmpty()) { f.toast("Paste the RadioReference app key first."); return; }
+            try { p25monitor.rr.RrKeys.save(f.app.profile, v); rrKeyField.setText(""); updateRrKey(); f.toast("RadioReference app key saved in the settings folder."); }
+            catch (Exception ex) { f.toast("Could not save the key: " + ex.getMessage()); }
+        });
+        rrDel.addActionListener(e -> {
+            try { p25monitor.rr.RrKeys.save(f.app.profile, ""); updateRrKey(); f.toast("The RadioReference app key in the settings folder was removed."); }
+            catch (Exception ex) { f.toast("Could not remove the key: " + ex.getMessage()); }
+        });
+        JButton rrForget = MainFrame.button("Forget saved RadioReference password", null, Theme.DIM);
+        rrForget.addActionListener(e -> { try { p25monitor.rr.RrLogin.forget(f.app.profile); f.toast("Saved RadioReference password removed."); } catch (Exception ex) { f.toast(String.valueOf(ex.getMessage())); } });
+        JPanel rkRow = new JPanel(new BorderLayout(6, 0)); rkRow.setOpaque(false);
+        JPanel rkb = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0)); rkb.setOpaque(false); rkb.add(rrSave); rkb.add(rrDel);
+        rkRow.add(rrKeyField, BorderLayout.CENTER); rkRow.add(rkb, BorderLayout.EAST);
+        JLabel rrHelp = new JLabel("<html><span style='color:#7D8FA3;font-size:10px'>Needed for Systems → Set up from RadioReference. The key belongs to the "
+                + "TrunkDeck app (RadioReference issues it to developers); it is not your RadioReference login. A pasted key is saved as rr-app-key.txt in the "
+                + "settings folder, readable only by your account. TrunkDeck also looks for the TRUNKDECK_RR_APP_KEY environment variable and an "
+                + "rr-app-key.txt next to the app.</span></html>");
+        JButton rrOpen = MainFrame.button("Set up from RadioReference…", Theme.Glyph.IMPORT, Theme.CYAN);
+        rrOpen.addActionListener(e -> RrWizard.open(f, null));
+        JPanel rrb2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0)); rrb2.setOpaque(false); rrb2.add(rrOpen);
+        JPanel rrb3 = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0)); rrb3.setOpaque(false); rrb3.add(rrForget);
+        for (JComponent x : new JComponent[]{rrKeyStatus, rkRow, rrHelp, rrb2, rrb3}) { rk.gridy++; rg.add(x, rk); }
+        rrc.add(rg, BorderLayout.CENTER);
+        left.addCard(rrc);
+        updateRrKey();
 
         JPanel fp = MainFrame.card("Test with an I/Q recording");
         JPanel fg = new JPanel(new GridBagLayout());
@@ -652,5 +690,13 @@ public class NativePage extends JPanel {
             NativeEngine.Msg m = rows.get(r);
             return c == 0 ? fmt.format(new Date(m.time)) : c == 1 ? String.format(Locale.ROOT, "%.5f", m.mhz) : m.text;
         }
+    }
+
+    /** Shows where the RadioReference app key comes from (never the key itself). */
+    void updateRrKey() {
+        p25monitor.rr.RrKeys.Found k = p25monitor.rr.RrKeys.find(f.app.home, f.app.profile);
+        rrKeyStatus.setForeground(k == null ? Theme.AMBER : Theme.GREEN);
+        rrKeyStatus.setText(k == null ? "<html>\u25CB No app key - RadioReference setup is not available in this build.</html>"
+                : "<html>\u25CF Key found: " + Util.xml(k.source()) + "<br><span style='color:#7D8FA3'>" + Util.xml(p25monitor.rr.RrKeys.hint(k.key())) + "</span></html>");
     }
 }

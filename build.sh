@@ -8,7 +8,16 @@ JAVAC="${JAVAC:-javac}"; JAR="${JAR:-jar}"; JAVA="${JAVA:-java}"
 rm -rf build/classes build/test && mkdir -p build/classes build/test
 find src -name '*.java' > build/sources.txt
 "$JAVAC" --release 22 -encoding UTF-8 -Xlint:-options -cp lib/flatlaf-3.5.4.jar -d build/classes @build/sources.txt
-printf 'Main-Class: p25monitor.Main\nClass-Path: flatlaf-3.5.4.jar\nEnable-Native-Access: ALL-UNNAMED\nImplementation-Title: TrunkDeck\nImplementation-Version: 1.5.1\n' > build/manifest.txt
+printf 'Main-Class: p25monitor.Main\nClass-Path: flatlaf-3.5.4.jar\nEnable-Native-Access: ALL-UNNAMED\nImplementation-Title: TrunkDeck\nImplementation-Version: 1.6.0\n' > build/manifest.txt
+# RadioReference app key (1.6.0): only when RR_APP_KEY is set while building, written into the built jar only (never into
+# src/ or the git tree). Stored obscured (base64 of the reversed key) - any key inside a distributed binary can be read out.
+rm -f build/classes/p25monitor/rr/appkey.dat
+if [ -n "${RR_APP_KEY:-}" ]; then
+  mkdir -p build/classes/p25monitor/rr
+  K=$(printf '%s' "$RR_APP_KEY" | tr -d ' \t\r\n'); R=""; for ((i=${#K}-1; i>=0; i--)); do R+="${K:i:1}"; done   # reversed (plain bash: Git Bash has no rev)
+  printf '%s' "$R" | base64 | tr -d '\r\n' > build/classes/p25monitor/rr/appkey.dat; unset K R
+  echo "RadioReference app key from RR_APP_KEY built into build/trunkdeck.jar (not written to the source tree)"
+fi
 "$JAR" cfm build/trunkdeck.jar build/manifest.txt -C build/classes .
 echo "Built build/trunkdeck.jar  (copy it to app/ next to flatlaf-3.5.4.jar; the other lib/*.jar files go to app/lib/)"
 if [ "${1:-}" = "test" ]; then
@@ -25,6 +34,7 @@ if [ "${1:-}" = "test" ]; then
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.SelfHealTests   # self-healing sample processing (1.4.3)
   "$JAVA" -Dtrunkdeck.lib=lib -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.LiveTalkgroupTests   # live talkgroup edits, feeds stay connected (1.4.4)
   "$JAVA" -Dtrunkdeck.lib=lib -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.FeedTagTests   # now-playing tags on feeds (1.5.1)
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test p25monitor.rr.RrTests   # RadioReference setup against a mock SOAP server (1.6.0)
   "$JAVA" ${TEST_OPTS:-} -cp build/classes:build/test p25monitor.p25.CodeTablesTests   # coding tables built from the TIA-102 standards = the earlier tables (1.4.6)
   "$JAVA" -Dtrunkdeck.lib=lib ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.ViewModeTests   # Simple / Advanced view, colours, scan animation (1.4.5; needs a display, skipped when headless)
   "$JAVA" -Dtrunkdeck.lib=lib ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.TrayTests   # system tray (1.4.7): logic always; window and real tray parts need a display / a tray

@@ -1,4 +1,4 @@
-TRUNKDECK 1.5.1 - P25 Phase 1 and Phase 2 trunking monitor
+TRUNKDECK 1.6.0 - P25 Phase 1 and Phase 2 trunking monitor
 ==========================================================
 
 WINDOWS:  open the "windows" folder and double-click Install.bat
@@ -6,6 +6,14 @@ LINUX:    open a terminal in the "linux" folder and run:  ./install.sh
 
 Then start TrunkDeck from the Start Menu / app menu or the Desktop icon.
 Full step-by-step guide (drivers, first start, CSV import, streaming): README.md
+
+NEW IN 1.6.0: SET UP FROM RADIOREFERENCE. Systems -> Set up from RadioReference: sign in with your own RadioReference
+Premium account, pick state -> county -> system (or a ZIP code / system ID), the site(s) and the talkgroups (all
+non-encrypted ones are ticked, encrypted ones are marked and unticked), and TrunkDeck creates the system with its
+control channels and talkgroup names. "Refresh from RadioReference" later merges new and renamed talkgroups and keeps
+your mutes, favourites, recording and stream settings; nothing is deleted and feeds are never restarted. "Remember me"
+is off by default. Needs a RadioReference app key (see README.md, "Set up from RadioReference"); builds without one
+say so and everything else works as before.
 
 NEW IN 1.5.1: NOW-PLAYING TAGS ON FEEDS. Broadcastify Feed and Icecast streams send the talkgroup of each call as the
 stream title when the call starts playing on the feed (in queue order, so it matches the audio), like SDRTrunk does.

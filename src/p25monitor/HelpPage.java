@@ -29,6 +29,9 @@ public class HelpPage extends JPanel {
         JPanel tools = MainFrame.card("Tools");
         JPanel tl = new JPanel(new GridLayout(0, 1, 0, 6));
         tl.setOpaque(false);
+        JButton rrb = MainFrame.button("Set up from RadioReference (system, sites, talkgroups)", Theme.Glyph.IMPORT, Theme.GREEN);
+        rrb.setHorizontalAlignment(SwingConstants.LEFT);
+        rrb.addActionListener(e -> RrWizard.open(f, null));
         JButton eng = MainFrame.button("Engine page (dongles, PPM, gain, voice codec)", Theme.Glyph.RADIO, Theme.CYAN);
         eng.setHorizontalAlignment(SwingConstants.LEFT);
         eng.addActionListener(e -> f.show("Engine"));
@@ -47,7 +50,7 @@ public class HelpPage extends JPanel {
         JButton prof = MainFrame.button("Open settings folder (systems, talkgroups, streams)", Theme.Glyph.FOLDER, Theme.DIM);
         prof.setHorizontalAlignment(SwingConstants.LEFT);
         prof.addActionListener(e -> { try { Desktop.getDesktop().open(f.app.profile.toFile()); } catch (Exception ex) { f.toast(String.valueOf(f.app.profile)); } });
-        tl.add(eng); tl.add(tuners); tl.add(log); tl.add(demo); tl.add(data); tl.add(prof);
+        tl.add(rrb); tl.add(eng); tl.add(tuners); tl.add(log); tl.add(demo); tl.add(data); tl.add(prof);
         tools.add(tl, BorderLayout.CENTER);
         left.addCard(check);
         left.addCard(tools);
@@ -143,6 +146,7 @@ public class HelpPage extends JPanel {
                 "Without it calls are listed but silent.<br>" +
                 "<h3 style='color:#00E5FF'>3. Choose a system</h3>" +
                 "Pick one in the <b>SYSTEM</b> box at the top, or add your own on the <b>Systems</b> page: type the control channel in MHz (e.g. <b>851.0125</b>). " +
+                "<b>With a RadioReference Premium account:</b> Systems page (or Tools below) &rarr; <b>Set up from RadioReference</b> - sign in, pick your state, county, system, site and talkgroups, and TrunkDeck fills in the control channels and talkgroup names (builds with a RadioReference app key only). " +
                 "Add the alternate control channel after a comma: the site uses one at a time and TrunkDeck switches over by itself if the active one goes quiet.<br>" +
                 "<h3 style='color:#00E5FF'>4. Add talkgroups (optional but recommended)</h3>" +
                 "Talkgroups page &rarr; <b>Import CSV</b>. Columns like Decimal, Hex, Alpha Tag, Mode, Description, Tag, Category are recognised automatically " +

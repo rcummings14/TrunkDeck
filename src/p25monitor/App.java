@@ -8,7 +8,7 @@ import java.util.*;
 /** Application state shared by all pages: profile folder, systems, streams, settings. */
 public class App {
     public static final String NAME = "TrunkDeck";
-    public static final String VERSION = "1.5.1";
+    public static final String VERSION = "1.6.0";
 
     public final Path home;      // install folder (contains app/ and runtime/)
     public final Path profile;   // per-user data
@@ -16,6 +16,8 @@ public class App {
     public final List<StreamConfig> streams = new ArrayList<>();
     public final Properties settings = new Properties();
     public RadioSystem current;
+    /** This profile was new when loaded (1.6.0: TrunkDeck offers RadioReference setup). */
+    public boolean firstRun;
 
     public App(Path home) {
         this.home = home;
@@ -36,7 +38,7 @@ public class App {
         try (DirectoryStream<Path> ds = Files.newDirectoryStream(systemsDir())) {
             for (Path d : ds) if (Files.exists(d.resolve("system.properties"))) try { systems.add(RadioSystem.load(d)); } catch (Exception ignored) {}
         }
-        boolean firstRun = !"true".equals(settings.getProperty("presetsInstalled"));
+        firstRun = !"true".equals(settings.getProperty("presetsInstalled"));
         if (firstRun) {
             for (RadioSystem p : RadioSystem.presets()) {
                 if (systems.stream().noneMatch(s -> s.id.equals(p.id))) { save(p); systems.add(p); }

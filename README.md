@@ -23,6 +23,10 @@ stream them to Broadcastify, OpenMHz or your own Rdio Scanner server - all from 
 * **System tray:** close or minimize to the tray (or to Display only) - your choice.
 * **Streaming / uploads** (optional): **Broadcastify Calls**, **Broadcastify Feeds** / any Icecast server (MP3),
   **OpenMHz**, **Rdio Scanner**. Live talkgroup assignment, status and retry on the Streams page.
+* **Set up from RadioReference** (1.6.0): sign in with your own RadioReference Premium account, pick state → county →
+  system, the site(s) and talkgroups (encrypted ones marked and unticked), and TrunkDeck creates the system with its
+  control channels and talkgroup names. *Refresh* later merges new and renamed talkgroups and keeps your own settings.
+  Needs a RadioReference app key (not in this repository - see [below](#radioreference-app-key)).
 * **Now-playing tags** on Broadcastify Feeds / Icecast (1.5.1): the talkgroup (optionally the radio) of the call playing
   is sent as the stream title, in step with the audio - your choice of format, an optional text between calls, and a
   *Send test tag* button. A separate short request: the audio connection is never touched.
@@ -43,7 +47,7 @@ Download the file for your system from the [Releases](../../releases) page.
 
 ### Windows 10/11 (64-bit)
 
-1. Unzip **`TrunkDeck-1.5.1-windows.zip`**, open `TrunkDeck\windows` and double-click **`Install.bat`**
+1. Unzip **`TrunkDeck-1.6.0-windows.zip`**, open `TrunkDeck\windows` and double-click **`Install.bat`**
    (SmartScreen: *More info → Run anyway*). It downloads the Eclipse Temurin Java runtime into TrunkDeck's own folder
    (checksum-verified) and adds Start Menu and Desktop shortcuts. Installs for your user only, no admin rights needed.
 2. **USB driver (once per receiver):** run [Zadig](https://zadig.akeo.ie), *Options → List All Devices*, pick the
@@ -56,7 +60,7 @@ Uninstall: *Settings → Apps → TrunkDeck*.
 ### Linux (Fedora, Ubuntu, Debian, Mint, Arch, Raspberry Pi OS 64-bit)
 
 ```bash
-tar xzf TrunkDeck-1.5.1-linux.tar.gz
+tar xzf TrunkDeck-1.6.0-linux.tar.gz
 cd TrunkDeck/linux
 ./install.sh
 ```
@@ -70,7 +74,8 @@ Uninstall: `~/.local/share/trunkdeck/uninstall.sh`.
 
 ### First start
 
-1. **Systems** page: add your system - its control channel(s) in MHz (RadioReference lists them; use the ones marked
+1. **Systems** page: **Set up from RadioReference** (needs a RadioReference Premium account and a build with an app key),
+   or add your system by hand - its control channel(s) in MHz (RadioReference lists them; use the ones marked
    *c*). The preloaded *Example County* presets are **fictional** placeholders; delete them if you like.
 2. **Talkgroups** page: import your talkgroup CSV (RadioReference export works as-is; `talkgroups_template.csv` is a template).
 3. **Engine** page → *Voice codec*: click **Build from source…** once to build the JMBE voice codec on your PC (see the
@@ -90,6 +95,23 @@ bash build.sh test       # ... and runs the automated tests (some are skipped wi
 bash assemble_pkg.sh     # assembles pkg/TrunkDeck (app, installers, licences, source)
 python3 make_zip.py      # writes dist/TrunkDeck-<version>-windows.zip, -linux.tar.gz and SHA256SUMS.txt
 ```
+
+### RadioReference app key
+
+RadioReference's web service needs an **app key**, issued to the app's developer. It is **not** in this repository and
+must never be committed (`rr-app-key.txt` is in `.gitignore`). Without one, everything works except *Set up from
+RadioReference*, which then says it isn't available in this build. TrunkDeck looks for the key in this order:
+
+1. the environment variable `TRUNKDECK_RR_APP_KEY`;
+2. a file `rr-app-key.txt` (just the key) next to the app, or in the settings folder (*Engine → RadioReference app key*
+   writes it there);
+3. a key built into the packaged app: `RR_APP_KEY=your-key bash build.sh` writes it (obscured) into `build/trunkdeck.jar`
+   only - never into `src/`. Anyone can extract a key from a binary, so only do this for builds you distribute
+   under RadioReference's terms for that key.
+
+Each user signs in with their **own** RadioReference Premium account; RadioReference data is for personal use and must
+not be mirrored or republished. TrunkDeck only contacts RadioReference while the wizard is open. Tests use a mock
+server (`test/p25monitor/rr/MockRr.java`, fictional data); no key is needed to build or test.
 
 Run without installing (Linux, with a system Java 22+): `bash pkg/TrunkDeck/linux/run.sh` after `assemble_pkg.sh`.
 The bundled native libraries (`stage/native`) are prebuilt `librtlsdr` and `libusb`;

@@ -19,6 +19,8 @@ public class SystemsPage extends JPanel {
             meter = new JCheckBox("Control-channel decode meter (writes a message log)");
     final JTextArea notes = new JTextArea(3, 20);
     RadioSystem editing;
+    /** 1.6.0: only for a system set up from RadioReference. */
+    final JButton rrRefresh = MainFrame.button("Refresh from RadioReference", Theme.Glyph.APPLY, Theme.CYAN);
 
     SystemsPage(MainFrame f) {
         super(new BorderLayout(12, 10));
@@ -29,6 +31,11 @@ public class SystemsPage extends JPanel {
         head.add(MainFrame.h1("Systems"), BorderLayout.WEST);
         JPanel tools = new JPanel(new Layouts.WrapLayout(FlowLayout.RIGHT, 8, 0)); // wraps under narrow windows instead of overlapping the title
         tools.setOpaque(false);
+        JButton fromRr = MainFrame.button("Set up from RadioReference", Theme.Glyph.IMPORT, Theme.GREEN);
+        fromRr.setToolTipText("Sign in with your RadioReference Premium account, pick your system, site and talkgroups - TrunkDeck fills in the rest");
+        fromRr.addActionListener(e -> RrWizard.open(f, null));
+        rrRefresh.setToolTipText("Download this system's talkgroups and sites again: new and renamed talkgroups are merged, your own settings are kept, nothing is deleted");
+        rrRefresh.addActionListener(e -> { if (editing != null && editing.rrSid > 0) RrWizard.open(f, editing); });
         JButton add = MainFrame.button("New system", Theme.Glyph.PLUS, Theme.GREEN);
         JButton preset = MainFrame.button("Add preset", Theme.Glyph.SYSTEMS, Theme.CYAN);
         JButton dup = MainFrame.button("Duplicate", Theme.Glyph.PLUS, Theme.DIM);
@@ -37,7 +44,7 @@ public class SystemsPage extends JPanel {
         preset.addActionListener(e -> addPreset());
         dup.addActionListener(e -> { if (editing != null) { RadioSystem c = copy(editing); c.name = editing.name + " (copy)"; addSystem(c); } });
         del.addActionListener(e -> deleteSystem());
-        tools.add(add); tools.add(preset); tools.add(dup); tools.add(del);
+        tools.add(fromRr); tools.add(rrRefresh); tools.add(add); tools.add(preset); tools.add(dup); tools.add(del);
         head.add(tools, BorderLayout.CENTER);
         add(head, BorderLayout.NORTH);
 
@@ -105,6 +112,7 @@ public class SystemsPage extends JPanel {
         buttons.add(save); buttons.add(use);
         form.add(buttons, BorderLayout.SOUTH);
         add(form, BorderLayout.CENTER);
+        rrRefresh.setVisible(false);
         refreshList();
     }
 
@@ -146,6 +154,7 @@ public class SystemsPage extends JPanel {
         ignoreData.setSelected(s.ignoreDataCalls); recordAll.setSelected(s.recordAll); meter.setSelected(s.decodeMeter);
         notes.setText(s.notes);
         notes.setCaretPosition(0);
+        rrRefresh.setVisible(s.rrSid > 0);
     }
 
     boolean readForm(RadioSystem s) {
@@ -216,6 +225,7 @@ public class SystemsPage extends JPanel {
         s.name = o.name; s.site = o.site; s.controlChannelsMHz = new ArrayList<>(o.controlChannelsMHz); s.nac = o.nac; s.wacn = o.wacn; s.sysId = o.sysId;
         s.rfss = o.rfss; s.siteNumber = o.siteNumber; s.modulation = o.modulation; s.nativeModulation = o.nativeModulation; s.trafficChannels = o.trafficChannels; s.ignoreDataCalls = o.ignoreDataCalls;
         s.preferredTuner = o.preferredTuner; s.recordAll = o.recordAll; s.decodeMeter = o.decodeMeter; s.notes = o.notes;
+        s.rrSid = o.rrSid; s.rrSites = o.rrSites; s.rrUpdated = o.rrUpdated; s.rrSeen = o.rrSeen;
         for (Talkgroup t : o.talkgroups) {
             Talkgroup n = new Talkgroup();
             n.decimal = t.decimal; n.alphaTag = t.alphaTag; n.mode = t.mode; n.description = t.description; n.tag = t.tag; n.category = t.category;

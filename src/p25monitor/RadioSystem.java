@@ -24,6 +24,11 @@ public class RadioSystem {
     public boolean recordAll = false;
     public boolean decodeMeter = true; // log control-channel messages so TrunkDeck can show a decode-rate meter
     public String notes = "";
+    /** RadioReference (1.6.0): the system's RR ID (sid, 0 = not from RadioReference), chosen site IDs and last import date. */
+    public int rrSid;
+    public String rrSites = "", rrUpdated = "";
+    /** Decimal IDs RadioReference listed at the last import (so a refresh only offers really new talkgroups). */
+    public String rrSeen = "";
     public final List<Talkgroup> talkgroups = new ArrayList<>();
     /** Radio ID -> name (radios.csv next to talkgroups.csv). */
     public RadioAliases radios = new RadioAliases();
@@ -88,6 +93,7 @@ public class RadioSystem {
         p.setProperty("recordAll", String.valueOf(recordAll));
         p.setProperty("notes", notes);
         p.setProperty("decodeMeter", String.valueOf(decodeMeter));
+        if (rrSid > 0) { p.setProperty("rr.sid", String.valueOf(rrSid)); p.setProperty("rr.sites", rrSites); p.setProperty("rr.updated", rrUpdated); p.setProperty("rr.seen", rrSeen); }
         try (Writer w = Files.newBufferedWriter(dir.resolve("system.properties"), StandardCharsets.UTF_8)) {
             p.store(w, "P25 Monitor system");
         }
@@ -119,6 +125,8 @@ public class RadioSystem {
         s.recordAll = Boolean.parseBoolean(p.getProperty("recordAll", "false"));
         s.notes = p.getProperty("notes", "");
         s.decodeMeter = Boolean.parseBoolean(p.getProperty("decodeMeter", "true"));
+        try { s.rrSid = Integer.parseInt(p.getProperty("rr.sid", "0").trim()); } catch (Exception ignored) {}
+        s.rrSites = p.getProperty("rr.sites", ""); s.rrUpdated = p.getProperty("rr.updated", ""); s.rrSeen = p.getProperty("rr.seen", "");
         Path csv = dir.resolve("talkgroups.csv");
         if (Files.exists(csv)) s.talkgroups.addAll(TalkgroupCsv.read(csv).talkgroups);
         s.radios = RadioAliases.load(dir);
