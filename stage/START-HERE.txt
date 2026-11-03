@@ -1,4 +1,4 @@
-TRUNKDECK 1.6.0 - P25 Phase 1 and Phase 2 trunking monitor
+TRUNKDECK 1.7.0 - P25 Phase 1 and Phase 2 trunking monitor
 ==========================================================
 
 WINDOWS:  open the "windows" folder and double-click Install.bat
@@ -6,6 +6,12 @@ LINUX:    open a terminal in the "linux" folder and run:  ./install.sh
 
 Then start TrunkDeck from the Start Menu / app menu or the Desktop icon.
 Full step-by-step guide (drivers, first start, CSV import, streaming): README.md
+
+NEW IN 1.7.0: SDRPLAY, HACKRF ONE, LIMESDR AND ETTUS USRP - UNTESTED. These receivers now work through SoapySDR
+(free drivers you install yourself; nothing new is bundled, and the SDRplay API must come from sdrplay.com). This support
+has NOT been tested with real hardware - if something doesn't work, please report it on GitHub Issues
+(https://github.com/rcummings14/TrunkDeck/issues) with "Copy diagnostics" from the Engine page. Airspy R2 and RTL-SDR
+are tested and unchanged. What to install for Windows, Fedora and Debian/Ubuntu: README.md, "Supported receivers".
 
 NEW IN 1.6.0: SET UP FROM RADIOREFERENCE. Systems -> Set up from RadioReference: sign in with your own RadioReference
 Premium account, pick state -> county -> system (or a ZIP code / system ID), the site(s) and the talkgroups (all

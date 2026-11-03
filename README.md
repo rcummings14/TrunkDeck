@@ -16,6 +16,8 @@ stream them to Broadcastify, OpenMHz or your own Rdio Scanner server - all from 
   emergency flags, priority, talkgroup mute / lockout, radio-ID names (DSD+ `.radios` or CSV import).
 * **Receivers:** one **Airspy R2** (about 8.8 MHz at 10 MS/s - often a whole site at once, many calls decoded in parallel)
   and/or one or more **RTL-SDR** dongles (a control dongle plus roaming voice dongles). Own drivers - no SDR# / SDRTrunk.
+  New in 1.7.0 and **untested**: **SDRplay**, **HackRF One**, **LimeSDR** and **Ettus USRP** through SoapySDR - see
+  [Supported receivers](#supported-receivers).
 * **Big scanner display** with colour themes (Full color, SDS-style, amber, ... or your own colours, including the bars
   and the display border), glow, scan lines, backlight on calls, SCANNING ticker.
 * **Display only** mode: the window shrinks to just the scanner display (resizable, draggable, always-on-top option);
@@ -47,7 +49,7 @@ Download the file for your system from the [Releases](../../releases) page.
 
 ### Windows 10/11 (64-bit)
 
-1. Unzip **`TrunkDeck-1.6.0-windows.zip`**, open `TrunkDeck\windows` and double-click **`Install.bat`**
+1. Unzip **`TrunkDeck-1.7.0-windows.zip`**, open `TrunkDeck\windows` and double-click **`Install.bat`**
    (SmartScreen: *More info → Run anyway*). It downloads the Eclipse Temurin Java runtime into TrunkDeck's own folder
    (checksum-verified) and adds Start Menu and Desktop shortcuts. Installs for your user only, no admin rights needed.
 2. **USB driver (once per receiver):** run [Zadig](https://zadig.akeo.ie), *Options → List All Devices*, pick the
@@ -60,7 +62,7 @@ Uninstall: *Settings → Apps → TrunkDeck*.
 ### Linux (Fedora, Ubuntu, Debian, Mint, Arch, Raspberry Pi OS 64-bit)
 
 ```bash
-tar xzf TrunkDeck-1.6.0-linux.tar.gz
+tar xzf TrunkDeck-1.7.0-linux.tar.gz
 cd TrunkDeck/linux
 ./install.sh
 ```
@@ -71,6 +73,29 @@ that grabs RTL-SDR dongles). Replug the receivers afterwards. The Airspy needs `
 Debian/Ubuntu: `libusb-1.0-0`). GNOME needs the *AppIndicator* extension for the tray icon.
 
 Uninstall: `~/.local/share/trunkdeck/uninstall.sh`.
+
+### Supported receivers
+
+| Receiver | Status | What you install besides TrunkDeck |
+|---|---|---|
+| **RTL-SDR** (RTL2832U) | Tested | Windows: WinUSB driver via Zadig. Linux: the installer's USB setup. (librtlsdr is bundled.) |
+| **Airspy R2** | Tested | Windows: WinUSB driver via Zadig. Linux: USB setup + `libusb1`. (TrunkDeck's own driver.) |
+| **SDRplay** RSP1A / RSP1B / RSP2 / RSPdx / RSPduo | **UNTESTED** (1.7.0) | The **SDRplay API 3.x** from [sdrplay.com](https://www.sdrplay.com) (its licence doesn't allow bundling) + SoapySDR with the SDRplay module |
+| **HackRF One** | **UNTESTED** (1.7.0) | SoapySDR + HackRF module (Windows: also WinUSB via Zadig) |
+| **LimeSDR** (USB / Mini) | **UNTESTED** (1.7.0) | SoapySDR + LimeSuite module |
+| **Ettus USRP** (B2xx, N2xx, X3xx...) | **UNTESTED** (1.7.0) | SoapySDR + UHD module, then `uhd_images_downloader` once |
+
+**UNTESTED** = new in 1.7.0 and not yet tried with real hardware (only with simulated receivers in `test/p25monitor/SoapyTests.java`).
+The Engine page marks these receivers *(untested)* ([screenshot](docs/screenshots/engine-untested-receivers.png)). If one doesn't work, please open an
+[issue](https://github.com/rcummings14/TrunkDeck/issues) with *Copy diagnostics* from the Engine page, the receiver model,
+your OS and driver versions.
+
+SoapySDR in short (details: *Supported receivers* in [stage/README.md](stage/README.md)) - none of it is bundled:
+* **Windows:** [PothosSDR](https://downloads.myriadrf.org/builds/PothosSDR/) (`PothosSDR-2021.07.25-vc16-x64.exe`)
+  contains SoapySDR and the HackRF, LimeSDR, USRP and SDRplay modules; SDRplay also needs the SDRplay API.
+* **Debian/Ubuntu:** `sudo apt install libsoapysdr0.8 soapysdr-module-hackrf soapysdr-module-lms7 soapysdr-module-uhd`
+* **Fedora:** `sudo dnf install SoapySDR soapy-uhd uhd` (HackRF / LimeSDR modules: radioconda or build from source).
+* **SDRplay on Linux:** SDRplay API, then build [SoapySDRPlay3](https://github.com/pothosware/SoapySDRPlay3).
 
 ### First start
 
@@ -130,11 +155,12 @@ Tests that need them are skipped when they are missing.
   [JMBE](https://github.com/DSheirer/jmbe) (GPL-3.0) and compiles it on your computer, or uses a JMBE jar you choose.
   The IMBE and AMBE+2 vocoders it implements are subject to patents held by Digital Voice Systems, Inc.; check whether
   you need a licence where you live.
-* Broadcastify, OpenMHz, Rdio Scanner, RadioReference, Airspy and RTL-SDR are names of their respective owners;
+* Broadcastify, OpenMHz, Rdio Scanner, RadioReference, Airspy, RTL-SDR, SDRplay, HackRF, LimeSDR, Ettus and USRP are names of their respective owners;
   TrunkDeck is not affiliated with or endorsed by any of them.
 
 ## License
 
 TrunkDeck is released under the [MIT License](LICENSE) - Copyright (c) 2026 TrunkDeck contributors.
-Bundled third-party components keep their own licences (FlatLaf, librtlsdr, libusb, java-lame, JTransforms, ...):
+Bundled third-party components keep their own licences (FlatLaf, librtlsdr, libusb, java-lame, JTransforms, ...);
+SoapySDR, its modules and the SDRplay API are not bundled (you install them yourself):
 see [NOTICE.txt](NOTICE.txt) and [stage/licenses/THIRD-PARTY.txt](stage/licenses/THIRD-PARTY.txt).

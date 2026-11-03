@@ -89,6 +89,47 @@ public final class NativeEngine {
         public long centerHz() { try { double m = Double.parseDouble(center.replace(',', '.')); return m > 24 && m < 1800 ? Math.round(m * 1e6) : 0; } catch (Exception e) { return 0; } }
     }
 
+    /**
+     * Per-receiver settings of an SDRplay / HackRF / LimeSDR / USRP (SoapySDR, 1.7.0, untested with real hardware):
+     * "native.tuner.soapy-DRIVER-SERIAL.*" role, sample rate, gain code (see {@link SoapyDriver#gainCodes}), PPM,
+     * bias-T (SDRplay only), antenna (blank = sensible default) and a fixed centre in MHz (blank = automatic).
+     */
+    public static final class SoapySettings {
+        public String role = "auto", gain = "default", center = "", antenna = "";
+        public double rate;
+        public int ppm;
+        public boolean biasTee;
+        public static SoapySettings load(Properties p, String key, SoapyDriver d) {
+            SoapySettings a = new SoapySettings();
+            String k = "native.tuner." + key + ".";
+            a.role = p.getProperty(k + "role", "auto");
+            try { a.rate = Double.parseDouble(p.getProperty(k + "rate", String.valueOf((long) d.defaultRate))); } catch (Exception e) { a.rate = d.defaultRate; }
+            boolean ok = false; for (double r : d.rates) if (r == a.rate) ok = true;
+            if (!ok) a.rate = d.defaultRate;
+            a.gain = p.getProperty(k + "gain", "default");
+            if (!d.gainCodes().contains(a.gain) && !a.gain.matches("db:-?[0-9.]+|agc(:[0-9])?")) a.gain = "default";
+            try { a.ppm = Math.max(-200, Math.min(200, Integer.parseInt(p.getProperty(k + "ppm", "0").trim()))); } catch (Exception e) { a.ppm = 0; }
+            a.biasTee = d.hasBiasTee() && Boolean.parseBoolean(p.getProperty(k + "bias", "false"));
+            a.center = p.getProperty(k + "center", "").trim();
+            a.antenna = p.getProperty(k + "antenna", "").trim();
+            return a;
+        }
+        public void save(Properties p, String key) {
+            String k = "native.tuner." + key + ".";
+            p.setProperty(k + "role", role);
+            p.setProperty(k + "rate", String.valueOf((long) rate));
+            p.setProperty(k + "gain", gain);
+            p.setProperty(k + "ppm", String.valueOf(ppm));
+            p.setProperty(k + "bias", String.valueOf(biasTee));
+            p.setProperty(k + "center", center);
+            if (!antenna.isEmpty()) p.setProperty(k + "antenna", antenna); else p.remove(k + "antenna");
+        }
+        public long centerHz() { try { double m = Double.parseDouble(center.replace(',', '.')); return m > 24 && m < 6000 ? Math.round(m * 1e6) : 0; } catch (Exception e) { return 0; } }
+    }
+
+    /** SoapySDR receivers on/off (Engine page): "native.soapy" = true (default) / false. */
+    public static boolean soapyEnabled(Properties p) { return !"false".equalsIgnoreCase(p.getProperty("native.soapy", "true").trim()); }
+
     public static final int IMBE_NOISE = VoiceCallDecoder.IMBE_NOISE, GAIN_FLOOR = TunerAdvice.GAIN_FLOOR;
     public static final double PPM_DEADBAND = TunerAdvice.PPM_DEADBAND;
     public static int suggestedPpm(int current, double measuredPpm) { return TunerAdvice.suggestedPpm(current, measuredPpm); }
@@ -110,6 +151,7 @@ public final class NativeEngine {
     final ConcurrentLinkedDeque<Msg> msgs = new ConcurrentLinkedDeque<>();
     final List<RtlSdr> dongles = new ArrayList<>();
     final List<AirspyR2> airspys = new ArrayList<>();
+    final List<SoapySdr> soapys = new ArrayList<>();
     /** Wideband control tuner: centre fixed by the user (0 = planned automatically), and whether the IDEN_UP plan ran. */
     volatile long fixedWideCenter;
     volatile boolean widePlanned;
@@ -367,6 +409,7 @@ public final class NativeEngine {
 
     /** Stall watchdog and processing restarts of every tuner (log messages with the failure's stack). */
     void watchTuners() {
+        if (!soapys.isEmpty() || !SoapySdr.driverLog.isEmpty()) drainSoapyLog();
         long stall = Long.getLong("trunkdeck.stallMs", 5000);
         for (Tuner t : tuners) {
             try {
@@ -425,47 +468,78 @@ public final class NativeEngine {
     }
 
     /**
-     * Real receivers: every Airspy R2 and RTL-SDR dongle found. The control tuner is the one set to "control", else an
-     * Airspy set to "auto" (it covers the control channel and the voice channels around it at once), else an RTL
-     * dongle set to "auto". Every other receiver roams for voice.
+     * Real receivers: every Airspy R2 and RTL-SDR dongle found, plus (1.7.0, untested with real hardware) SDRplay,
+     * HackRF, LimeSDR and USRP receivers through SoapySDR. The control tuner is the one set to "control", else an
+     * Airspy set to "auto" (it covers the control channel and the voice channels around it at once), else a SoapySDR
+     * receiver set to "auto" (wideband like the Airspy), else an RTL dongle set to "auto". Every other receiver roams for voice.
      */
     void startRtl(List<Long> ccs) throws Exception {
         List<RtlSdr.Info> found = new ArrayList<>();
         List<AirspyR2.Info> spies = new ArrayList<>();
-        String rtlErr = null, usbErr = null;
+        List<SoapySdr.Info> soapy = new ArrayList<>();
+        String rtlErr = null, usbErr = null, soapyErr = null;
+        SoapySdr.enabled = soapyEnabled(app.settings);
+        long t0 = System.currentTimeMillis();
+        // SoapySDR receivers are searched at the same time as the RTL / Airspy ones (a USRP network search takes ~0.5 s)
+        java.util.concurrent.FutureTask<List<SoapySdr.Info>> soapyFind = new java.util.concurrent.FutureTask<>(() -> SoapySdr.list());
+        if (SoapySdr.enabled) { Thread th = new Thread(soapyFind, "soapy-search"); th.setDaemon(true); th.start(); }
         try { found = RtlSdr.list(); } catch (Throwable t) { rtlErr = t.getMessage(); }
         try { spies = AirspyR2.list(); } catch (Throwable t) { usbErr = t.getMessage(); }
         log("librtlsdr: " + (rtlErr == null ? RtlSdr.libraryInfo() : rtlErr) + "; " + found.size() + " RTL-SDR dongle(s) found");
         log("libusb (Airspy): " + (usbErr == null ? LibUsb.get().from + " " + LibUsb.get().version() : usbErr) + "; " + spies.size() + " Airspy receiver(s) found");
         for (AirspyR2.Info a : spies) if (!a.note.isBlank()) log("Airspy " + a.label());
+        if (SoapySdr.enabled) {
+            try { soapy = soapyFind.get(); } catch (java.util.concurrent.ExecutionException t) { soapyErr = t.getCause().getMessage(); } catch (Throwable t) { soapyErr = String.valueOf(t.getMessage()); }
+            drainSoapyLog();
+            if (soapyErr == null) {
+                log("SoapySDR (SDRplay / HackRF / LimeSDR / USRP, untested): " + SoapySdr.libraryInfo() + "; " + soapy.size() + " receiver(s) found in " + (System.currentTimeMillis() - t0) + " ms");
+                for (String st : SoapySdr.status()) if (!st.contains("driver ready")) log("SoapySDR " + st);
+            } else log("SoapySDR receivers (SDRplay / HackRF / LimeSDR / USRP): not available - " + soapyErr.split("\n")[0]);
+        } else log("SoapySDR receivers switched off (Engine page)");
         List<AirspyR2.Info> usable = new ArrayList<>();
         for (AirspyR2.Info a : spies) if (!AirspySettings.load(app.settings, a.key()).role.equals("off")) usable.add(a);
-        if (found.isEmpty() && usable.isEmpty()) {
+        List<SoapySdr.Info> soapyUsable = new ArrayList<>();
+        for (SoapySdr.Info a : soapy) if (!SoapySettings.load(app.settings, a.key(), a.driver).role.equals("off")) soapyUsable.add(a);
+        // the widest receiver first: it becomes the control tuner when several are set to "auto"
+        soapyUsable.sort(Comparator.comparingDouble((SoapySdr.Info a) -> -SoapySettings.load(app.settings, a.key(), a.driver).rate));
+        if (found.isEmpty() && usable.isEmpty() && soapyUsable.isEmpty()) {
             problem = "NO TUNER FOUND";
-            if (found.isEmpty() && rtlErr != null && spies.isEmpty()) throw new IllegalStateException(rtlErr);
-            throw new IllegalStateException((spies.isEmpty() ? "No RTL-SDR dongle or Airspy found. Plug it in" : "Every receiver is set to \"off\" (Engine page \u2192 Tuners). Plug in another or change its role")
-                    + (System.getProperty("os.name", "").toLowerCase().contains("win") ? " and install the WinUSB driver with Zadig (Setup & Help)." : " and check the udev rules (Setup & Help)."));
+            if (found.isEmpty() && rtlErr != null && spies.isEmpty() && soapy.isEmpty()) throw new IllegalStateException(rtlErr);
+            throw new IllegalStateException((spies.isEmpty() && soapy.isEmpty() ? "No RTL-SDR dongle, Airspy or other receiver found. Plug it in" : "Every receiver is set to \"off\" (Engine page \u2192 Tuners). Plug in another or change its role")
+                    + (System.getProperty("os.name", "").toLowerCase().contains("win") ? " and install the WinUSB driver with Zadig (Setup & Help)." : " and check the udev rules (Setup & Help).")
+                    + (soapyErr != null && SoapySdr.enabled ? " SDRplay / HackRF / LimeSDR / USRP: " + soapyErr.split("\n")[0] : ""));
         }
-        AirspyR2.Info ca = null; RtlSdr.Info ci = null;
+        AirspyR2.Info ca = null; RtlSdr.Info ci = null; SoapySdr.Info cs = null;
         for (AirspyR2.Info a : usable) if (AirspySettings.load(app.settings, a.key()).role.equals("control")) { ca = a; break; }
-        if (ca == null) for (RtlSdr.Info d : found) if (TunerSettings.load(app.settings, d.key()).role.equals("control")) { ci = d; break; }
-        if (ca == null && ci == null) for (AirspyR2.Info a : usable) if (AirspySettings.load(app.settings, a.key()).role.equals("auto")) { ca = a; break; }
-        if (ca == null && ci == null) for (RtlSdr.Info d : found) if (TunerSettings.load(app.settings, d.key()).role.equals("auto")) { ci = d; break; }
-        if (ca == null && ci == null) throw new IllegalStateException("No receiver is assigned to the control channel (Engine page \u2192 Tuners).");
+        if (ca == null) for (SoapySdr.Info a : soapyUsable) if (SoapySettings.load(app.settings, a.key(), a.driver).role.equals("control")) { cs = a; break; }
+        if (ca == null && cs == null) for (RtlSdr.Info d : found) if (TunerSettings.load(app.settings, d.key()).role.equals("control")) { ci = d; break; }
+        if (ca == null && cs == null && ci == null) for (AirspyR2.Info a : usable) if (AirspySettings.load(app.settings, a.key()).role.equals("auto")) { ca = a; break; }
+        if (ca == null && cs == null && ci == null) for (SoapySdr.Info a : soapyUsable) if (SoapySettings.load(app.settings, a.key(), a.driver).role.equals("auto")) { cs = a; break; }
+        if (ca == null && cs == null && ci == null) for (RtlSdr.Info d : found) if (TunerSettings.load(app.settings, d.key()).role.equals("auto")) { ci = d; break; }
+        if (ca == null && cs == null && ci == null) throw new IllegalStateException("No receiver is assigned to the control channel (Engine page \u2192 Tuners).");
         int id = 2;
-        if (ca != null) {
-            AirspySettings as = AirspySettings.load(app.settings, ca.key());
-            AirspyR2 a = openAirspy(ca);
-            ccTuner = new Tuner(1, ca.label().trim(), a, Tuner.Role.CONTROL);
+        if (ca != null || cs != null) {
+            IqSource src; String label; long fixed;
+            if (ca != null) { AirspySettings as = AirspySettings.load(app.settings, ca.key()); src = openAirspy(ca); label = ca.label().trim(); fixed = as.centerHz(); }
+            else { SoapySettings ss = SoapySettings.load(app.settings, cs.key(), cs.driver); src = openSoapy(cs); label = cs.tagged(); fixed = ss.centerHz(); }
+            ccTuner = new Tuner(1, label, src, Tuner.Role.CONTROL);
             tuners.add(ccTuner);
-            ccSource = a;
-            ccGroups = groupChannels(ccs, (long) (2 * ccTuner.halfSpan()));
-            ccGroup = 0;
-            fixedWideCenter = as.centerHz();
-            long c0 = fixedWideCenter > 0 ? fixedWideCenter : TunerPlanner.planWide(ccs, Map.of(), List.of(), x -> false, ccTuner.halfSpan(), ccTuner.dcGuard, 0);
-            cc.retuneTo(c0 > 0 ? c0 : centerFor(ccGroups.get(0)), fixedWideCenter > 0 ? "fixed centre from the Engine page" : "start: covers the control channels; re-centred for the voice band once the site's channel plan is known");
-            log("Control tuner T1: " + ca.label() + " (" + String.format(Locale.ROOT, "%.1f MS/s", a.sampleRate() / 1e6) + ", wideband: control channel + every voice channel in "
-                    + String.format(Locale.ROOT, "%.1f MHz", 2 * ccTuner.halfSpan() / 1e6) + ")");
+            ccSource = src;
+            if (ccTuner.wideband()) {
+                ccGroups = groupChannels(ccs, (long) (2 * ccTuner.halfSpan()));
+                ccGroup = 0;
+                fixedWideCenter = fixed;
+                long c0 = fixedWideCenter > 0 ? fixedWideCenter : TunerPlanner.planWide(ccs, Map.of(), List.of(), x -> false, ccTuner.halfSpan(), ccTuner.dcGuard, 0);
+                cc.retuneTo(c0 > 0 ? c0 : centerFor(ccGroups.get(0)), fixedWideCenter > 0 ? "fixed centre from the Engine page" : "start: covers the control channels; re-centred for the voice band once the site's channel plan is known");
+                log("Control tuner T1: " + label + " (" + String.format(Locale.ROOT, "%.1f MS/s", src.sampleRate() / 1e6) + ", wideband: control channel + every voice channel in "
+                        + String.format(Locale.ROOT, "%.1f MHz", 2 * ccTuner.halfSpan() / 1e6) + ")");
+            } else {   // a SoapySDR receiver at a rate the filter bank cannot split: decoded like an RTL dongle
+                ccGroups = groupChannels(ccs, (long) (2 * ccTuner.halfSpan()));
+                ccGroup = 0;
+                long c0 = TunerPlanner.plan(ccs, Map.of(), x -> false, ccTuner.halfSpan(), ccTuner.dcGuard, 0);
+                cc.retuneTo(c0 > 0 ? c0 : centerFor(ccGroups.get(0)), "start");
+                log("Control tuner T1: " + label + " (" + String.format(Locale.ROOT, "%.3f MS/s", src.sampleRate() / 1e6) + ", not a wideband rate: decoded like an RTL dongle)");
+            }
         } else {
             ccGroups = groupChannels(ccs, 2_000_000);
             ccGroup = 0;
@@ -485,6 +559,16 @@ public final class NativeEngine {
             tuners.add(new Tuner(id++, v.label().trim(), r, Tuner.Role.ROAMING));
             log("Voice tuner T" + (id - 1) + ": " + v.label() + " (wideband, roams to cover voice grants outside the other windows)");
         }
+        for (SoapySdr.Info v : soapyUsable) {
+            if (v == cs) continue;
+            String role = SoapySettings.load(app.settings, v.key(), v.driver).role;
+            if (role.equals("control")) continue;
+            SoapySdr r;
+            try { r = openSoapy(v); } catch (RuntimeException e) { log("Voice tuner " + v.tagged() + " not used: " + e.getMessage()); continue; }   // a voice receiver that fails does not stop the engine
+            Tuner t = new Tuner(id++, v.tagged(), r, Tuner.Role.ROAMING);
+            tuners.add(t);
+            log("Voice tuner T" + (id - 1) + ": " + v.tagged() + " (" + (t.wideband() ? "wideband, " : "") + "roams to cover voice grants outside the other windows)");
+        }
         for (RtlSdr.Info v : found) {
             if (v == ci) continue;
             String role = TunerSettings.load(app.settings, v.key()).role;
@@ -493,8 +577,25 @@ public final class NativeEngine {
             tuners.add(new Tuner(id++, v.label().trim(), r, Tuner.Role.ROAMING));
             log("Voice tuner T" + (id - 1) + ": " + v.label() + " (" + r.tunerName() + ") - roams to cover voice grants outside the other windows");
         }
-        if (tuners.size() == 1) log(ccTuner.wideband() ? "One Airspy: every voice channel inside its window is decoded (" + ccTuner.window() + ")."
+        if (tuners.size() == 1) log(ccTuner.wideband() ? (ccTuner.src instanceof AirspyR2 ? "One Airspy" : "One wideband receiver") + ": every voice channel inside its window is decoded (" + ccTuner.window() + ")."
                 : "Only one dongle: voice channels are decoded only when they fall inside the control dongle's window (about 2 MHz).");
+        for (Tuner t : tuners) if (t.src instanceof SoapySdr) { log("Note: " + SoapyDriver.UNTESTED_NOTE); break; }
+    }
+
+    SoapySdr openSoapy(SoapySdr.Info i) {
+        SoapySettings s = SoapySettings.load(app.settings, i.key(), i.driver);
+        SoapySdr d = new SoapySdr(i);
+        d.open(s.rate, s.gain, s.ppm, s.biasTee, s.antenna);
+        soapys.add(d);
+        drainSoapyLog();
+        log("Opened " + i.tagged() + ": " + d.configReport);
+        return d;
+    }
+
+    /** SoapySDR and driver messages (warnings / errors) into the engine log. */
+    void drainSoapyLog() {
+        int n = 0;
+        for (String m; (m = SoapySdr.driverLog.poll()) != null; ) if (n++ < 40) log("SoapySDR " + m);
     }
 
     AirspyR2 openAirspy(AirspyR2.Info i) {
@@ -624,6 +725,8 @@ public final class NativeEngine {
         dongles.clear();
         for (AirspyR2 a : airspys) a.stop();
         airspys.clear();
+        for (SoapySdr d : soapys) d.stop();
+        soapys.clear();
         if (widePool != null) { widePool.shutdownNow(); widePool = null; }
         tuners.clear();
         ccTuner = null; ccSource = null; ccDecoders.clear(); tdma.clear();

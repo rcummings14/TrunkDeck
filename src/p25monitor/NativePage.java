@@ -424,6 +424,7 @@ public class NativePage extends JPanel {
             driver.setText("Driver: " + RtlSdr.libraryInfo()); tunerNote.setVisible(true);
         }
         addAirspyRows(g, busy);
+        addSoapyRows(g, busy);
         tunerRows.revalidate();
         tunerRows.repaint();
         updateCodec();
@@ -499,6 +500,153 @@ public class NativePage extends JPanel {
         }
         String d = driver.getText();
         driver.setText((d.isBlank() ? "Driver: " : d + "  |  ") + LibUsb.info());
+    }
+
+    // ---------------------------------------------------------------- SDRplay / HackRF / LimeSDR / USRP (SoapySDR, 1.7.0, untested)
+    private volatile boolean soapySearching;
+    private String soapyShownKeys = null;
+    private boolean soapyShownSearching;
+
+    /** Searches for SoapySDR receivers in the background (USRP network search ~0.5 s) and redraws when the list changed. */
+    void refreshSoapy() {
+        if (soapySearching || !NativeEngine.soapyEnabled(f.app.settings)) return;
+        soapySearching = true;
+        Thread t = new Thread(() -> {
+            String keys;
+            try { StringBuilder k = new StringBuilder(); for (SoapySdr.Info i : SoapySdr.list()) k.append(i.key()).append(';'); keys = k.toString(); }
+            catch (Throwable ex) { keys = "error"; }
+            String fk = keys;
+            SwingUtilities.invokeLater(() -> { soapySearching = false; if (!fk.equals(soapyShownKeys) || soapyShownSearching) rescan(); });
+        }, "soapy-ui-search");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    static String shortStatus() {
+        List<String> parts = new ArrayList<>();
+        Map<SoapyDriver, SoapySdr.Module> m = SoapySdr.modules();
+        for (SoapyDriver d : SoapyDriver.values()) {
+            SoapySdr.Module x = m.get(d);
+            boolean ok = x != null && x.ok() && !(d == SoapyDriver.SDRPLAY && !SoapySdr.sdrplayApiInstalled());
+            parts.add(d.product.replace(" One", "").replace(" RSP", "") + (ok ? " ready" : d == SoapyDriver.SDRPLAY && !SoapySdr.sdrplayApiInstalled() ? ": SDRplay API not installed" : x != null && !x.ok() ? ": driver failed to load" : ": driver not installed"));
+        }
+        return "Drivers: " + String.join("  \u00b7  ", parts) + "  (what to install: Setup & Help)";
+    }
+
+    /** SoapySDR receivers: role, sample rate, gain, bias-T (SDRplay), fixed centre and PPM; each tagged "(untested)". */
+    void addSoapyRows(GridBagConstraints g, boolean busy) {
+        int y = tunerRows.getComponentCount() + 100;
+        g.gridwidth = 4; g.gridx = 0; g.weightx = 1; g.gridy = y++; g.insets = new Insets(12, 2, 0, 6);
+        JLabel h = new JLabel("SDRPLAY / HACKRF / LIMESDR / USRP  (via SoapySDR, " + SoapyDriver.UNTESTED.replaceAll("[()]", "") + ")");
+        h.setToolTipText("New in 1.7.0: these receivers work through SoapySDR, installed separately. Not tested with real hardware yet.");
+        h.setFont(Theme.mono(Font.BOLD, 10f)); h.setForeground(Theme.DIM);
+        tunerRows.add(h, g);
+        boolean on = NativeEngine.soapyEnabled(f.app.settings);
+        JCheckBox use = new JCheckBox("Look for these receivers");
+        use.setOpaque(false); use.setSelected(on); use.setFont(Theme.ui(Font.PLAIN, 12f));
+        use.setToolTipText("Off: TrunkDeck does not load SoapySDR at all (Airspy and RTL-SDR are never affected either way).");
+        use.addActionListener(e -> { f.app.settings.setProperty("native.soapy", String.valueOf(use.isSelected())); f.app.saveSettings(); SoapySdr.enabled = use.isSelected(); soapyShownKeys = null; rescan();
+            if (f.nativeEngine.isRunning()) f.toast("Saved - press STOP / START to apply."); });
+        g.gridy = y++; g.insets = new Insets(2, 2, 0, 6);
+        tunerRows.add(use, g);
+        if (!on) { g.weightx = 0; g.gridwidth = 1; return; }
+        SoapySdr.enabled = true;
+        List<SoapySdr.Info> list = new ArrayList<>();
+        String err = null, status = null;
+        boolean shots = Boolean.getBoolean("trunkdeck.screenshotTuners");
+        try { SoapySdr.lib(); status = shortStatus(); list = new ArrayList<>(SoapySdr.lastFound()); } catch (Throwable t) { err = t.getMessage(); }
+        if (list.isEmpty() && shots) {   // documentation screenshots only
+            SoapySdr.Info a = new SoapySdr.Info(); a.driver = SoapyDriver.HACKRF; a.args.put("label", "HackRF One #0 0000000000000000457863dc2b7a1a1f"); a.args.put("serial", "0000000000000000457863dc2b7a1a1f"); list.add(a);
+            SoapySdr.Info b = new SoapySdr.Info(); b.driver = SoapyDriver.SDRPLAY; b.args.put("label", "SDRplay Dev0 RSP1A 2105076A13"); b.args.put("serial", "2105076A13"); list.add(b);
+            err = null; status = "Drivers: SDRplay ready  \u00b7  HackRF ready  \u00b7  LimeSDR ready  \u00b7  Ettus USRP ready";
+        }
+        StringBuilder keys = new StringBuilder(); for (SoapySdr.Info i : list) keys.append(i.key()).append(';');
+        soapyShownKeys = err != null ? "error" : keys.toString();
+        soapyShownSearching = err == null && list.isEmpty() && !SoapySdr.searched();
+        g.gridy = y++; g.insets = new Insets(2, 2, 3, 6);
+        if (err != null) {
+            tunerRows.add(Layouts.wrapText(err.split("\n")[0], Theme.AMBER, Theme.ui(Font.PLAIN, 12f)), g);
+            g.weightx = 0; g.gridwidth = 1;
+            return;
+        }
+        tunerRows.add(Layouts.wrapText(status + (list.isEmpty() ? "\n" + (soapyShownSearching ? "Searching\u2026" : "None found. " + "Plug the receiver in and press Rescan.") + (busy ? " (Receivers in use by the running engine may be hidden.)" : "") : ""),
+                Theme.DIM, Theme.ui(Font.PLAIN, 11f)), g);
+        if (!shots) refreshSoapy();
+        for (SoapySdr.Info a : list) {
+            SoapyDriver d = a.driver;
+            NativeEngine.SoapySettings ss = NativeEngine.SoapySettings.load(f.app.settings, a.key(), d);
+            g.gridwidth = 4; g.gridx = 0; g.weightx = 1; g.gridy = y++; g.insets = new Insets(6, 2, 0, 6);
+            JPanel nameRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0)); nameRow.setOpaque(false);
+            JLabel n = new JLabel(a.label());
+            n.setFont(Theme.ui(Font.PLAIN, 12f)); n.setToolTipText(a.label());
+            JLabel tag = new JLabel("  " + SoapyDriver.UNTESTED);
+            tag.setFont(Theme.ui(Font.BOLD, 12f)); tag.setForeground(Theme.AMBER);
+            tag.setToolTipText(SoapyDriver.UNTESTED_NOTE);
+            nameRow.add(n); nameRow.add(tag);
+            nameRow.setMinimumSize(new Dimension(70, n.getPreferredSize().height));
+            tunerRows.add(nameRow, g);
+            g.weightx = 0; g.gridwidth = 1; g.gridy = y++; g.insets = new Insets(2, 2, 3, 6);
+            JComboBox<String> role = new JComboBox<>(new String[]{"auto", "control", "voice", "off"});
+            role.setSelectedItem(ss.role);
+            role.setToolTipText("auto/control: takes the control channel and decodes every voice channel in its window (an Airspy is preferred); voice: roams for calls; off: not used");
+            JComboBox<String> rate = new JComboBox<>();
+            for (double r : d.rates) rate.addItem(String.format(Locale.ROOT, r % 1e6 == 0 ? "%.0f MS/s" : "%.1f MS/s", r / 1e6));
+            int ri = 0; for (int k = 0; k < d.rates.length; k++) if (d.rates[k] == ss.rate) ri = k;
+            rate.setSelectedIndex(ri);
+            rate.setToolTipText("Default " + String.format(Locale.ROOT, "%.0f", d.defaultRate / 1e6) + " MS/s. Wider covers more voice channels at once but needs more USB bandwidth and CPU. Usable window is about 0.88 x the rate.");
+            JComboBox<String> gain = new JComboBox<>();
+            List<String> codes = new ArrayList<>(d.gainCodes());
+            if (!codes.contains(ss.gain)) codes.add(ss.gain);
+            for (String c : codes) gain.addItem(d.describeGain(c));
+            gain.setSelectedIndex(Math.max(0, codes.indexOf(ss.gain)));
+            gain.setToolTipText("Default is a safe middle setting. Lower it if Diagnostics shows clipping; raise it for weak sites.");
+            JCheckBox bias = new JCheckBox();
+            bias.setOpaque(false); bias.setSelected(ss.biasTee); bias.setEnabled(d.hasBiasTee());
+            bias.setToolTipText(d.hasBiasTee() ? "Powers an LNA through the antenna jack (RSP1A, RSP2, RSPdx, RSPduo). Off unless you use one." : "Bias-T is not available for this receiver in TrunkDeck.");
+            JTextField centre = new JTextField(ss.center, 9);
+            centre.putClientProperty("JTextField.placeholderText", "centre MHz: automatic");
+            centre.setToolTipText("Leave empty: TrunkDeck places the window itself. Or type a fixed centre, e.g. 456.8");
+            JSpinner ppm = new JSpinner(new SpinnerNumberModel(ss.ppm, -200, 200, 1));
+            ppm.setPreferredSize(new Dimension(76, 28)); ppm.setMinimumSize(new Dimension(76, 28));
+            Jargon.explain(ppm, "PPM");
+            JTextArea note = Layouts.wrapText("Untested: support for the " + d.product + " is new and was not tried with a real one. If something doesn't work, please report it on GitHub Issues: "
+                    + SoapyDriver.ISSUES_URL, Theme.AMBER, Theme.ui(Font.PLAIN, 11f));
+            note.setVisible(!"off".equals(ss.role));
+            Runnable save = () -> {
+                ss.role = (String) role.getSelectedItem(); ss.rate = d.rates[Math.max(0, rate.getSelectedIndex())];
+                ss.gain = codes.get(Math.max(0, gain.getSelectedIndex())); ss.biasTee = bias.isSelected(); ss.center = centre.getText().trim(); ss.ppm = (Integer) ppm.getValue();
+                ss.save(f.app.settings, a.key()); f.app.saveSettings();
+                note.setVisible(!"off".equals(ss.role)); tunerRows.revalidate();
+                if (f.nativeEngine.isRunning()) f.toast(d.product + " settings saved - press STOP / START to apply.");
+            };
+            role.addActionListener(e -> save.run()); rate.addActionListener(e -> save.run()); gain.addActionListener(e -> save.run()); bias.addActionListener(e -> save.run());
+            ppm.addChangeListener(e -> save.run());
+            centre.addActionListener(e -> save.run());
+            centre.addFocusListener(new java.awt.event.FocusAdapter() { public void focusLost(java.awt.event.FocusEvent e) { save.run(); } });
+            // one row of its own (the RTL columns are too narrow for these combos): role | rate | gain | Bias
+            JPanel sr = new JPanel(new GridBagLayout()); sr.setOpaque(false);
+            GridBagConstraints q = new GridBagConstraints(); q.fill = GridBagConstraints.HORIZONTAL; q.insets = new Insets(0, 0, 0, 6);
+            role.setPreferredSize(new Dimension(78, 28)); rate.setPreferredSize(new Dimension(92, 28)); gain.setPreferredSize(new Dimension(80, 28));
+            for (JComboBox<String> cb : List.of(role, rate, gain)) cb.setMinimumSize(new Dimension(40, 28));
+            q.gridx = 0; q.weightx = 0; sr.add(role, q);
+            q.gridx = 1; q.weightx = 0; sr.add(rate, q);
+            q.gridx = 2; q.weightx = 1; sr.add(gain, q);
+            bias.setText("Bias"); bias.setFont(Theme.ui(Font.PLAIN, 11f)); bias.setForeground(Theme.DIM);
+            q.gridx = 3; q.weightx = 0; q.insets = new Insets(0, 0, 0, 0); sr.add(bias, q);
+            g.gridx = 0; g.gridwidth = 4; g.weightx = 1; tunerRows.add(sr, g);
+            JPanel cr = new JPanel(new BorderLayout(6, 0)); cr.setOpaque(false);
+            centre.setPreferredSize(new Dimension(60, 28)); centre.setMinimumSize(new Dimension(60, 28));
+            JPanel pp = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0)); pp.setOpaque(false);
+            pp.add(dimLabel("PPM")); pp.add(ppm);
+            cr.add(centre, BorderLayout.CENTER); cr.add(pp, BorderLayout.EAST);
+            g.gridx = 0; g.gridwidth = 4; g.gridy = y++; g.insets = new Insets(0, 2, 3, 6);
+            tunerRows.add(cr, g);
+            g.gridy = y++; g.insets = new Insets(0, 2, 6, 6);
+            tunerRows.add(note, g);
+            g.gridwidth = 1;
+        }
+        String dt = driver.getText();
+        driver.setText((dt.isBlank() ? "Driver: " : dt + "  |  ") + SoapySdr.libraryInfo().split("\n")[0]);
     }
 
     void updateCodec() {

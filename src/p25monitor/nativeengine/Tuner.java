@@ -49,7 +49,8 @@ public final class Tuner {
         bank = rate >= 2.5e6 && PolyphaseBank.supports(rate) && !Boolean.getBoolean("trunkdeck.noFilterBank") ? new PolyphaseBank(rate) : null;
         // RTL: the last ~15 % of each half is anti-alias roll-off. Airspy: its half-band converter is flat to 0.44 x the rate.
         this.usableFraction = bank != null ? 0.44 : rate > 5e6 ? 0.45 : 0.42;
-        this.dcGuard = rate > 5e6 ? 15_000 : 25_000;
+        long g = src.dcGuardHz();
+        this.dcGuard = g > 0 ? g : rate > 5e6 ? 15_000 : 25_000;
     }
 
     boolean wideband() { return bank != null; }

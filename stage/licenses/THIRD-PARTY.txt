@@ -43,6 +43,17 @@ JMBE - GNU GPL v3 - https://github.com/DSheirer/jmbe
   The IMBE (Phase 1) and AMBE+2 (Phase 2) vocoders it implements are subject to patents held by Digital Voice
   Systems, Inc. TrunkDeck contains no vocoder code.
 
+Not included - used at run time only if you install them yourself (1.7.0)
+-------------------------------------------------------------------------
+SoapySDR - Boost Software License 1.0 - https://github.com/pothosware/SoapySDR
+  TrunkDeck calls the installed SoapySDR library (C API, ABI 0.8) to use SDRplay, HackRF, LimeSDR and USRP receivers.
+  No SoapySDR code or binary is included. Its driver modules keep their own licences: SoapySDRPlay3 (MIT),
+  SoapyHackRF (MIT), LimeSuite (Apache 2.0), SoapyUHD (GPL-3.0) with UHD (GPL-3.0).
+SDRplay API - proprietary (SDRplay Ltd) - https://www.sdrplay.com
+  Its licence does not allow redistribution: it is never included and must be downloaded from sdrplay.com.
+  TrunkDeck only checks whether it is installed, to explain what is missing.
+mock_soapy.cpp / broken_module.c (source/test/mocksoapy) are TrunkDeck's own test code (MIT).
+
 Reference only (no code or binary included)
 -------------------------------------------
 airspyone_host / libairspy - BSD 3-Clause - https://github.com/airspy/airspyone_host

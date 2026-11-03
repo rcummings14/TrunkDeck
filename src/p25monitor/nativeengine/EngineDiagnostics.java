@@ -181,6 +181,7 @@ final class EngineDiagnostics {
         String s = String.format(Locale.ROOT, "%d sub-bands of %.1f kHz, %d in use, %d channel decoders; processing %.0f %% of one CPU core",
                 t.bank.M, t.bank.SPACING / 1e3, bands, t.decoders.size() + (t == e.ccTuner ? e.ccDecoders.size() : 0), 100 * t.dspLoad());
         if (t.src.usbStream() != null) s += "; " + usbLine(t.src.usbStream());
+        if (t.src instanceof p25monitor.sdr.SoapySdr d) s += String.format(Locale.ROOT, "; receiver: %d blocks, %d dropped%s, %d driver overflows", d.blocks, d.droppedBlocks, dropCause(d.droppedBlocks, d.guard), d.overflows);
         return s;
     }
 
@@ -226,6 +227,9 @@ final class EngineDiagnostics {
                     + (st == null ? "not streaming" : String.format(Locale.ROOT, "ADC clipping %.3f %%, peak %.1f dBFS, level %.1f dBFS; %s, %s; ", 100 * st.clipFraction, st.peakDb, st.rmsDb, a.usbMode, usbLine(st)))
                     + t.window());
         }
+        for (Tuner t : e.tuners) if (t.src instanceof p25monitor.sdr.SoapySdr d) out.add(String.format(Locale.ROOT, "T%d %s %s: %s; ADC clipping %.3f %%, peak %.1f dBFS; %d blocks, %d dropped%s, %d driver overflows, %d read errors, queue peak %d; %s",
+                t.id, t == e.ccTuner ? "control" : "voice", d.info().tagged(), d.configReport, 100 * d.clipFraction, d.peakDb, d.blocks, d.droppedBlocks, dropCause(d.droppedBlocks, d.guard),
+                d.overflows, d.readErrors, d.queuePeak, t.window()));
         for (Tuner t : e.tuners) if (t.src instanceof RtlSdr d) out.add(String.format(Locale.ROOT, "T%d %s %s: PPM %d, gain %s, ADC clipping %.3f %%, peak %.1f dB; USB %s, %d blocks dropped%s, queue peak %d; %s",
                 t.id, t == e.ccTuner ? "control" : "voice", d.info().label().trim(), d.ppmSetting(),
                 d.gainReport.isEmpty() ? (d.gainSetting() < 0 ? "auto" : d.gainSetting() / 10.0 + " dB") : d.gainReport,
@@ -238,6 +242,10 @@ final class EngineDiagnostics {
         List<String> out = new ArrayList<>();
         for (Tuner t : e.tuners) if (t.src instanceof RtlSdr d) { String a = TunerAdvice.gainAdvice(who(t), d, level(t)); if (!a.isEmpty()) out.add(a); }
         for (Tuner t : e.tuners) if (t.src instanceof AirspyR2 a && a.stream() != null) { String g = TunerAdvice.airspyGainAdvice("Airspy T" + t.id, a.gain(), a.stream()); if (!g.isEmpty()) out.add(g); }
+        for (Tuner t : e.tuners) if (t.src instanceof p25monitor.sdr.SoapySdr d && d.running()) {
+            if (d.clipFraction > 0.001) out.add(String.format(Locale.ROOT, "%s T%d is overloaded (%.2f %% of samples clipped): lower its gain on the Engine page.", d.driver().product, t.id, 100 * d.clipFraction));
+            else if (d.peakDb < -40 && d.blocks > 50) out.add(String.format(Locale.ROOT, "%s T%d signal is very weak (peak %.0f dBFS): raise its gain on the Engine page.", d.driver().product, t.id, d.peakDb));
+        }
         return String.join("  ", out);
     }
 

@@ -82,8 +82,10 @@ public class HelpPage extends JPanel {
         int n = -1, a = 0;
         try { n = p25monitor.sdr.RtlSdr.list().size(); } catch (Throwable ignored) {}
         try { a = p25monitor.sdr.AirspyR2.list().size(); } catch (Throwable ignored) {}
-        String found = (a > 0 ? a + " Airspy R2" + (n > 0 ? " + " : "") : "") + (n > 0 ? n + " RTL-SDR dongle(s)" : "");
-        set(engineOk, n > 0 || a > 0, "TrunkDeck engine ready: " + found + " found",
+        int o = 0;   // SDRplay / HackRF / LimeSDR / USRP: the last background search (never blocks this page)
+        if (p25monitor.nativeengine.NativeEngine.soapyEnabled(f.app.settings) && p25monitor.sdr.SoapySdr.available()) o = p25monitor.sdr.SoapySdr.lastFound().size();
+        String found = (a > 0 ? a + " Airspy R2" + (n > 0 ? " + " : "") : "") + (n > 0 ? n + " RTL-SDR dongle(s)" : "") + (o > 0 ? (a > 0 || n > 0 ? " + " : "") + o + " other receiver(s) (untested)" : "");
+        set(engineOk, n > 0 || a > 0 || o > 0, "TrunkDeck engine ready: " + found + " found",
                 n == 0 || a > 0 ? "No receiver found - plug in your Airspy R2 or RTL-SDR (Windows: WinUSB driver via Zadig; Linux: USB rules below)" : "RTL-SDR library could not be loaded - see the Engine page");
         boolean codec = p25monitor.nativeengine.EngineLibs.jmbeReady() || p25monitor.nativeengine.EngineLibs.findJmbe(f.app.profile, f.app.settings.getProperty("native.jmbe", "")) != null;
         set(codecOk, codec, "Voice codec (JMBE) installed", "Voice codec not installed yet - Engine page \u2192 Build voice codec (one time, about a minute)");
@@ -123,7 +125,15 @@ public class HelpPage extends JPanel {
             List<String> t = new ArrayList<>();
             try { for (var i : p25monitor.sdr.AirspyR2.list()) t.add(i.label()); } catch (Throwable ex) { t.add("Airspy: " + p25monitor.sdr.LibUsb.info()); }
             try { for (var i : p25monitor.sdr.RtlSdr.list()) t.add(i.label()); } catch (Throwable ex) { t.add("The RTL-SDR library could not be loaded: " + ex.getMessage()); }
-            msg = t.isEmpty() ? "No Airspy R2 or RTL-SDR dongle found.\n\nPlug it in. Windows: install the WinUSB driver with Zadig (Airspy: \"AIRSPY\" 1D50 60A1; RTL-SDR: \"Bulk-In, Interface (Interface 0)\").\nLinux: run the USB setup (udev rules) from the installer, then replug; the Airspy also needs libusb1 (sudo dnf install libusb1)." : String.join("\n", t);
+            if (p25monitor.nativeengine.NativeEngine.soapyEnabled(f.app.settings)) {
+                try {
+                    for (var i : p25monitor.sdr.SoapySdr.list()) t.add(i.tagged());
+                    t.add(""); t.add("SDRplay / HackRF / LimeSDR / USRP (SoapySDR, untested): " + p25monitor.sdr.SoapySdr.libraryInfo());
+                    for (String x : p25monitor.sdr.SoapySdr.status()) t.add("  " + x);
+                } catch (Throwable ex) { t.add(""); t.add("SDRplay / HackRF / LimeSDR / USRP: " + ex.getMessage()); }
+            }
+            boolean none = true; for (String x : t) if (!x.isBlank() && !x.startsWith("SDRplay / HackRF") && !x.startsWith("  ")) none = false;
+            msg = none ? "No receiver found." + (t.isEmpty() ? "" : "\n\n" + String.join("\n", t)) + "\n\nAirspy / RTL-SDR: plug it in.\n\nPlug it in. Windows: install the WinUSB driver with Zadig (Airspy: \"AIRSPY\" 1D50 60A1; RTL-SDR: \"Bulk-In, Interface (Interface 0)\").\nLinux: run the USB setup (udev rules) from the installer, then replug; the Airspy also needs libusb1 (sudo dnf install libusb1)." : String.join("\n", t);
         } catch (Throwable ex) { msg = "Receiver list failed: " + ex.getMessage(); }
         JTextArea ta = new JTextArea(msg, 14, 100);
         ta.setFont(Theme.mono(Font.PLAIN, 12f));
@@ -133,14 +143,24 @@ public class HelpPage extends JPanel {
 
     static String guideHtml() {
         return "<html><body style='color:#DCE6F0;font-family:sans-serif'>" +
-                "<h3 style='color:#00E5FF'>1. Plug in your Airspy R2 or RTL-SDR dongles</h3>" +
+                "<h3 style='color:#00E5FF'>1. Plug in your Airspy R2 or RTL-SDR dongles (tested)</h3>" +
                 "<b>Airspy R2:</b> one Airspy at 10 MS/s covers about 8.8 MHz - the control channel and every voice channel in that window are decoded at the same time (on many UHF and 800 MHz sites: the whole site). " +
                 "Windows: install the <b>WinUSB</b> driver with Zadig (pick <b>AIRSPY</b>, USB ID 1D50 60A1). Linux/Fedora: run the USB setup (udev rules) and install <b>libusb1</b>. " +
                 "On the <b>Engine</b> page set its role, sample rate (10 or 2.5 MS/s), gain (Linearity presets recommended) and bias-T (off unless your antenna needs power). The centre frequency is chosen automatically. " +
-                "Not yet tested on a real Airspy - please send Copy diagnostics after the first try.<br>" +
+                "<br>" +
                 "<b>RTL-SDR:</b> " +
                 "One dongle decodes the control channel. Every voice call inside its window (about 2 MHz around its centre) is decoded too, all at the same time. " +
                 "A second dongle covers voice channels outside that window: it moves only when it has no call in progress. Set PPM and gain per dongle on the <b>Engine</b> page.<br>" +
+                "<h3 style='color:#00E5FF'>1b. SDRplay, HackRF One, LimeSDR or Ettus USRP <span style='color:#FFB300'>(untested)</span></h3>" +
+                "New in 1.7.0 and <b>not tested with real hardware yet</b> - if something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ") with Copy diagnostics. " +
+                "These receivers work through <b>SoapySDR</b>, which you install yourself (TrunkDeck does not include it; the SDRplay API may not be passed on by anyone but SDRplay). " +
+                "They show up on the <b>Engine</b> page under <i>SDRplay / HackRF / LimeSDR / USRP</i>, wideband like the Airspy (default 10 MS/s, SDRplay 5 MS/s) with a safe default gain. " +
+                "<b>Windows:</b> install <b>PothosSDR</b> (downloads.myriadrf.org/builds/PothosSDR, PothosSDR-2021.07.25-vc16-x64.exe) - it contains SoapySDR and the HackRF, LimeSDR, USRP and SDRplay drivers. " +
+                "SDRplay: also install the <b>SDRplay API</b> from sdrplay.com (Downloads \u2192 API). HackRF: WinUSB driver with Zadig. USRP: run <i>uhd_images_downloader</i> from PothosSDR's bin folder once. " +
+                "<b>Fedora:</b> <i>sudo dnf install SoapySDR</i>; USRP: <i>sudo dnf install soapy-uhd uhd</i> then <i>sudo uhd_images_downloader</i>; HackRF / LimeSDR modules are not packaged in Fedora - use radioconda (TrunkDeck finds it in your home folder) or build SoapyHackRF / LimeSuite from source. " +
+                "<b>Debian/Ubuntu:</b> <i>sudo apt install libsoapysdr0.8 soapysdr-module-hackrf soapysdr-module-lms7 soapysdr-module-uhd uhd-host</i>. " +
+                "<b>SDRplay on Linux:</b> install the SDRplay API (sdrplay.com), then build the SoapySDRPlay3 module once (git clone https://github.com/pothosware/SoapySDRPlay3, then cmake .. &amp;&amp; make &amp;&amp; sudo make install in a build folder). " +
+                "Tools \u2192 <b>Detected receivers</b> says exactly what is missing.<br>" +
                 "<h3 style='color:#00E5FF'>2. Install the voice codec (one time)</h3>" +
                 "Engine page &rarr; <b>Build voice codec</b>. TrunkDeck downloads the JMBE source code and builds it on your computer (about a minute). " +
                 "Without it calls are listed but silent.<br>" +

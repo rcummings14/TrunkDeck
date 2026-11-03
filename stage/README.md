@@ -1,12 +1,36 @@
-# TrunkDeck 1.6.0 — P25 Phase 1 and Phase 2 trunking monitor (Windows & Linux)
+# TrunkDeck 1.7.0 — P25 Phase 1 and Phase 2 trunking monitor (Windows & Linux)
 
 TrunkDeck is a scanner-style dashboard for **P25 trunked radio systems** (Phase 1 control channel; Phase 1 and Phase 2 voice). Type in a control channel, load your
-talkgroups from a CSV file, plug in an Airspy R2 or one or two RTL-SDR dongles, press **START MONITORING**, and watch (and hear) the system
+talkgroups from a CSV file, plug in an Airspy R2 or one or two RTL-SDR dongles (or, new and untested, an SDRplay, HackRF One, LimeSDR or Ettus USRP), press **START MONITORING**, and watch (and hear) the system
 live: talkgroup, name, frequency, radio ID, call timer, encryption and emergency flags, a control-channel decode meter, an
 activity graph, and a table of **every call that is on the air right now**.
 
 TrunkDeck decodes everything itself with the **TrunkDeck engine**, its own P25 decoder written in Java from the TIA-102 standard.
-It talks to your Airspy R2 and RTL-SDR dongles directly. No other radio program is needed.
+It talks to your Airspy R2 and RTL-SDR dongles directly. No other radio program is needed. SDRplay, HackRF, LimeSDR and USRP
+receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *Supported receivers*.
+
+**New in 1.7.0 – SDRplay, HackRF One, LimeSDR and Ettus USRP (UNTESTED)**
+* **UNTESTED:** support for these four receivers is new and **has not been tested with real hardware** (none was available on
+  the build PC). It was tested with simulated receivers only (`SoapyTests`: the real SoapySDR library with simulated
+  driver modules, P25 voice decoded bit-exactly through each). If something doesn't work, please
+  report it on **GitHub Issues** (<https://github.com/rcummings14/TrunkDeck/issues>) and attach *Copy diagnostics* from the
+  Engine page. Airspy R2 and RTL-SDR support is unchanged and remains the tested path.
+* TrunkDeck reaches them through **SoapySDR** (the standard open-source driver layer), which you install yourself - see
+  *Supported receivers* for exactly what to install on Windows, Fedora and Debian/Ubuntu. Nothing new is bundled: the
+  installers are unchanged, and the SDRplay API (whose licence does not allow passing it on) always comes from sdrplay.com.
+* **Found automatically** at START and listed on the **Engine** page under *SDRplay / HackRF / LimeSDR / USRP*, each marked
+  **(untested)**; choosing a role shows a short note with the GitHub Issues link. Per receiver: **role** (auto / control /
+  voice / off), **sample rate**, **gain**, **bias-T** (SDRplay only), optional fixed **centre MHz** and **PPM**.
+* **Sensible defaults:** wideband like the Airspy - HackRF, LimeSDR and USRP at **10 MS/s** (about 8.8 MHz: a whole site),
+  SDRplay at **5 MS/s** (its widest gap-free rate over USB 2.0); 2.5 MS/s is offered for slower PCs and 20 MS/s for HackRF /
+  LimeSDR / USRP. Default gains: SDRplay AGC with LNA state 4, HackRF LNA 24 + VGA 20 dB with the RF amp off, LimeSDR 40 dB,
+  USRP 60 % of its range. All are adjustable; Diagnostics says when to lower (clipping) or raise (weak signal) the gain.
+* **Plain-English messages** when a driver is missing, e.g. *"SDRplay API not installed - download it from sdrplay.com
+  (Downloads → API)"*, *"HackRF driver for SoapySDR not installed"*, or *"SoapySDR is not installed"* with the command or
+  download for your system. *Setup & Help → Tools → Detected receivers* lists every receiver and every driver's status.
+* **No change for Airspy / RTL-SDR users:** the SoapySDR search runs alongside the usual one (no slower START), Airspy and RTL
+  dongles are preferred for the control channel when both kinds are present, and Broadcastify uploads and feeds (which never
+  restart) are untouched. *Engine → Look for these receivers* switches the SoapySDR search off completely.
 
 **New in 1.6.0 – set up from RadioReference**
 * **Systems → Set up from RadioReference** (also *Setup & Help → Tools*, and offered on a new install) builds a system
@@ -82,13 +106,56 @@ Older release notes are in the GitHub release history.
 | **Internet** | During install (about 140 MB on Linux, 200 MB on Windows), and once on first start to fetch the voice codec's source code. |
 
 **Airspy R2:** supported natively since 1.4.0 (TrunkDeck's own driver, no SDRTrunk or Airspy tools needed) - see *Airspy R2*
-below. The Airspy Mini has the same USB ID and should work at its own rates but is untested. **HackRF:** not supported.
+below. The Airspy Mini has the same USB ID and should work at its own rates but is untested. **SDRplay, HackRF, LimeSDR,
+USRP:** new in 1.7.0 and untested - see *Supported receivers*.
+
+### Supported receivers
+
+| Receiver | Status | Driver | Bundled with TrunkDeck? | What you install |
+|---|---|---|---|---|
+| **RTL-SDR** (RTL2832U dongles) | **Tested** | TrunkDeck + librtlsdr | Yes (`app/native`) | Windows: WinUSB via Zadig. Linux: the installer's USB setup |
+| **Airspy R2** (Mini: should work) | **Tested** | TrunkDeck's own driver | Yes (libusb on Windows) | Windows: WinUSB via Zadig. Linux: USB setup + `libusb1` |
+| **SDRplay** RSP1A / RSP2 / RSPdx / RSPduo / RSP1B | **UNTESTED** (1.7.0) | SoapySDR + SoapySDRPlay3 + SDRplay API 3.x | **No** (SDRplay's licence forbids it) | SDRplay API **and** SoapySDR + SDRplay module (below) |
+| **HackRF One** | **UNTESTED** (1.7.0) | SoapySDR + SoapyHackRF | No | SoapySDR + HackRF module; Windows: WinUSB via Zadig |
+| **LimeSDR** (USB, Mini) | **UNTESTED** (1.7.0) | SoapySDR + LimeSuite (lms7) | No | SoapySDR + LimeSuite module |
+| **Ettus USRP** (B200/B210/B200mini, N2xx, X3xx...) | **UNTESTED** (1.7.0) | SoapySDR + SoapyUHD + UHD | No | SoapySDR + UHD module + UHD FPGA images |
+
+**UNTESTED** means the code was tested only against simulated receivers (the `SoapyTests` suite), never a real one. It may
+well work, but if it doesn't, please open an issue at <https://github.com/rcummings14/TrunkDeck/issues> with *Copy diagnostics*
+from the Engine page and which receiver, driver versions and operating system you have.
+
+**Installing the drivers for SDRplay / HackRF / LimeSDR / USRP** (TrunkDeck finds them by itself; restart TrunkDeck afterwards):
+
+* **Windows 10/11:**
+  1. Install **PothosSDR** (free; <https://downloads.myriadrf.org/builds/PothosSDR/>, file
+     `PothosSDR-2021.07.25-vc16-x64.exe`; let it add itself to the PATH). It contains SoapySDR and the HackRF, LimeSDR, USRP
+     and SDRplay modules. (radioconda also works for HackRF / LimeSDR / USRP, but has no SDRplay module on Windows.)
+  2. **SDRplay:** also install the **SDRplay API** (3.x) from <https://www.sdrplay.com> → Downloads → API. TrunkDeck says
+     *"SDRplay API not installed"* until you do. Close SDRuno/SDR# before starting TrunkDeck.
+  3. **HackRF:** in Zadig pick *HackRF One* and install **WinUSB**. **LimeSDR:** PothosSDR's driver folder has the USB driver.
+  4. **USRP:** run `uhd_images_downloader` once (in `C:\Program Files\PothosSDR\bin`) so UHD has the FPGA images.
+* **Fedora:** `sudo dnf install SoapySDR`; USRP: `sudo dnf install soapy-uhd uhd` then `sudo uhd_images_downloader`.
+  Fedora has no HackRF or LimeSDR module packages: either install **radioconda** in your home folder (TrunkDeck looks in
+  `~/radioconda`, `~/miniforge3` and `/opt/radioconda`) or build SoapyHackRF / LimeSuite from source.
+* **Debian / Ubuntu / Mint / Raspberry Pi OS:**
+  `sudo apt install libsoapysdr0.8 soapysdr-tools soapysdr-module-hackrf soapysdr-module-lms7 soapysdr-module-uhd uhd-host`
+  (pick the modules you need), and for a USRP `sudo uhd_images_downloader`.
+* **SDRplay on Linux (any distribution):** install the SDRplay API from sdrplay.com (it installs a service), then build the
+  SoapySDR module once:
+  `git clone https://github.com/pothosware/SoapySDRPlay3 && cd SoapySDRPlay3 && mkdir build && cd build && cmake .. && make && sudo make install && sudo ldconfig`
+  (Fedora needs `SoapySDR-devel cmake gcc-c++`; Debian `libsoapysdr-dev cmake g++`). If the receiver stops being found,
+  `sudo systemctl restart sdrplay`.
+* **USB permissions on Linux:** the HackRF, LimeSDR, USRP and SDRplay packages install their own udev rules; replug afterwards.
+* SoapySDR somewhere unusual? Start TrunkDeck with `-Dtrunkdeck.libsoapysdr=/path/to/libSoapySDR.so.0.8` (Windows:
+  `SoapySDR.dll`) or set the environment variable `TRUNKDECK_SOAPYSDR`.
+* TrunkDeck loads only the SDRplay, HackRF, LimeSDR and USRP modules (never SoapySDR's own RTL-SDR or Airspy modules, so they
+  can't grab your dongles).
 
 ---
 
 ## Pick your system
 
-Download **TrunkDeck-1.5.1-windows.zip** (Windows) or **TrunkDeck-1.5.1-linux.tar.gz** (Linux) from the GitHub
+Download **TrunkDeck-1.7.0-windows.zip** (Windows) or **TrunkDeck-1.7.0-linux.tar.gz** (Linux) from the GitHub
 Release and unpack it. Inside the `TrunkDeck` folder you'll find (each download has only its own installer folder):
 
 ```
@@ -535,9 +602,9 @@ own CSV (see *Talkgroup CSV files*).
 * **Phase 2 has been confirmed on few live calls so far.** Phase 2 needs a Phase 1 control
   channel (as on most Phase 2 systems); Phase 2 TDMA control channels, Phase 2 data and the encryption-sync field are not decoded.
 * Phase 2 audio needs JMBE 2.x (it contains the AMBE+2 codec). With an old JMBE 1.x jar Phase 2 calls are followed but silent.
-* **The Airspy R2 driver is new in 1.4.0 and has not been tested with a real Airspy yet** - only with a bit-accurate simulation of
-  its USB sample stream. *Copy diagnostics* on the Engine page shows what happened.
-  HackRF is not supported.
+* **SDRplay, HackRF One, LimeSDR and Ettus USRP support (1.7.0) is UNTESTED with real hardware** - only with simulated receivers.
+  It needs SoapySDR and the receiver's driver installed (see *Supported receivers*). Please report problems on GitHub Issues
+  (<https://github.com/rcummings14/TrunkDeck/issues>) with *Copy diagnostics* from the Engine page.
 * **Two RTL-SDRs (without an Airspy) cover about 2 MHz each.** Calls outside both windows while the roaming dongle is busy are missed (and logged with
   their frequency). See *How two dongles cover a site*.
 * **Mix all calls** plays everything, but the big display doesn't follow individual calls in that mode (the Active calls table does).
@@ -602,6 +669,7 @@ Your systems, talkgroups, radio names, streams, recordings and voice codec are k
 * **JMBE** voice codec (GPLv3, <https://github.com/DSheirer/jmbe>): only built on your machine on request (see *Voice audio*). It's never included in this zip.
   The IMBE and AMBE+2 vocoders it implements are subject to patents held by Digital Voice Systems, Inc.
 * **Eclipse Temurin JDK 25** (GPLv2 with the Classpath Exception, <https://adoptium.net>): downloaded by the installer, not in this zip. Licence files: `runtime/legal`.
+* **SoapySDR** and its SDRplay / HackRF / LimeSDR / USRP modules (Boost Software License / MIT / Apache 2.0 / GPL) and the **SDRplay API** (proprietary): **not included**; you install them yourself if you use those receivers (1.7.0). TrunkDeck only calls them.
 * **librtlsdr** (bundled in `app/native/`, RTL-SDR Blog rtl-sdr v1.3.6): GNU GPL v2 or later; **libusb**: LGPL 2.1. Sources in `source/third-party/`.
 * **java-lame** (MP3 encoder, `app/lib`): LGPL v3, unmodified separate jar; source in `source/third-party/`.
 * **JTransforms**, **JLargeArrays** (BSD 2-Clause), **Apache Commons Math** (Apache 2.0), **SLF4J API** (MIT): libraries the JMBE codec needs, in `app/lib`.

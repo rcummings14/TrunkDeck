@@ -48,6 +48,7 @@ public final class EngineHealth {
             var us = t.src.usbStream();
             if (us != null) { h.droppedBlocks += us.droppedBlocks; h.usbErrors += us.usbErrors; }
             if (t.src instanceof p25monitor.sdr.RtlSdr d) h.droppedBlocks += d.droppedBlocks;
+            if (t.src instanceof p25monitor.sdr.SoapySdr d) h.droppedBlocks += d.droppedBlocks;
         }
         Streaming st = e.streaming;
         if (st != null) {
