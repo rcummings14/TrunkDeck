@@ -6,6 +6,8 @@ stream them to Broadcastify, OpenMHz or your own Rdio Scanner server - all from 
 
 ![TrunkDeck main window](docs/screenshots/monitor.png)
 
+### [⬇ Download TrunkDeck (Windows & Linux)](https://github.com/rcummings14/TrunkDeck/releases/latest) &nbsp;·&nbsp; [▶ Watch the 7-minute tour](https://www.youtube.com/watch?v=iAd6VPXa0ZE)
+
 > **Provided as-is.** TrunkDeck is a hobby project shared in the hope that it is useful. There is **no support and no
 > warranty** of any kind, and issues or pull requests **may not be answered**. See [LICENSE](LICENSE).
 
