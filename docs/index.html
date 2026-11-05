@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrunkDeck – Free P25 trunked radio scanner for Windows &amp; Linux</title>
+<meta name="description" content="Free, easy P25 trunked radio scanner for Windows and Linux. Decodes, records and streams to Broadcastify, OpenMHz and Rdio Scanner.">
+<meta name="theme-color" content="#000000">
+<meta property="og:title" content="TrunkDeck">
+<meta property="og:description" content="Free, easy P25 trunked radio scanner for Windows and Linux.">
+<meta property="og:image" content="assets/monitor.png">
+<link rel="icon" href="assets/trunkdeck.svg" type="image/svg+xml">
+<link rel="icon" href="assets/trunkdeck-32.png" sizes="32x32" type="image/png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap nav">
+    <a class="brand" href="./"><img src="assets/trunkdeck.svg" alt="" width="32" height="32"> TRUNKDECK</a>
+    <nav><a href="#features">Features</a><a href="#start">Get started</a><a href="#receivers">Receivers</a><a href="#tour">Tour</a><a href="https://github.com/rcummings14/TrunkDeck">GitHub</a></nav>
+  </div>
+</header>
+
+<main>
+<section class="hero">
+  <div class="wrap">
+    <div class="lcd">
+      <div class="lcd-row"><span class="lbl">SYSTEM</span><span class="amber">P25 PHASE 1 + 2</span></div>
+      <div class="marquee"><span>SCANNING ... SCANNING ... SCANNING ... SCANNING ... SCANNING ... SCANNING ...</span></div>
+    </div>
+    <h1>Your PC becomes a <span class="glow-a">P25 trunked radio scanner</span>.</h1>
+    <p class="lead">TrunkDeck is a free, easy scanner app for Windows and Linux. It follows a digital trunked radio system, plays and records the calls, and can stream them to Broadcastify, OpenMHz or Rdio Scanner – all from one window, with no other radio software needed.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/rcummings14/TrunkDeck/releases/latest">⬇ Download for Windows &amp; Linux</a>
+      <a class="btn ghost" href="#tour">▶ Watch the tour</a>
+    </div>
+    <p class="small">Free and open source (MIT) · Version 1.7.0 · Windows 10/11 64-bit and popular Linux distributions</p>
+  </div>
+</section>
+
+<section class="shots">
+  <div class="wrap">
+    <figure class="main-shot"><img src="assets/monitor.png" alt="TrunkDeck main window showing the scanner display, active calls and call log" width="1366" height="697" loading="eager"></figure>
+    <div class="grid3">
+      <figure><img src="assets/display-only.png" alt="Display only mode: just the scanner display" width="780" height="260" loading="lazy"><figcaption>Display only mode</figcaption></figure>
+      <figure><img src="assets/simple-view.png" alt="Simple view" width="1366" height="768" loading="lazy"><figcaption>Simple view</figcaption></figure>
+      <figure><img src="assets/streams.png" alt="Streams page" width="1366" height="697" loading="lazy"><figcaption>Streaming setup</figcaption></figure>
+    </div>
+    <p class="small center">Screenshots show a simulated signal and a made-up example system.</p>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2>What it does</h2>
+    <div class="cards">
+      <div class="card"><h3>Built-in decoder</h3><p>Decodes P25 Phase 1 and Phase 2 voice on its own. No SDRTrunk, SDR# or other radio software needed.</p></div>
+      <div class="card"><h3>Works with cheap receivers</h3><p>Use an RTL-SDR dongle or an Airspy. Several dongles can work together to catch more calls.</p></div>
+      <div class="card"><h3>Share your audio</h3><p>Optional streaming to Broadcastify Calls, Broadcastify Feeds (or any Icecast server), OpenMHz and Rdio Scanner.</p></div>
+      <div class="card"><h3>Quick setup from RadioReference</h3><p>Sign in with your RadioReference Premium account, pick your system, and TrunkDeck fills in the channels and talkgroup names.</p></div>
+      <div class="card"><h3>Looks like a real scanner</h3><p>A big scanner-style display with colour themes (including an SDS-style look), backlight glow on calls and a scrolling SCANNING ticker.</p></div>
+      <div class="card"><h3>Display only mode</h3><p>Shrink the window to just the scanner display – keep it on top while you work. Double-click to get the full window back.</p></div>
+      <div class="card"><h3>Hides in the tray</h3><p>Close or minimize to the system tray and keep listening in the background.</p></div>
+      <div class="card"><h3>Tunes itself</h3><p>Measures how far your dongle is off frequency (PPM) and offers a one-click <b>Apply</b> button.</p></div>
+      <div class="card"><h3>Your talkgroups, your way</h3><p>Favorite, mute or record talkgroups – one at a time or many at once. Encrypted calls are skipped.</p></div>
+      <div class="card"><h3>Every call recorded</h3><p>Recordings of each call, a live call log and an activity graph, so you can replay what you missed.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="start" class="alt">
+  <div class="wrap">
+    <h2>Get started in 3 steps</h2>
+    <ol class="steps">
+      <li><span class="num">1</span><h3>Download &amp; install</h3><p>Get the Windows zip or Linux file from the <a href="https://github.com/rcummings14/TrunkDeck/releases/latest">download page</a>. Run <code>Install.bat</code> (Windows) or <code>./install.sh</code> (Linux). It fetches Java for you – no admin rights needed on Windows.</p></li>
+      <li><span class="num">2</span><h3>Plug in a receiver</h3><p>Connect your RTL-SDR or Airspy. On Windows, set its USB driver once with Zadig (WinUSB); on Linux the installer offers to set up USB access.</p></li>
+      <li><span class="num">3</span><h3>Pick a system &amp; press Start</h3><p>Choose your system (from RadioReference or by hand), import your talkgroups and press <b>START MONITORING</b>.</p></li>
+    </ol>
+    <p class="note">One-time extra: for sound, click <b>Build from source…</b> on the Engine page to build the voice codec on your PC. Without it, calls are followed but silent. The <a href="https://github.com/rcummings14/TrunkDeck#readme">full guide</a> is in the download too.</p>
+  </div>
+</section>
+
+<section id="receivers">
+  <div class="wrap two">
+    <div>
+      <h2>Supported receivers</h2>
+      <ul class="rx">
+        <li><b>RTL-SDR</b> dongles (RTL2832U) <span class="tag ok">Tested</span></li>
+        <li><b>Airspy R2</b> <span class="tag ok">Tested</span></li>
+        <li><b>SDRplay</b> RSP1A / RSP1B / RSP2 / RSPdx / RSPduo <span class="tag warn">Untested</span></li>
+        <li><b>HackRF One</b> <span class="tag warn">Untested</span></li>
+        <li><b>LimeSDR</b> (USB / Mini) <span class="tag warn">Untested</span></li>
+        <li><b>Ettus USRP</b> (B2xx, N2xx, X3xx…) <span class="tag warn">Untested</span></li>
+      </ul>
+      <p>SDRplay, HackRF, LimeSDR and USRP work through SoapySDR (installed separately). They are new in 1.7.0 and haven't been tried with real hardware yet. If yours doesn't work, please <a href="https://github.com/rcummings14/TrunkDeck/issues">report problems on GitHub Issues</a> and include <i>Copy diagnostics</i> from the Engine page.</p>
+    </div>
+    <figure><img src="assets/engine-untested-receivers.png" alt="Engine page listing receivers, untested ones marked" width="1366" height="900" loading="lazy"><figcaption>Untested receivers are clearly marked in the app.</figcaption></figure>
+  </div>
+</section>
+
+<section id="tour" class="alt">
+  <div class="wrap">
+    <h2>Take the 7-minute tour</h2>
+    <div class="video"><iframe src="https://www.youtube-nocookie.com/embed/iAd6VPXa0ZE" title="TrunkDeck tour video" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+    <p class="center small">Short on time? Watch the <a href="https://youtube.com/shorts/LZ9R0cKWnYA">YouTube Short</a>.</p>
+    <div class="cta center"><a class="btn primary" href="https://github.com/rcummings14/TrunkDeck/releases/latest">⬇ Download TrunkDeck</a></div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <p><a href="https://github.com/rcummings14/TrunkDeck">TrunkDeck on GitHub</a> · <a href="https://github.com/rcummings14/TrunkDeck/blob/main/LICENSE">MIT License</a> · <a href="https://github.com/rcummings14/TrunkDeck/issues">Issues</a></p>
+    <p class="small">TrunkDeck is a free hobby project, offered as-is with no warranty and no guaranteed support. Encrypted calls are not decoded. Check your local laws on scanner use.</p>
+  </div>
+</footer>
+</body>
+</html>
