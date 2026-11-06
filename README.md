@@ -11,6 +11,8 @@ stream them to Broadcastify, OpenMHz or your own Rdio Scanner server - all from 
 > **Provided as-is.** TrunkDeck is a hobby project shared in the hope that it is useful. There is **no support and no
 > warranty** of any kind, and issues or pull requests **may not be answered**. See [LICENSE](LICENSE).
 
+If TrunkDeck is useful to you, you can support it here: [https://paypal.me/TrunkDeck](https://paypal.me/TrunkDeck)
+
 ## Features
 
 * **Native P25 engine** (written in Java from the TIA-102 standards): Phase 1 control channel (C4FM, and LSM/CQPSK for
