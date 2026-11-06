@@ -48,6 +48,7 @@ if [ "${1:-}" = "test" ]; then
   "$JAVA" -Dtrunkdeck.lib=lib ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.FeedTests   # needs ffmpeg/ffprobe (skipped otherwise)
   TD_TMP=$(mktemp -d)   # Airspy R2 (1.4.0): simulated USB device, never touches ~/.trunkdeck
   "$JAVA" -Djava.awt.headless=true -Dtrunkdeck.profile=$TD_TMP/rp ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.RadioAliasTests   # radio names (1.4.1); -DradiosFile=<your DSD+ .radios> to test a real file
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.TalkgroupShareTests   # one talkgroup list for every site of a radio system
   "$JAVA" --enable-native-access=ALL-UNNAMED -Dtrunkdeck.lib=lib -Djava.awt.headless=true -Dtrunkdeck.profile=$TD_TMP/p ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.AirspyTests
   "$JAVA" --enable-native-access=ALL-UNNAMED -Dtrunkdeck.lib=lib -Djava.awt.headless=true -Dtrunkdeck.profile=$TD_TMP/p ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.AirspyBench
   "$JAVA" --enable-native-access=ALL-UNNAMED -Dtrunkdeck.lib=lib -Djava.awt.headless=true -Dtrunkdeck.home=$TD_TMP -Dtrunkdeck.profile=$TD_TMP/p ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.WidebandSite airspy

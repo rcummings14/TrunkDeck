@@ -48,6 +48,7 @@ public class App {
             saveSettings();
         }
         systems.sort(Comparator.comparing(s -> s.name.toLowerCase()));
+        bindTalkgroups();   // sites of one radio system share one list; separate talkgroups.csv files are merged
         String last = settings.getProperty("lastSystem", "");
         current = systems.stream().filter(s -> s.id.equals(last)).findFirst().orElse(systems.isEmpty() ? null : systems.get(0));
         streams.clear();
@@ -72,6 +73,42 @@ public class App {
     public void save(RadioSystem s) throws IOException {
         if (s.id == null || s.id.isBlank()) s.id = uniqueId(RadioSystem.safeId(s.name));
         s.save(systemsDir().resolve(s.id));
+        shareTalkgroupFile(s);   // the same list is stored in every matching site's folder, so a later load cannot drift
+    }
+
+    /**
+     * Make sites of the same radio system share one talkgroup list. When that changes a site's rows, write them back
+     * so the folder on disk matches what the Talkgroups page shows.
+     */
+    public void bindTalkgroups() {
+        Map<RadioSystem, String> before = new IdentityHashMap<>();
+        for (RadioSystem s : systems) before.put(s, TalkgroupCsv.render(s.talkgroups));
+        TalkgroupLists.bind(systems);
+        for (RadioSystem s : systems) {
+            if (TalkgroupCsv.render(s.talkgroups).equals(before.get(s))) continue;
+            try { writeTalkgroupsOnly(s); } catch (IOException ignored) {}
+        }
+    }
+
+    /** Writes talkgroups.csv for one site. Does nothing until that site has a folder. */
+    void writeTalkgroupsOnly(RadioSystem s) throws IOException {
+        if (s.id == null || s.id.isBlank()) return;
+        Path dir = systemsDir().resolve(s.id);
+        if (!Files.isDirectory(dir)) return;
+        TalkgroupCsv.writeAtomic(dir.resolve("talkgroups.csv"), TalkgroupCsv.render(s.talkgroups));
+    }
+
+    /** Copies this site's talkgroup list into the other sites that share it, skipping a file that already matches. */
+    void shareTalkgroupFile(RadioSystem s) throws IOException {
+        String text = TalkgroupCsv.render(s.talkgroups);
+        for (RadioSystem o : systems) {
+            if (o == s || o.talkgroups != s.talkgroups || o.id == null || o.id.isBlank()) continue;
+            Path dir = systemsDir().resolve(o.id);
+            if (!Files.isDirectory(dir)) continue;
+            Path p = dir.resolve("talkgroups.csv");
+            if (Files.isRegularFile(p) && text.equals(Files.readString(p))) continue;
+            TalkgroupCsv.writeAtomic(p, text);
+        }
     }
 
     String uniqueId(String base) {

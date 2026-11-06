@@ -481,15 +481,24 @@ public class MainFrame extends JFrame {
     /** Saves the edited talkgroup lists now; wait = until written (exit). */
     void saveTalkgroupsNow(boolean wait) {
         tgSaveTimer.stop();
-        List<java.util.concurrent.Future<?>> writes = new ArrayList<>();
+        // A shared list is written to every site that uses it. Saving only the selected site would let an older
+        // copy in another folder come back the next time TrunkDeck starts.
+        LinkedHashSet<RadioSystem> todo = new LinkedHashSet<>();
         for (RadioSystem s : new ArrayList<>(tgPending)) {
             tgPending.remove(s);
+            boolean any = false;
+            for (RadioSystem o : app.systems) if (o.talkgroups == s.talkgroups) { todo.add(o); any = true; }
+            if (!any) todo.add(s);
+        }
+        List<java.util.concurrent.Future<?>> writes = new ArrayList<>();
+        Map<List<Talkgroup>, String> rendered = new IdentityHashMap<>();   // one render per shared list, on this thread
+        for (RadioSystem s : todo) {
             if (s.id == null || s.id.isBlank() || !Files.isDirectory(app.systemsDir().resolve(s.id))) {   // never saved yet: the whole system
                 try { app.save(s); showSaved(); } catch (Exception ex) { toast("Could not save talkgroups: " + ex.getMessage()); }
                 continue;
             }
             Path p = app.systemsDir().resolve(s.id).resolve("talkgroups.csv");
-            String text = TalkgroupCsv.render(s.talkgroups);   // on the UI thread, which owns the list
+            String text = rendered.computeIfAbsent(s.talkgroups, TalkgroupCsv::render);
             writes.add(tgWriter.submit(() -> {
                 try { TalkgroupCsv.writeAtomic(p, text); SwingUtilities.invokeLater(this::showSaved); }
                 catch (Exception ex) { SwingUtilities.invokeLater(() -> toast("Could not save talkgroups: " + ex.getMessage())); }

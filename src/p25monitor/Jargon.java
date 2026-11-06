@@ -13,8 +13,8 @@ public final class Jargon {
     static void put(String text, String... keys) { for (String k : keys) TIPS.put(k.toLowerCase(Locale.ROOT), text); }
     static {
         put("Network Access Code: a 3-digit hex number every transmission on this system carries, so receivers ignore other systems on the same frequency. TrunkDeck reads it from the control channel; enter it only to lock onto one system.", "NAC");
-        put("Wide Area Communications Network ID: identifies the whole P25 network (all its systems). For your reference; read from the control channel.", "WACN");
-        put("System ID: identifies this trunked system inside the network (WACN). For your reference; read from the control channel.", "Sys ID", "SysID");
+        put("Wide Area Communications Network ID: identifies the whole P25 network. Sites with the same WACN and System ID share one talkgroup list. TrunkDeck also reads it from the control channel.", "WACN");
+        put("System ID: identifies this trunked system inside its network (WACN). Sites with the same WACN and System ID share one talkgroup list. TrunkDeck also reads it from the control channel.", "Sys ID", "SysID");
         put("Radio Frequency SubSystem: a group of sites run together. For your reference; read from the control channel.", "RFSS");
         put("Site number: which tower / site of the system you are receiving. For your reference.", "Site #");
         put("The control channel is the always-on data channel that tells radios which frequency each call is on. TrunkDeck listens to it and follows the calls.", "Control channel", "Control channel(s) MHz");
