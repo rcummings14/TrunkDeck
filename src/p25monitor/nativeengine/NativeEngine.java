@@ -855,6 +855,27 @@ public final class NativeEngine {
      */
     public int displayState() { return speaker.displayState(); }
 
+    /**
+     * Control-channel signal level in dB of the control tuner's full scale, or NaN when that tuner is not reporting one.
+     * Only the control-channel decoders on the control tuner are read (not a voice or roaming receiver). The number is
+     * the channel power those decoders already measure from the samples; RTL-SDR, Airspy and SoapySDR all feed that path.
+     */
+    public double controlSignalDb() {
+        if (!running || ccTuner == null) return Double.NaN;
+        ChannelDecoder[] ds = ccDecoders.toArray(new ChannelDecoder[0]);   // one snapshot; a rebuild must not leave a 0 dB hole
+        if (ds.length == 0) return Double.NaN;
+        long[] hz = new long[ds.length];
+        double[] db = new double[ds.length];
+        boolean[] lk = new boolean[ds.length];
+        long now = System.currentTimeMillis();
+        for (int i = 0; i < ds.length; i++) {
+            hz[i] = ds[i].freqHz;
+            db[i] = ds[i].signalDb;
+            lk[i] = ds[i].locked(now);
+        }
+        return SignalMeter.pick(ccFreqHz, hz, db, lk);
+    }
+
     /** One line for the UI: what is being heard right now, plus how many other calls are recording. */
     public String nowFollowing() {
         ActiveCall c = speaker.speaker;

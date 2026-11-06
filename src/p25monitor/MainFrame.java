@@ -83,6 +83,7 @@ public class MainFrame extends JFrame {
             return q == null || q[1] < 1500 ? null : "QUEUED +" + Math.round(q[1] / 1000.0) + " s";
         };
         display.litState = () -> System.currentTimeMillis() < demoUntil ? -1 : nativeEngine.isRunning() ? nativeEngine.displayState() : 0;
+        display.controlSignal = () -> nativeEngine.isRunning() ? nativeEngine.controlSignalDb() : Double.NaN;
         setIconImages(List.of(Theme.logo(16), Theme.logo(24), Theme.logo(32), Theme.logo(48), Theme.logo(64), Theme.logo(128), Theme.logo(256)));
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         // 1.4.7: with a tray icon, X (and minimize, if chosen) hides the window to the tray; without one, as before

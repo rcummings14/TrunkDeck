@@ -173,7 +173,9 @@ public class HelpPage extends JPanel {
                 "(RadioReference exports work as-is). Use <b>Save CSV template</b> to start your own. " +
                 "<b>Radio IDs\u2026</b> on the same page names the radios: import a DSD+ <i>.radios</i> file or a CSV (radio_id,alias), or right-click a radio ID on the Monitor page \u2192 <b>Name this radio\u2026</b>.<br>" +
                 "<h3 style='color:#00E5FF'>5. Press START MONITORING</h3>" +
-                "The scanner display shows the call you are hearing; the <b>Active calls</b> table lists every call being decoded right now (talkgroup, frequency, tuner, level). " +
+                "The scanner display shows the call you are hearing. While TrunkDeck is scanning, the control channel on that display has a signal meter (bars and a level in dB). " +
+                SignalMeter.WHAT + " It stays readable while the display is dark. If the receiver cannot report a level, the meter stays empty. " +
+                "The <b>Active calls</b> table lists every call being decoded right now (talkgroup, frequency, tuner, level). " +
                 "The display stays lit until the last bit of a call's audio has played.<br>" +
                 "<h3 style='color:#00E5FF'>6. Listen your way</h3>" +
                 "\u2605 Favorite, Mute and Record talkgroups (Monitor or Talkgroups page). <b>What to play</b>: everything, only your list, or favorites only. " +
