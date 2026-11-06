@@ -28,6 +28,8 @@ public class TalkgroupPage extends JPanel {
     boolean simple;
     final List<JComponent> advancedOnly = new ArrayList<>();
     final JLabel tip = new JLabel("   Edits take effect at once and are saved automatically. Priority 1 = most important.");
+    /** Shown when this site's list is the one list for every site of the radio system. */
+    final JLabel sharedNote = new JLabel(" ");
     /** Stream checkbox columns, one per stream, by channel name (model columns BASE..). */
     List<String> streamCols = new ArrayList<>();
     final Map<Object, TableColumn> columnsById = new HashMap<>();
@@ -83,7 +85,15 @@ public class TalkgroupPage extends JPanel {
         advancedOnly.add(catLbl); advancedOnly.add(category); advancedOnly.add(heardOnly);
         count.setForeground(Theme.DIM);
         filters.add(count);
-        card.add(filters, BorderLayout.NORTH);
+        sharedNote.setForeground(Theme.CYAN);
+        sharedNote.setFont(Theme.ui(Font.PLAIN, 12f));
+        sharedNote.setBorder(new EmptyBorder(4, 2, 2, 2));
+        sharedNote.setVisible(false);
+        JPanel north = new JPanel(new BorderLayout());
+        north.setOpaque(false);
+        north.add(filters, BorderLayout.NORTH);
+        north.add(sharedNote, BorderLayout.SOUTH);
+        card.add(north, BorderLayout.NORTH);
 
         table.setAutoCreateColumnsFromModel(false); // the page picks the columns (view switch, stream checkboxes)
         table.setRowSorter(sorter);
@@ -220,6 +230,10 @@ public class TalkgroupPage extends JPanel {
             }
         });
         count.setText(table.getRowCount() + " of " + model.getRowCount() + " shown");
+        String note = TalkgroupLists.shareNote(f.app.systems, sys);
+        boolean show = !note.isEmpty();
+        sharedNote.setText(show ? "<html><span style='color:#00E5FF'>" + Util.xml(note) + "</span></html>" : " ");
+        if (sharedNote.isVisible() != show) { sharedNote.setVisible(show); sharedNote.revalidate(); }
     }
 
     // ------------------------------------------------------------------ CSV
@@ -245,23 +259,9 @@ public class TalkgroupPage extends JPanel {
                         JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null, new Object[]{"Merge", "Replace", "Cancel"}, "Merge");
                 if (choice == 2 || choice < 0) return;
             }
-            int added = 0, updated = 0;
             if (choice == 1) sys.talkgroups.clear();
-            for (Talkgroup n : r.talkgroups) {
-                Talkgroup old = sys.find(n.decimal);
-                if (old == null) { sys.talkgroups.add(n); added++; }
-                else {
-                    if (!n.alphaTag.isBlank()) old.alphaTag = n.alphaTag;
-                    if (!n.mode.isBlank()) old.mode = n.mode;
-                    if (!n.description.isBlank()) old.description = n.description;
-                    if (!n.tag.isBlank()) old.tag = n.tag;
-                    if (!n.category.isBlank()) old.category = n.category;
-                    old.favorite |= n.favorite; old.muted |= n.muted; old.record |= n.record;
-                    if (n.priority != 100) old.priority = n.priority;
-                    old.streams.addAll(n.streams);
-                    updated++;
-                }
-            }
+            int[] merged = TalkgroupLists.mergeInto(sys.talkgroups, r.talkgroups);
+            int added = merged[0], updated = merged[1];
             sys.talkgroups.sort(Comparator.comparingInt(t -> t.decimal));
             reload();
             f.talkgroupsEdited();

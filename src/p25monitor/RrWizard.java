@@ -550,6 +550,19 @@ final class RrWizard extends JDialog {
 
     Set<Integer> chosenTalkgroups() { Set<Integer> s = new LinkedHashSet<>(); for (TgModel.Row r : tgModel.rows) if (r.tg != null && r.on) s.add(r.tg.dec()); return s; }
 
+    /** True when the system being set up matches a site the user already saved (same WACN and System ID, or same RadioReference system). */
+    boolean sharesExisting() {
+        if (fetched == null) return false;
+        RadioSystem probe = new RadioSystem();
+        probe.rrSid = fetched.details().sid();
+        if (!fetched.details().sysids().isEmpty()) {
+            probe.sysId = fetched.details().sysids().get(0).sysid();
+            probe.wacn = fetched.details().sysids().get(0).wacn();
+        }
+        for (RadioSystem e : f.app.systems) if (TalkgroupLists.sameSystem(probe, e)) return true;
+        return false;
+    }
+
     void prepareFinish() {
         List<Site> sites = chosenSites();
         Set<Integer> tgs = chosenTalkgroups();
@@ -566,6 +579,7 @@ final class RrWizard extends JDialog {
              .append("<li><b>").append(tgs.size()).append("</b> talkgroups in ").append(cats.size()).append(" categories, with names, tags and categories")
              .append(enc > 0 ? " (" + enc + " encrypted - their calls are skipped)" : "").append("</li>")
              .append("<li>Usual settings: demodulator Auto (C4FM and LSM), up to 20 calls at once. Change them on the Systems page any time.</li>")
+             .append(sharesExisting() ? "<li>This site shares the talkgroup list you already keep for this system. RadioReference names are merged in; favorites, mutes, record, priority and streams stay.</li>" : "")
              .append("<li>New talkgroups are not sent to any stream until you assign them (Talkgroups or Streams page).</li></ul>")
              .append("<p style='color:#7D8FA3'>Nothing else is fetched from RadioReference until you choose Refresh on the Systems page.</p>");
         } else {
@@ -576,7 +590,10 @@ final class RrWizard extends JDialog {
              .append("<li>").append(refresh.talkgroups.size()).append(" talkgroups you have: names, descriptions, tags, categories and modes updated from RadioReference; ")
              .append("your favourites, mutes, recording, priorities and stream assignments stay as they are; none is removed.</li>")
              .append("<li>").append(tgs.size()).append(" new talkgroup").append(tgs.size() == 1 ? "" : "s").append(" added.</li>")
-             .append("<li>Control channels: ").append(ccChange ? "<b>" + freqs(refresh.controlChannelsMHz) + " \u2192 " + freqs(cc) + "</b> MHz" : "unchanged (" + freqs(cc) + " MHz)").append("</li></ul>");
+             .append("<li>Control channels: ").append(ccChange ? "<b>" + freqs(refresh.controlChannelsMHz) + " \u2192 " + freqs(cc) + "</b> MHz" : "unchanged (" + freqs(cc) + " MHz)").append("</li>")
+             .append(TalkgroupLists.sharing(f.app.systems, refresh).size() > 1
+                     ? "<li>Other sites on this system use this same list, so they pick up the same names and settings.</li>" : "")
+             .append("</ul>");
             if (running) h.append("<p>Talkgroup changes apply at once while monitoring; feeds and uploads keep running.")
                     .append(ccChange ? " The new control channels need the radio part restarted: TrunkDeck shows <b>Restart</b> in the top bar - press it when it suits you (feeds and uploads stay connected)." : "").append("</p>");
         }
@@ -592,6 +609,7 @@ final class RrWizard extends JDialog {
             s.id = f.app.uniqueId(RadioSystem.safeId(s.name));
             try { f.app.save(s); } catch (Exception ex) { error("Could not save the system: " + ex.getMessage()); return; }
             f.app.systems.add(s);
+            f.app.bindTalkgroups();   // a site of a system the user already has joins that talkgroup list
             f.app.systems.sort(Comparator.comparing(x -> x.name.toLowerCase()));
             boolean start = startNow.isSelected() && startNow.isEnabled() && !f.running();
             if (start || f.app.current == null) { f.app.current = s; f.app.settings.setProperty("lastSystem", s.id); f.app.saveSettings(); }
@@ -599,8 +617,10 @@ final class RrWizard extends JDialog {
             f.systemsPage.select(start || f.app.current == s ? s : f.app.current);
             if (f.rrBanner != null) f.dismissRrOffer();
             done = true;
+            boolean sharedList = TalkgroupLists.sharing(f.app.systems, s).size() > 1;
             finishText.setText("<html><body style='font-family:sans-serif'><p><b style='color:#2BFF88'>\u2713 " + Util.xml(s.name) + " is ready</b> - "
                     + s.talkgroups.size() + " talkgroups, control channels " + freqs(s.controlChannelsMHz) + " MHz.</p>"
+                    + (sharedList ? "<p>It uses the talkgroup list already kept for this system, so names, favorites, mutes, record, priority and streams stay in one place.</p>" : "")
                     + (start ? "<p>Monitoring starts now.</p>" : f.app.current == s ? "" : "<p>It's in the System box at the top: pick it when you want to listen to it (switching restarts the radio part; feeds stay connected).</p>")
                     + "<p style='color:#7D8FA3'>Check it any time on the Systems and Talkgroups pages. To update it later: Systems page \u2192 Refresh from RadioReference.</p></body></html>");
             finishText.setCaretPosition(0);
@@ -611,6 +631,7 @@ final class RrWizard extends JDialog {
             boolean current = refresh == f.app.current;
             String before = SystemsPage.restartKey(refresh);
             RrImport.Summary sum = RrImport.merge(refresh, fetched, sites, tgs, updateNames.isSelected());
+            f.app.bindTalkgroups();                    // a changed WACN, System ID or RadioReference id may join or leave the shared list
             boolean needsRestart = !before.equals(SystemsPage.restartKey(refresh));
             if (current) {
                 f.talkgroupsEdited();                  // live: the engine gets the new list now, nothing restarts

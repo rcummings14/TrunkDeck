@@ -29,7 +29,11 @@ public class RadioSystem {
     public String rrSites = "", rrUpdated = "";
     /** Decimal IDs RadioReference listed at the last import (so a refresh only offers really new talkgroups). */
     public String rrSeen = "";
-    public final List<Talkgroup> talkgroups = new ArrayList<>();
+    /**
+     * Talkgroups for this site. Sites of the same radio system share this list (one object): an edit on any of them
+     * is the edit for all of them. {@link TalkgroupLists} decides who shares and joins an existing list.
+     */
+    public List<Talkgroup> talkgroups = new ArrayList<>();
     /** Radio ID -> name (radios.csv next to talkgroups.csv). */
     public RadioAliases radios = new RadioAliases();
 

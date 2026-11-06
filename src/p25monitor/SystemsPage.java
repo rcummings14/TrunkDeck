@@ -88,7 +88,7 @@ public class SystemsPage extends JPanel {
             Jargon.explain(l, (String) o[0]); ((JComponent) o[1]).setToolTipText(l.getToolTipText());
             p.add(l, BorderLayout.WEST); p.add((JComponent) o[1], BorderLayout.CENTER); ids.add(p);
         }
-        y = row(g, c, y, "IDs (optional)", ids, "For your reference. The engine reads these from the control channel automatically.");
+        y = row(g, c, y, "IDs (optional)", ids, "Sites with the same WACN and System ID share one talkgroup list (leading zeros do not matter). The engine still reads the live IDs from the control channel.");
         y = row(g, c, y, "Max simultaneous calls", traffic, "How many calls the engine decodes at the same time (each uses about 4% of one CPU core). Calls must also fall inside a dongle's window.");
         JPanel checks = new JPanel(new GridLayout(0, 1));
         checks.setOpaque(false);
@@ -186,7 +186,7 @@ public class SystemsPage extends JPanel {
         String before = restartKey(editing);
         if (!readForm(editing)) return;
         boolean needsRestart = !before.equals(restartKey(editing));
-        try { f.app.save(editing); } catch (Exception ex) { JOptionPane.showMessageDialog(f, ex.getMessage()); return; }
+        try { f.app.bindTalkgroups(); f.app.save(editing); } catch (Exception ex) { JOptionPane.showMessageDialog(f, ex.getMessage()); return; }
         f.app.systems.sort(Comparator.comparing(s -> s.name.toLowerCase()));
         refreshList();
         if (editing == f.app.current) {
@@ -206,6 +206,7 @@ public class SystemsPage extends JPanel {
         s.id = f.app.uniqueId(RadioSystem.safeId(s.name));
         try { f.app.save(s); } catch (Exception ex) { JOptionPane.showMessageDialog(f, ex.getMessage()); return; }
         f.app.systems.add(s);
+        f.app.bindTalkgroups();   // a new site of a system the user already has picks up that system's talkgroup list
         edit(s);
         refreshList();
         f.reloadSystems();
@@ -238,7 +239,11 @@ public class SystemsPage extends JPanel {
 
     void deleteSystem() {
         if (editing == null) return;
-        if (JOptionPane.showConfirmDialog(f, "Delete \"" + editing.name + "\" and its talkgroup list?", "Delete system", JOptionPane.OK_CANCEL_OPTION) != JOptionPane.OK_OPTION) return;
+        boolean shared = TalkgroupLists.sharing(f.app.systems, editing).size() > 1;
+        String msg = shared
+                ? "Delete \"" + editing.name + "\"? The other sites on this system keep the shared talkgroup list."
+                : "Delete \"" + editing.name + "\" and its talkgroup list?";
+        if (JOptionPane.showConfirmDialog(f, msg, "Delete system", JOptionPane.OK_CANCEL_OPTION) != JOptionPane.OK_OPTION) return;
         try { f.app.delete(editing); } catch (Exception ignored) {}
         if (f.app.current == editing) f.app.current = f.app.systems.isEmpty() ? null : f.app.systems.get(0);
         editing = null;
