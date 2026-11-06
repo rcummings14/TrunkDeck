@@ -198,6 +198,7 @@ public final class EngineLibs {
     // ------------------------------------------------------------------ LAME MP3 (8 kHz mono)
     private static Constructor<?> lameCtor;
     private static Object monoMode;
+    private static ClassLoader lameLoader;
     private static boolean lameTried;
 
     public static synchronized boolean mp3Available() {
@@ -209,7 +210,8 @@ public final class EngineLibs {
                 Class<?> mode = cl.loadClass("net.sourceforge.lame.mp3.MPEGMode");
                 monoMode = Enum.valueOf((Class) mode, "MONO");
                 lameCtor = enc.getConstructor(AudioFormat.class, int.class, mode, int.class, boolean.class);
-            } catch (Throwable t) { lameCtor = null; }
+                lameLoader = cl;
+            } catch (Throwable t) { lameCtor = null; lameLoader = null; }
         }
         return lameCtor != null;
     }
@@ -259,6 +261,87 @@ public final class EngineLibs {
             return bo.toByteArray();
         }
         public byte[] finish() { try { int n = (int) finish.invoke(enc, out); return Arrays.copyOf(out, n); } catch (Exception e) { return new byte[0]; } }
+    }
+
+    /** 16-bit little-endian PCM from a saved MP3. Playback only: live encoding, the speaker and uploads are untouched. */
+    public static final class Pcm {
+        public final int sampleRate, channels;
+        public final byte[] data;
+        public Pcm(int sampleRate, int channels, byte[] data) {
+            this.sampleRate = sampleRate; this.channels = channels; this.data = data;
+        }
+    }
+
+    /**
+     * Decodes an MP3 with the same java-lame library that writes recordings. Samples are 16-bit little-endian
+     * (interleaved when stereo). Does not decrypt anything and does not touch a live call.
+     */
+    public static synchronized Pcm decodeMp3(byte[] mp3) throws Exception {
+        if (mp3 == null || mp3.length < 4) return new Pcm(8000, 1, new byte[0]);
+        if (!mp3Available()) throw new IllegalStateException("java-lame not found");
+        ClassLoader cl = lameLoader;
+        Class<?> mpgC = cl.loadClass("net.sourceforge.lame.mpg.MPGLib");
+        Class<?> ifC = cl.loadClass("net.sourceforge.lame.mpg.Interface");
+        Class<?> vbrC = cl.loadClass("net.sourceforge.lame.mp3.VBRTag");
+        Class<?> dataC = cl.loadClass("net.sourceforge.lame.mp3.MP3Data");
+        Class<?> skipC = cl.loadClass("net.sourceforge.lame.mp3.FrameSkip");
+        Class<?> tagC = cl.loadClass("net.sourceforge.lame.mpg.MPGLib$mpstr_tag");
+        Object mpg = mpgC.getDeclaredConstructor().newInstance();
+        Object iface = ifC.getDeclaredConstructor().newInstance();
+        ifC.getMethod("setModules", vbrC).invoke(iface, vbrC.getDeclaredConstructor().newInstance());
+        mpgC.getMethod("setModules", ifC).invoke(mpg, iface);
+        Object hip = mpgC.getMethod("hip_decode_init").invoke(mpg);
+        Method dec = mpgC.getMethod("hip_decode1_headers", tagC, byte[].class, int.class, float[].class, float[].class, dataC, skipC);
+        Object data = dataC.getDeclaredConstructor().newInstance();
+        Object skip = skipC.getDeclaredConstructor().newInstance();
+        float[] left = new float[1152], right = new float[1152];
+        java.io.ByteArrayOutputStream pcm = new java.io.ByteArrayOutputStream(Math.min(mp3.length * 12, 1 << 20));
+        byte[] empty = new byte[0];
+        int off = 0, silent = 0, spins = 0, rate = 0, channels = 1;
+        try {
+            while (silent < 2 && spins++ < 200000 && pcm.size() < 8000 * 60 * 20 * 2) {
+                byte[] buf; int len;
+                if (off < mp3.length) {
+                    len = Math.min(4096, mp3.length - off);
+                    buf = Arrays.copyOfRange(mp3, off, off + len);
+                    off += len;
+                } else { buf = empty; len = 0; }
+                int got = (int) dec.invoke(mpg, hip, buf, len, left, right, data, skip);
+                if (rate == 0 && dataC.getField("header_parsed").getBoolean(data)) {
+                    rate = dataC.getField("samplerate").getInt(data);
+                    int st = dataC.getField("stereo").getInt(data);
+                    channels = st >= 2 ? 2 : 1;
+                }
+                if (got > 0) {
+                    silent = 0;
+                    int n = Math.min(got, left.length);
+                    byte[] frame = new byte[n * channels * 2];
+                    int p = 0;
+                    for (int i = 0; i < n; i++) {
+                        p = putSample(frame, p, left[i]);
+                        if (channels == 2) p = putSample(frame, p, right[i]);
+                    }
+                    pcm.write(frame, 0, p);
+                } else if (off >= mp3.length || got < 0) {
+                    silent++;
+                    if (got < 0) break;
+                }
+            }
+        } finally {
+            try { mpgC.getMethod("hip_decode_exit", tagC).invoke(mpg, hip); } catch (Throwable ignored) {}
+        }
+        if (rate <= 0) rate = 8000;
+        return new Pcm(rate, channels, pcm.toByteArray());
+    }
+
+    /** java-lame's decoder returns samples on the 16-bit scale, not -1..1. */
+    static int putSample(byte[] frame, int p, float sample) {
+        int s = Math.round(sample);
+        if (s > 32767) s = 32767;
+        else if (s < -32768) s = -32768;
+        frame[p] = (byte) s;
+        frame[p + 1] = (byte) (s >> 8);
+        return p + 2;
     }
 
     public static byte[] pcm16(float[] s, int n) {

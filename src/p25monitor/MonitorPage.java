@@ -4,6 +4,9 @@ import javax.swing.*;
 import javax.swing.border.*;
 import javax.swing.table.*;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.nio.file.Path;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.List;
@@ -21,6 +24,9 @@ public class MonitorPage extends JPanel {
     final JButton muteBtn = MainFrame.button("Mute", Theme.Glyph.MUTE, Theme.RED);
     final JButton addBtn = MainFrame.button("Add to list", Theme.Glyph.PLUS, Theme.CYAN);
     final JButton replayBtn = MainFrame.button("Replay last", Theme.Glyph.PLAY, Theme.GREEN);
+    final JButton logPlay = MainFrame.button("Play", Theme.Glyph.PLAY, Theme.GREEN);
+    /** Talkgroup and time of the saved call playing right now. Shown in Simple and Advanced. */
+    final JLabel playingLbl = new JLabel(" ");
     /** Local speaker volume and mute: live, remembered, never applied to streams or recordings. */
     final JSlider volSlider = new JSlider(0, 100, 80);
     final JLabel volLabel = new JLabel("80 %");
@@ -75,6 +81,14 @@ public class MonitorPage extends JPanel {
             if (r >= 0 && !e.getValueIsAdjusting()) focus(live.rows.get(r).tg);
         });
         RadioUi.install(f, table, r -> live.rows.get(r).e.radioId);   // right-click: Name this radio...
+        table.setToolTipText("Double-click a call to play or pause its recording");
+        table.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() != 2) return;
+                int r = table.rowAtPoint(e.getPoint());
+                if (r >= 0 && r < live.rows.size()) playCall(live.rows.get(r));
+            }
+        });
         JScrollPane sp = new JScrollPane(table);
         sp.setBorder(BorderFactory.createEmptyBorder());
         logCard.add(sp, BorderLayout.CENTER);
@@ -84,6 +98,9 @@ public class MonitorPage extends JPanel {
         hideData.setToolTipText("Hide affiliations, data calls and other non-voice events");
         JButton clear = MainFrame.button("Clear", Theme.Glyph.TRASH, Theme.DIM);
         clear.addActionListener(e -> { live.rows.clear(); live.fireTableDataChanged(); });
+        logPlay.setToolTipText("Play or pause the selected call's recording");
+        logPlay.addActionListener(e -> playLogSelection());
+        logTools.add(logPlay);
         logTools.add(hideData);
         logTools.add(clear);
         logCard.add(logTools, BorderLayout.SOUTH);
@@ -98,11 +115,20 @@ public class MonitorPage extends JPanel {
         JPanel nb = new JPanel(new GridLayout(2, 2, 6, 6));
         nb.setOpaque(false);
         nb.add(favBtn); nb.add(muteBtn); nb.add(addBtn); nb.add(replayBtn);
-        now.add(nb, BorderLayout.SOUTH);
+        playingLbl.setFont(Theme.ui(Font.PLAIN, 12f));
+        playingLbl.setForeground(Theme.CYAN);
+        playingLbl.setVisible(false);
+        JPanel south = new JPanel(new BorderLayout(0, 6));
+        south.setOpaque(false);
+        south.add(nb, BorderLayout.CENTER);
+        south.add(playingLbl, BorderLayout.SOUTH);
+        now.add(south, BorderLayout.SOUTH);
         favBtn.addActionListener(e -> { if (currentTg != null) { ensureListed(currentTg); currentTg.favorite = !currentTg.favorite; changed(); } });
         muteBtn.addActionListener(e -> { if (currentTg != null) { ensureListed(currentTg); currentTg.muted = !currentTg.muted; changed(); } });
         addBtn.addActionListener(e -> { if (currentTg != null) { ensureListed(currentTg); changed(); } });
+        replayBtn.setToolTipText("Play the newest recording of this talkgroup. Pauses if that one is already playing. A live call pauses it.");
         replayBtn.addActionListener(e -> { if (currentTg != null) f.recordings.playLatest(currentTg.decimal); });
+        AudioPlayer.addListener(this::syncPlayback);
 
         JPanel hotCard = MainFrame.card("Hot talkgroups (most recent)");
         hot.setCellRenderer(new HotRenderer());
@@ -250,7 +276,7 @@ public class MonitorPage extends JPanel {
         asp.setPreferredSize(new Dimension(600, 262));
         asp.setMinimumSize(new Dimension(200, 70));
         activeCard.add(asp, BorderLayout.CENTER);
-        new javax.swing.Timer(250, e -> refreshActive()).start();
+        new javax.swing.Timer(250, e -> { refreshActive(); holdForLive(); }).start();
         refreshActive();
 
         activeCard.setMinimumSize(new Dimension(300, 110));
@@ -533,6 +559,61 @@ public class MonitorPage extends JPanel {
 
     static String esc(String s) { return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;"); }
 
+    /** Pause a recording while a live call is actually coming through the speaker. Does not stop scanning or streaming. */
+    void holdForLive() {
+        var eng = f.nativeEngine;
+        AudioPlayer.setLiveCall(AudioPlayer.liveShouldHold(eng.isRunning(), eng.speakerMuted(), eng.speakerVolume(), eng.displayState()));
+    }
+
+    void playLogSelection() {
+        int r = table.getSelectedRow();
+        if (r < 0 || r >= live.rows.size()) { f.toast("Choose a call first."); return; }
+        playCall(live.rows.get(r));
+    }
+
+    /** Play or pause the saved audio for one call-log row. Encrypted calls are not opened. */
+    void playCall(Row row) {
+        String why = RecordingFiles.unavailable(row.e);
+        if (why != null) { f.toast(why); return; }
+        Path p = RecordingFiles.find(App.recordingDir(), row.e.timestamp, row.e.talkgroup, row.e.radioId);
+        if (p == null) { f.toast(RecordingFiles.missing(row.e)); return; }
+        if (AudioPlayer.same(p.toFile())) AudioPlayer.togglePause();
+        else {
+            String name = row.tg != null ? row.tg.displayName() : RecordingFiles.title(f.app.current, row.e.talkgroup);
+            f.recordings.playFile(p.toFile(), name, RecordingFiles.whenLabel(row.e.timestamp));
+        }
+    }
+
+    void syncPlayback() {
+        boolean on = AudioPlayer.active();
+        String text = AudioPlayer.statusText();
+        playingLbl.setVisible(on);
+        playingLbl.setText(on ? "<html>" + esc(text) + "</html>" : " ");
+        playingLbl.setToolTipText(on ? text : null);
+        playingLbl.setForeground(AudioPlayer.pausedForLive() ? Theme.AMBER : AudioPlayer.paused() ? Theme.DIM : Theme.CYAN);
+        int r = table.getSelectedRow();
+        boolean thisRow = r >= 0 && r < live.rows.size() && RecordingFiles.matchesPlaying(live.rows.get(r).e, AudioPlayer.currentFile());
+        boolean showPause = thisRow && on && !AudioPlayer.paused();
+        logPlay.setText(showPause ? "Pause" : "Play");
+        logPlay.setIcon(Theme.icon(showPause ? Theme.Glyph.PAUSE : Theme.Glyph.PLAY, 16, Theme.GREEN));
+        boolean replayThis = false;
+        if (on && currentTg != null) {
+            Path latest = RecordingFiles.latest(App.recordingDir(), currentTg.decimal);
+            replayThis = latest != null && AudioPlayer.same(latest.toFile());
+        }
+        if (replayThis && !AudioPlayer.paused()) {
+            replayBtn.setText("Pause");
+            replayBtn.setIcon(Theme.icon(Theme.Glyph.PAUSE, 16, Theme.GREEN));
+        } else if (replayThis) {
+            replayBtn.setText("Play");
+            replayBtn.setIcon(Theme.icon(Theme.Glyph.PLAY, 16, Theme.GREEN));
+        } else {
+            replayBtn.setText("Replay last");
+            replayBtn.setIcon(Theme.icon(Theme.Glyph.PLAY, 16, Theme.GREEN));
+        }
+        table.repaint();
+    }
+
     void updated() { live.fireTableDataChanged(); }
 
     void reset() { live.rows.clear(); live.fireTableDataChanged(); hotModel.clear(); focus(null); }
@@ -617,15 +698,21 @@ public class MonitorPage extends JPanel {
             super.getTableCellRendererComponent(t, v, sel, false, r, c);
             Row row = live.rows.get(r);
             setBorder(new EmptyBorder(0, 8, 0, 8));
-            setFont(c == 2 ? Theme.ui(Font.BOLD, 13f) : c <= 1 || c >= 4 ? Theme.mono(Font.PLAIN, 12f) : Theme.ui(Font.PLAIN, 12f));
+            boolean playing = RecordingFiles.matchesPlaying(row.e, AudioPlayer.currentFile());
+            int style = (c == 2 || playing) ? Font.BOLD : Font.PLAIN;
+            setFont(c == 2 || (playing && c == 0) ? Theme.ui(style, 13f) : c <= 1 || c >= 4 ? Theme.mono(style, 12f) : Theme.ui(style, 12f));
             Color fg = Theme.TEXT;
             if (row.e.isEmergency()) fg = Theme.RED;
             else if (row.e.isEncrypted()) fg = Theme.VIOLET;
+            else if (playing) fg = Theme.CYAN;
             else if (row.tg != null && row.tg.muted) fg = Theme.DIM;
             else if (row.tg != null && row.tg.favorite) fg = Theme.AMBER;
             else if (c == 2) fg = Theme.CYAN;
             else if (!row.e.isVoiceCall()) fg = Theme.DIM;
-            if (!sel) setForeground(fg);
+            if (!sel) {
+                setForeground(fg);
+                if (playing) setBackground(new Color(0x0F2A33));
+            }
             return this;
         }
     }

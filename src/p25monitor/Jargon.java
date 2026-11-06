@@ -32,7 +32,7 @@ public final class Jargon {
         put("The talkgroup number in hexadecimal (base 16), as some lists and radios show it.", "Hex");
         put("Radio Reference mode: D = digital, E = encrypted (can't be heard), T = TDMA (Phase 2). Encrypted talkgroups show in violet.", "Mode");
         put("Priority 1-100 (1 = most important): when calls overlap, the speaker plays the higher priority one.", "Priority");
-        put("Record: save every call on this talkgroup as an MP3 file (Recordings page).", "Rec");
+        put("Record: save every call on this talkgroup as an audio file. Play it from the Recordings page or the call log.", "Rec");
         put("Mute / lock out: never play this talkgroup on the speaker and don't follow its calls.", "Mute");
         put("Favorite: listen to it in \"Favorites only\" mode, highlighted in lists.", "\u2605", "Fav");
         put("The talkgroup number (decimal), as on Radio Reference.", "TG", "Decimal");

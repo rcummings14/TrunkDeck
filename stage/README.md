@@ -293,11 +293,11 @@ in a few seconds - your feeds stay connected (listeners hear silence for that mo
 
 | Page | What it does |
 |---|---|
-| **Monitor** | The scanner display (the call on the speaker: big alpha tag, talkgroup, category/tag, frequency, radio ID, call timer, ENC / EMERGENCY / FAV / MUTED badges; a dimmed SCANNING when no call is playing), control-channel meter, activity graph). Below it: the **Active calls** table, the live call log, **Hot talkgroups**, the **Speaker** choice, and quick buttons for the selected talkgroup (**Favorite, Mute, Add to list, Replay last**). **What to play:** *Everything*, *Only talkgroups in my list*, or *Favorites only*. |
+| **Monitor** | The scanner display (the call on the speaker: big alpha tag, talkgroup, category/tag, frequency, radio ID, call timer, ENC / EMERGENCY / FAV / MUTED badges; a dimmed SCANNING when no call is playing), control-channel meter, activity graph). Below it: the **Active calls** table, the live call log (double-click a call, or **Play**, to hear its recording), **Hot talkgroups**, the **Speaker** choice, and quick buttons for the selected talkgroup (**Favorite, Mute, Add to list, Replay last**). **What to play:** *Everything*, *Only talkgroups in my list*, or *Favorites only*. |
 | **Talkgroups** | Your list for the selected system. **Import CSV**, **Export CSV**, **Save CSV template**, search box, category filter, *Favorites* / *Heard* filters. Tick ★ (favorite), **Mute** and **Rec** (record) per talkgroup. Edit names, categories and **Priority** (1 = most important, 100 = normal) in the table. Select rows (Ctrl/Shift-click or Ctrl+A) to favorite, mute, record or assign streams in bulk. |
 | **Systems** | Add or edit systems: name, site, **control channel(s) in MHz**, demodulator (Auto / C4FM / LSM for simulcast), optional NAC/WACN/System ID/RFSS/Site, **Max simultaneous calls**, and *Record every call*. **Add preset** brings back the fictional example presets. |
 | **Streams** | Broadcastify Calls, Broadcastify Feeds and Icecast. See below. |
-| **Recordings** | Recorded calls, one file per call (talkgroups with **Rec** ticked, or every call). Double-click to play: WAV plays inside TrunkDeck, MP3 opens in your system's player. Volume slider and *Open folder* button. |
+| **Recordings** | Recorded calls, one file per call (talkgroups with **Rec** ticked, or every call). Double-click a recording (or **Play** / **Pause**) to hear it in TrunkDeck. The talkgroup name and time stay on screen while it plays. A live call on the speaker pauses it. Volume slider and *Open folder* button. |
 | **Engine** | Dongles (role, PPM, gain, bias-T), live site info and tuner windows, voice codec, voice-call diagnostics, decoded control-channel messages, and *Test with an I/Q recording*. See *Engine page*. |
 | **Setup & Help** | Checklist (dongles, voice codec, system chosen), detected dongles, engine log, and a **60-second demo** that shows the display with made-up calls, so you can try it without a radio. |
 
@@ -410,6 +410,7 @@ Also:
 * **Record** talkgroups (Rec column), or every call (*Systems → Record every call*, or *Engine → Record every followed call*).
   Each call is its own file, named `date_time_TrunkDeck_TO_<talkgroup>_FROM_<radio>.mp3`, in `~/TrunkDeck/recordings`
   (Windows: `%USERPROFILE%\TrunkDeck\recordings`). Updating from 1.1.x keeps your old recordings folder (see *Updating*).
+* **Play a recording** in TrunkDeck: on the **Recordings** page, double-click a call or use **Play** / **Pause**. On the live call log, double-click a call or use **Play**, or **Replay last** on the selected talkgroup (Simple and Advanced). The talkgroup name and the time show while it plays, and only one recording plays at a time. A live call coming through the speaker pauses the recording; it continues when that call is over. A muted speaker, or speaker volume at zero, does not pause it. Scanning, uploads and feeds keep going. If the file is missing or can't be read, TrunkDeck says so. Encrypted calls are not saved as audio.
 * Changes to mute, favorites, priority, record, streams and *what to play* take effect **immediately** - no Apply, no restart.
   Muting a talkgroup that is playing silences it at once (its queued audio too); a talkgroup un-muted mid-call is followed
   from that moment. The speaker mode changes immediately too.

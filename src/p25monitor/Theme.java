@@ -92,7 +92,7 @@ public final class Theme {
     }
 
     // ---------------- icons ----------------
-    public enum Glyph { MONITOR, TALKGROUPS, SYSTEMS, STREAMS, RECORDINGS, HELP, PLAY, STOP, STAR, MUTE, REC, IMPORT, EXPORT, PLUS, TRASH, RADIO, APPLY, SEARCH, FOLDER, MINI }
+    public enum Glyph { MONITOR, TALKGROUPS, SYSTEMS, STREAMS, RECORDINGS, HELP, PLAY, PAUSE, STOP, STAR, MUTE, REC, IMPORT, EXPORT, PLUS, TRASH, RADIO, APPLY, SEARCH, FOLDER, MINI }
 
     public static Icon icon(Glyph g, int size, Color c) { return new VectorIcon(g, size, c); }
 
@@ -140,6 +140,10 @@ public final class Theme {
                     Path2D q = new Path2D.Double(); q.moveTo(9, 9.5); q.curveTo(9, 5.5, 15, 5.5, 15, 9.5); q.curveTo(15, 12, 12, 12, 12, 14.5);
                     g2.draw(q); g2.fill(new Ellipse2D.Double(10.8, 16.5, 2.4, 2.4)); break;
                 case PLAY: { Path2D t = new Path2D.Double(); t.moveTo(7, 4); t.lineTo(20, 12); t.lineTo(7, 20); t.closePath(); g2.fill(t); break; }
+                case PAUSE:
+                    g2.fill(new RoundRectangle2D.Double(6, 4, 4, 16, 1.5, 1.5));
+                    g2.fill(new RoundRectangle2D.Double(14, 4, 4, 16, 1.5, 1.5));
+                    break;
                 case STOP: g2.fill(new RoundRectangle2D.Double(5, 5, 14, 14, 3, 3)); break;
                 case STAR: {
                     Path2D st = new Path2D.Double();
