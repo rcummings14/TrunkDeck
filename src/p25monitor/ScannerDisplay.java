@@ -5,7 +5,7 @@ import java.awt.*;
 import java.awt.geom.*;
 import java.util.*;
 
-/** The big "scanner LCD": current talkgroup, alpha tag, frequency, unit, timers, LEDs, decode & activity meters. */
+/** The big "scanner LCD": current talkgroup, alpha tag, frequency, unit, timers, LEDs, decode & activity meters, and the control-channel signal meter. */
 public class ScannerDisplay extends JComponent {
     // current call
     String alpha = "", tgText = "", category = "", tag = "", radio = "", freq = "", eventText = "";
@@ -26,6 +26,13 @@ public class ScannerDisplay extends JComponent {
     // status
     String systemName = "NO SYSTEM", siteName = "", ccText = "", engineState = "STOPPED";
     boolean engineLive;
+    /**
+     * Control-channel level in dB of full scale. NaN = not reporting. Used when {@link #controlSignal} is null
+     * (tests, and the demo, which has no receiver).
+     */
+    public volatile double controlDb = Double.NaN;
+    /** Live level from the engine (NaN = not reporting). When set, it wins over {@link #controlDb}. */
+    public volatile java.util.function.DoubleSupplier controlSignal;
     // meters
     final double[] activity = new double[60];      // calls per 2 s bucket, last 2 minutes
     final double[] decode = new double[60];        // control-channel messages per second, last 60 s
@@ -69,7 +76,27 @@ public class ScannerDisplay extends JComponent {
     public ScannerDisplay() {
         setPreferredSize(new Dimension(900, 270));
         setMinimumSize(new Dimension(600, 230));
+        setToolTipText(SignalMeter.EXPLAIN);   // registers for tooltips; the event method limits it to the meter
         new javax.swing.Timer(FRAME_MS, e -> tick()).start();
+    }
+
+    /** Signal-meter geometry (logical pixels). The whole meter, including the number, is {@link #signalW} wide. */
+    static final int SIG_BW = 5, SIG_GAP = 2, SIG_BH = 11;
+    /** Where the meter was drawn, in logical pixels. {@code signalX < 0} means it is not on screen. */
+    int signalX = -1, signalY, signalW, signalH;
+    /** Same rectangle in component pixels (display-only zoom included), for the tooltip. */
+    Rectangle signalTip;
+
+    @Override public String getToolTipText(java.awt.event.MouseEvent e) {
+        Rectangle r = signalTip;
+        if (r == null || e == null || !r.contains(e.getPoint())) return null;
+        String t = Jargon.tip("Signal");
+        return t == null ? null : Jargon.html(t);
+    }
+
+    double readSignal() {
+        var s = controlSignal;
+        return s != null ? s.getAsDouble() : controlDb;
     }
 
     void tick() {
@@ -203,12 +230,7 @@ public class ScannerDisplay extends JComponent {
         }   // None: no outline either
 
         int x0 = pad + 18, y = pad + 26;
-        // top status row
-        g.setFont(Theme.mono(Font.BOLD, 12f));
-        g.setColor(th.get(DisplayPalette.Field.SYSTEM));
-        g.drawString((systemName + (siteName.isBlank() ? "" : "  \u00b7  " + siteName)).toUpperCase(), x0, y);
-        String cc = ccText;
-        g.drawString(cc, pad + lcdW - 18 - g.getFontMetrics().stringWidth(cc), y);
+        paintTop(g, x0, y, pad + lcdW - 18, z, th);
 
         // big text: the talkgroup while a call is playing (lit until its audio has finished), otherwise SCANNING (dimmed).
         // 1.3.2: this replaces the separate small "Scanning..." status line; its height went to the big text.
@@ -283,6 +305,61 @@ public class ScannerDisplay extends JComponent {
     }
 
     static String ago(long s) { return s < 60 ? s + "s ago" : s < 3600 ? (s / 60) + "m ago" : (s / 3600) + "h ago"; }
+
+    /**
+     * Top row: system name, the control-channel frequency, and (while scanning) the signal meter at the right of the
+     * glass. The meter is drawn at full brightness so it stays readable on the dark glass. It is not one of the side
+     * meters, so Display only (simple view) still shows it.
+     */
+    void paintTop(Graphics2D g, int x0, int y, int right, double z, DisplayPalette th) {
+        g.setFont(Theme.mono(Font.BOLD, 12f));
+        FontMetrics fm = g.getFontMetrics();
+        String head = (systemName + (siteName.isBlank() ? "" : "  \u00b7  " + siteName)).toUpperCase();
+        String cc = ccText == null ? "" : ccText;
+        g.setColor(th.get(DisplayPalette.Field.SYSTEM));
+        if (!engineLive) {
+            signalX = -1; signalTip = null;
+            g.drawString(head, x0, y);
+            g.drawString(cc, right - fm.stringWidth(cc), y);
+            return;
+        }
+        int gap = 12, barsW = SignalMeter.BARS * SIG_BW + (SignalMeter.BARS - 1) * SIG_GAP;
+        int numBox = fm.stringWidth("-120 dB");
+        int meterW = barsW + 6 + numBox;
+        int room = Math.max(0, right - x0 - meterW - gap);
+        String ccDraw = cc.isEmpty() ? "" : fit(g, cc, Math.max(fm.charWidth('0') * 6, Math.min(fm.stringWidth(cc), Math.max(0, room - 24))));
+        int ccW = ccDraw.isEmpty() ? 0 : fm.stringWidth(ccDraw);
+        int meterX = right - meterW;
+        int ccX = meterX - (ccW == 0 ? 0 : gap + ccW);
+        g.drawString(fit(g, head, Math.max(16, ccX - gap - x0)), x0, y);
+        if (!ccDraw.isEmpty()) g.drawString(ccDraw, ccX, y);
+        paintSignal(g, meterX, y, barsW, th);
+        signalX = meterX; signalY = y - SIG_BH; signalW = meterW; signalH = SIG_BH + fm.getDescent() + 2;
+        signalTip = new Rectangle((int) Math.floor(meterX * z), (int) Math.floor(signalY * z),
+                (int) Math.ceil(meterW * z), (int) Math.ceil(signalH * z));
+    }
+
+    /** Bars plus the dB number. Empty segments and a dash when {@code db} is not a real level. */
+    void paintSignal(Graphics2D g, int x, int y, int barsW, DisplayPalette th) {
+        double db = readSignal();
+        int lit = SignalMeter.bars(db);
+        Color fill = th.get(DisplayPalette.Field.SCAN);
+        if (fill == null) fill = Theme.GREEN;
+        Color number = th.get(DisplayPalette.Field.FREQ);
+        if (number == null) number = Theme.TEXT;
+        Color track = signalTrack(number);
+        int top = y - SIG_BH;
+        for (int i = 0; i < SignalMeter.BARS; i++) {
+            g.setColor(i < lit ? fill : track);
+            g.fillRect(x + i * (SIG_BW + SIG_GAP), top, SIG_BW, SIG_BH);
+        }
+        g.setFont(Theme.mono(Font.BOLD, 12f));
+        g.setColor(number);
+        g.drawString(SignalMeter.text(db), x + barsW + 6, y);
+    }
+
+    /** Empty-segment colour: bright enough to see on the dark (unlit) glass, dimmer than a lit segment. */
+    static Color signalTrack(Color number) { return mix(Color.BLACK, number, 0.62); }
 
     private void meter(Graphics2D g, int x, int y, int w, int h, String title, String value, Color c, double[] data, double floorMax) {
         g.setColor(new Color(0x0A1219));

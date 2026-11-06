@@ -57,6 +57,12 @@ final class ChannelDecoder {
     volatile long lastNidSampleAt = -1_000_000;
     float[] oi = new float[0], oq = new float[0];
     double power;               // channel power (dB relative to the ADC's full scale)
+    /**
+     * Same level as {@link #power}, for the control-channel signal meter. NaN until the first block of samples, so the
+     * meter does not flash the 0 dB that {@code power} starts at. RTL-SDR, Airspy and SoapySDR all reach this from
+     * the samples they already deliver; nothing here invents a dBm figure.
+     */
+    volatile double signalDb = Double.NaN;
     volatile double syncPower = Double.NaN;   // channel power while frames are being received
     volatile boolean enabled = true;
     /** Exceptions thrown by this decoder (within 10 s of each other) and whether it is to be replaced. */
@@ -207,7 +213,11 @@ final class ChannelDecoder {
         int m = ch.process(i, q, n, oi, oq);
         double p = 0;
         for (int k = 0; k < m; k++) p += oi[k] * oi[k] + oq[k] * oq[k];
-        if (m > 0) power = 0.8 * power + 0.2 * (10 * Math.log10(p / m + 1e-12));
+        if (m > 0) {
+            double inst = 10 * Math.log10(p / m + 1e-12);
+            power = 0.8 * power + 0.2 * inst;
+            signalDb = Double.isNaN(signalDb) ? inst : 0.8 * signalDb + 0.2 * inst;
+        }
         // Break detector: a C4FM carrier turns at most ~1.2 rad in 3 samples at 48 kHz (1.8 kHz peak deviation).
         // Lost samples make it jump by a random angle, which the channel filter smears over a few samples; an
         // excursion of over 2 rad in 3 samples at full level means samples are missing from the stream (USB).

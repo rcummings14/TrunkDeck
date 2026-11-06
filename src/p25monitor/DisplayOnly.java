@@ -9,7 +9,8 @@ import java.util.Locale;
  * Display only (1.5.0): the main window shrinks to just the big scanner display, and back. It is the same window
  * (no second window is created): only its content and size change. The display keeps its colours, glow, scan lines,
  * backlight and SCANNING marquee, and is drawn larger or smaller with the window. Nothing else is touched: monitoring,
- * the speaker, recordings, feeds and uploads keep running (no engine call is made here).
+ * the speaker, recordings, feeds and uploads keep running (no engine call is made here). The control-channel
+ * signal meter stays on the glass (the side decode-rate and activity meters do not).
  * <p>
  * In / out: the header's "Display only" button, Ctrl+D, the close / minimize choices, the tray menu; back with a
  * double-click on the display, Esc, Ctrl+D or the right-click menu (Full window, Always on top, Mute speaker,
@@ -117,7 +118,7 @@ final class DisplayOnly {
         displayParent = f.display.getParent();
         if (displayParent != null && displayParent.getLayout() instanceof BorderLayout bl) displayConstraint = bl.getConstraints(f.display);
         if (displayParent != null) { displayParent.remove(f.display); ((JComponent) displayParent).revalidate(); }
-        f.display.simple = true;        // no meters: the display only
+        f.display.simple = true;        // side meters off (decode rate and activity). The control-channel signal meter stays on the glass.
         root.add(f.display, BorderLayout.CENTER);
         f.setContentPane(root);
         if ((st & Frame.MAXIMIZED_BOTH) != 0) f.setExtendedState(st & ~Frame.MAXIMIZED_BOTH);

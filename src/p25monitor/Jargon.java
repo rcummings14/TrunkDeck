@@ -18,6 +18,7 @@ public final class Jargon {
         put("Radio Frequency SubSystem: a group of sites run together. For your reference; read from the control channel.", "RFSS");
         put("Site number: which tower / site of the system you are receiving. For your reference.", "Site #");
         put("The control channel is the always-on data channel that tells radios which frequency each call is on. TrunkDeck listens to it and follows the calls.", "Control channel", "Control channel(s) MHz");
+        put(SignalMeter.EXPLAIN, "Signal");
         put("How the radio signal is turned back into data. Auto tries both kinds (C4FM, and LSM/CQPSK used by simulcast systems) and keeps the one that works better - leave it on Auto unless told otherwise.", "Demodulator");
         put("How many calls are decoded at the same time. Each one uses a little CPU; calls must also be inside a tuner's range.", "Max simultaneous calls");
         put("Hang time: after someone stops talking, how long the speaker stays on that talkgroup waiting for the reply before switching to another call.", "Hang time", "HANG");
