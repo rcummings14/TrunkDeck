@@ -8,7 +8,7 @@ JAVAC="${JAVAC:-javac}"; JAR="${JAR:-jar}"; JAVA="${JAVA:-java}"
 rm -rf build/classes build/test && mkdir -p build/classes build/test
 find src -name '*.java' > build/sources.txt
 "$JAVAC" --release 22 -encoding UTF-8 -Xlint:-options -cp lib/flatlaf-3.5.4.jar -d build/classes @build/sources.txt
-printf 'Main-Class: p25monitor.Main\nClass-Path: flatlaf-3.5.4.jar\nEnable-Native-Access: ALL-UNNAMED\nImplementation-Title: TrunkDeck\nImplementation-Version: 1.7.1\n' > build/manifest.txt
+printf 'Main-Class: p25monitor.Main\nClass-Path: flatlaf-3.5.4.jar\nEnable-Native-Access: ALL-UNNAMED\nImplementation-Title: TrunkDeck\nImplementation-Version: 1.7.2\n' > build/manifest.txt
 # RadioReference app key (1.6.0): only when RR_APP_KEY is set while building, written into the built jar only (never into
 # src/ or the git tree). Stored obscured (base64 of the reversed key) - any key inside a distributed binary can be read out.
 rm -f build/classes/p25monitor/rr/appkey.dat
