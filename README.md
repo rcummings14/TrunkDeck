@@ -36,7 +36,7 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
 * **Now-playing tags** on Broadcastify Feeds / Icecast (1.5.1): the talkgroup (optionally the radio) of the call playing
   is sent as the stream title, in step with the audio - your choice of format, an optional text between calls, and a
   *Send test tag* button. A separate short request: the audio connection is never touched.
-* Recordings of every call, call log, Active-calls table, control-channel decode meter, activity graph, per-call
+* Recordings of every call, played back in the app (a live call pauses playback), call log, Active-calls table, control-channel decode meter, activity graph, per-call
   diagnostics, talkgroup CSV import (RadioReference format), Simple and Advanced views.
 
 | Display only | Streams | Colours |
