@@ -130,7 +130,10 @@ public class App {
     public void saveSettings() {
         try {
             Files.createDirectories(profile);
-            try (Writer w = Files.newBufferedWriter(settingsFile(), StandardCharsets.UTF_8)) { settings.store(w, NAME + " settings"); }
+            Path file = settingsFile();
+            try (Writer w = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) { settings.store(w, NAME + " settings"); }
+            // the home-network password verifier lives in this file; keep it owner-only where the OS allows
+            if (settings.getProperty("lan.pass") != null) Util.restrictToOwner(file);
         } catch (IOException ignored) {}
     }
 

@@ -238,6 +238,7 @@ public class MonitorPage extends JPanel {
         lp.add(listenNote, BorderLayout.SOUTH);
         listen.add(lp, BorderLayout.CENTER);
         nowCard = now;
+        if (f.lanCard != null) right.addCard(f.lanCard.panel());
         right.addCard(now);
         right.addCard(listen);
         JScrollPane rsp = new JScrollPane(right);
