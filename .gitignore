@@ -1,0 +1,25 @@
+# Local secrets and this computer's own data. Git should skip these so they
+# cannot be committed by accident.
+
+# RadioReference app key (the key itself, never the source).
+rr-app-key.txt
+# Windows Notepad with "hide extensions" can save the same file as this name.
+rr-app-key.txt.txt
+# Obscured copy that a local build may write. Never copy it into the source tree.
+appkey.dat
+
+# Saved RadioReference website password.
+rr-login.properties
+
+# Settings and stream list saved on this computer. No files with these names
+# are already tracked in the repository.
+settings.properties
+streams.properties
+
+# Optional local test recordings (README: never committed).
+samples/
+
+# Folders created when you build or package the app. Not part of the source tree.
+build/
+pkg/
+dist/
