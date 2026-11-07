@@ -24,6 +24,8 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   [Supported receivers](#supported-receivers).
 * **Big scanner display** with colour themes (Full color, SDS-style, amber, ... or your own colours, including the bars
   and the display border), glow, scan lines, backlight on calls, SCANNING ticker.
+* **Control-channel signal meter** (1.7.2): the scanner display shows a signal meter on the control-channel row so you
+  can compare sites and antennas.
 * **Display only** mode: the window shrinks to just the scanner display (resizable, draggable, always-on-top option);
   double-click to get the full window back. Everything keeps running.
 * **System tray:** close or minimize to the tray (or to Display only) - your choice.
@@ -33,6 +35,9 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   system, the site(s) and talkgroups (encrypted ones marked and unticked), and TrunkDeck creates the system with its
   control channels and talkgroup names. *Refresh* later merges new and renamed talkgroups and keeps your own settings.
   Needs a RadioReference app key (not in this repository - see [below](#radioreference-app-key)).
+* **Shared talkgroup lists** (1.7.2): sites of the same radio system share one talkgroup list (matching WACN and
+  System ID, or imported from the same RadioReference system). Names, favorites, mutes, record, priority, and stream
+  assignments stay in sync. Radio ID names stay per site.
 * **Now-playing tags** on Broadcastify Feeds / Icecast (1.5.1): the talkgroup (optionally the radio) of the call playing
   is sent as the stream title, in step with the audio - your choice of format, an optional text between calls, and a
   *Send test tag* button. A separate short request: the audio connection is never touched.
