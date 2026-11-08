@@ -19,7 +19,7 @@ import java.util.Deque;
 import java.util.List;
 
 /**
- * "Control from this network" on the Monitor page. The switch starts and stops the home-network page.
+ * "Control from this network" on Setup & Help. The switch starts and stops the home-network page.
  * Start, stop and mute on that page call the same actions as the buttons on this computer.
  */
 final class LanCard {

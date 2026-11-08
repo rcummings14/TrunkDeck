@@ -53,6 +53,7 @@ public class HelpPage extends JPanel {
         tl.add(rrb); tl.add(eng); tl.add(tuners); tl.add(log); tl.add(demo); tl.add(data); tl.add(prof);
         tools.add(tl, BorderLayout.CENTER);
         left.addCard(check);
+        if (f.lanCard != null) left.addCard(f.lanCard.panel());
         left.addCard(tools);
         JScrollPane ls = new JScrollPane(left) {
             @Override public Dimension getPreferredSize() { return new Dimension(Layouts.s(470), super.getPreferredSize().height); }
