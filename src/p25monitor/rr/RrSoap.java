@@ -110,7 +110,15 @@ public final class RrSoap {
 
     public CountyInfo getCountyInfo(int ctid) throws RrException {
         Node r = call("getCountyInfo", "ctid", ctid);
-        return new CountyInfo(r.integer("ctid"), r.text("countyName"), r.integer("stid"), trsList(r.child("trsList")));
+        List<Subcat> subs = new ArrayList<>();
+        for (Node cat : r.child("cats").items()) {
+            String category = cat.text("cName");
+            for (Node sc : cat.child("subcats").items()) {
+                int scid = sc.integer("scid");
+                if (scid > 0) subs.add(new Subcat(scid, category, sc.text("scName")));
+            }
+        }
+        return new CountyInfo(r.integer("ctid"), r.text("countyName"), r.integer("stid"), trsList(r.child("trsList")), subs);
     }
 
     public ZipInfo getZipcodeInfo(int zip) throws RrException {
@@ -126,10 +134,23 @@ public final class RrSoap {
         List<Sysid> ids = new ArrayList<>();
         for (Node n : r.child("sysid").items()) ids.add(new Sysid(n.text("sysid"), n.text("wacn")));
         int type = r.integer("sType");
-        String typeName = "";
+        int flavor = r.integer("sFlavor");
+        String typeName = "", flavorName = "";
         try { for (Node n : call("getTrsType", "id", type).items()) if (n.integer("sType") == type) typeName = n.text("sTypeDescr"); }
         catch (RrException e) { if (e.kind != RrException.Kind.FAULT && e.kind != RrException.Kind.BAD_RESPONSE) throw e; }
-        return new TrsDetails(sid, r.text("sName"), type, r.integer("sFlavor"), r.integer("sVoice"), r.text("sCity"), typeName, ids);
+        try { for (Node n : call("getTrsFlavor", "id", type).items()) if (n.integer("sFlavor") == flavor) flavorName = n.text("sFlavorDescr"); }
+        catch (RrException e) { if (e.kind != RrException.Kind.FAULT && e.kind != RrException.Kind.BAD_RESPONSE) throw e; }
+        return new TrsDetails(sid, r.text("sName"), type, flavor, r.integer("sVoice"), r.text("sCity"), typeName, flavorName, ids);
+    }
+
+    /** Conventional frequencies of one subcategory (getSubcatFreqs). Output frequency only; input is not monitored. */
+    public List<Freq> getSubcatFreqs(int scid) throws RrException {
+        List<Freq> l = new ArrayList<>();
+        for (Node n : call("getSubcatFreqs", "scid", scid).items()) {
+            double mhz = n.decimal("out");
+            if (mhz > 25 && mhz < 1300) l.add(new Freq(n.integer("fid"), mhz, n.text("alpha"), n.text("descr"), n.text("tone"), n.text("tg"), n.text("mode"), n.integer("enc")));
+        }
+        return l;
     }
 
     public List<Site> getTrsSites(int sid) throws RrException {

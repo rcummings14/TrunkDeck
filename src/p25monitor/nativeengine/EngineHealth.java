@@ -17,6 +17,9 @@ public final class EngineHealth {
     public String lastFailure = "";
     /** Control channel: last good control message (ms), messages so far. */
     public long lastCcMessageAt, ccMessages;
+    /** Conventional system: no control channel. {@code lastChannelAt} is the last P25 frame on a saved channel. */
+    public boolean conventional;
+    public long lastChannelAt;
 
     public enum Kind { FEED, CALLS, OPENMHZ, RDIO }
     public static final class Stream {
@@ -35,6 +38,12 @@ public final class EngineHealth {
         h.problem = e.problem == null ? "" : e.problem;
         h.lastCcMessageAt = e.lastTsbkAt;
         h.ccMessages = e.msgTotal;
+        h.conventional = e.conventional;
+        if (e.conventional) {
+            long last = 0;
+            for (Tuner t : e.tuners) for (ChannelDecoder d : e.decodersOn(t)) last = Math.max(last, d.lastFrameAt);
+            h.lastChannelAt = last;
+        }
         Set<Object> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Tuner t : e.tuners) {
             h.tuners++;

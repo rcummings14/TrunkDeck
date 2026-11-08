@@ -59,7 +59,16 @@ public final class SignalMeter {
      * one, then the strongest reported level. Voice and roaming receivers are not in this list.
      */
     public static double pick(long activeHz, long[] freqHz, double[] db, boolean[] locked) {
-        if (freqHz == null || db == null || locked == null) return Double.NaN;
+        int i = pickIndex(activeHz, freqHz, db, locked);
+        return i >= 0 ? db[i] : Double.NaN;
+    }
+
+    /**
+     * Which entry {@link #pick} would show: the active channel, else a locked one, else the strongest reported level.
+     * -1 when nothing is reporting.
+     */
+    public static int pickIndex(long activeHz, long[] freqHz, double[] db, boolean[] locked) {
+        if (freqHz == null || db == null || locked == null) return -1;
         int n = Math.min(freqHz.length, Math.min(db.length, locked.length));
         int active = -1, lockedBest = -1, strong = -1;
         for (int i = 0; i < n; i++) {
@@ -68,8 +77,8 @@ public final class SignalMeter {
             if (locked[i] && (lockedBest < 0 || db[i] > db[lockedBest])) lockedBest = i;
             if (strong < 0 || db[i] > db[strong]) strong = i;
         }
-        if (active >= 0) return db[active];
-        if (lockedBest >= 0) return db[lockedBest];
-        return strong >= 0 ? db[strong] : Double.NaN;
+        if (active >= 0) return active;
+        if (lockedBest >= 0) return lockedBest;
+        return strong;
     }
 }

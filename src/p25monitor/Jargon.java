@@ -12,7 +12,9 @@ public final class Jargon {
     static final Map<String, String> TIPS = new HashMap<>();
     static void put(String text, String... keys) { for (String k : keys) TIPS.put(k.toLowerCase(Locale.ROOT), text); }
     static {
-        put("Network Access Code: a 3-digit hex number every transmission on this system carries, so receivers ignore other systems on the same frequency. TrunkDeck reads it from the control channel; enter it only to lock onto one system.", "NAC");
+        put("Network Access Code: a 3-digit hex number every transmission on this system carries, so receivers ignore other systems on the same frequency. On a trunked system TrunkDeck reads it from the control channel. On a conventional system, type it to ignore other traffic, or add it after one channel (155.2500:2D5).", "NAC");
+        put("Trunked follows a control channel and hops to each call. Conventional stays on the frequencies you type. There is no control channel.", "Kind");
+        put("The frequencies this conventional system uses. Separate them with commas. Add a NAC after a colon when one channel uses its own: 155.2500:2D5.", "Channels MHz");
         put("Wide Area Communications Network ID: identifies the whole P25 network. Sites with the same WACN and System ID share one talkgroup list. TrunkDeck also reads it from the control channel.", "WACN");
         put("System ID: identifies this trunked system inside its network (WACN). Sites with the same WACN and System ID share one talkgroup list. TrunkDeck also reads it from the control channel.", "Sys ID", "SysID");
         put("Radio Frequency SubSystem: a group of sites run together. For your reference; read from the control channel.", "RFSS");

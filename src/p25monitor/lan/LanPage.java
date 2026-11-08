@@ -262,6 +262,7 @@ function paint(s) {
   const sys = (s.system || 'NO SYSTEM') + (s.site ? '  ·  ' + s.site : '');
   $('sys').textContent = sys.toUpperCase();
   $('cc').textContent = s.control || '';
+  const conv = !!s.conventional;
   bars(s.signalBars, s.signalText, on);
   const big = $('big');
   big.className = 'big';
@@ -298,7 +299,7 @@ function paint(s) {
     const sec = s.callSeconds < 0 ? 0 : s.callSeconds;
     $('ctime').textContent = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
   } else if (on && chans.length) {
-    $('flab').textContent = 'SCAN · CONTROL CH';
+    $('flab').textContent = conv ? 'SCAN · CHANNEL' : 'SCAN · CONTROL CH';
     $('freq').textContent = chans[Math.floor(scanTick / 1) % chans.length] + ' MHz';
     $('tlab').textContent = 'LAST CALL';
     $('ctime').textContent = s.lastAgo >= 0 ? ago(s.lastAgo) : '-';

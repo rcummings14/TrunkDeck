@@ -54,7 +54,9 @@ public final class LanServer {
         public String activity = "stopped";
         public boolean hang;
         public String system = "", site = "", control = "";
-        /** Control-channel frequencies the idle glass steps through, already formatted. */
+        /** Conventional system: the glass shows a channel, not a control channel. */
+        public boolean conventional;
+        /** Frequencies the idle glass steps through, already formatted. */
         public final List<String> channels = new ArrayList<>();
         /** Control-channel level in dB of full scale. NaN = the receiver is not reporting one. */
         public double signalDb = Double.NaN;
@@ -318,6 +320,7 @@ public final class LanServer {
         b.append(",\"system\":").append(LanJson.quote(s.system));
         b.append(",\"site\":").append(LanJson.quote(s.site));
         b.append(",\"control\":").append(LanJson.quote(s.control));
+        b.append(",\"conventional\":").append(s.conventional);
         b.append(",\"channels\":[");
         for (int i = 0; i < s.channels.size(); i++) { if (i > 0) b.append(','); b.append(LanJson.quote(s.channels.get(i))); }
         b.append(']');

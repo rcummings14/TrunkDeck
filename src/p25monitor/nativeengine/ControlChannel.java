@@ -41,15 +41,21 @@ final class ControlChannel {
         e.ccDecoders.addAll(list);
     }
 
-    /** Retunes the control tuner and rebuilds the control-channel decoders. */
+    /** Retunes the control tuner and rebuilds its decoders (control channel, or the conventional channels it covers). */
     void retuneTo(long c, String why) {
         Tuner t = e.ccTuner;
-        if (!t.src.tune(c)) return;
+        if (t == null) return;
+        if (!t.src.tune(c)) {
+            if (e.conventional) e.installParked(t, e.covered(t));
+            return;
+        }
         var tap = e.retuneTap; if (tap != null) tap.accept(new long[]{t.id, e.calls.callsOn(t), c});
         e.ccCenter = c; t.center = c;
         t.retunes++; t.lastRetuneAt = System.currentTimeMillis();
-        e.log("Control tuner T1 -> " + t.window() + " (" + why + ")");
-        if (e.sys != null) buildDecoders(NativeEngine.parseNac(e.sys.nac));
+        e.log((e.conventional ? "Tuner T" + t.id : "Control tuner T1") + " -> " + t.window() + " (" + why + ")");
+        if (e.sys == null) return;
+        if (e.conventional) e.installParked(t, e.covered(t));
+        else buildDecoders(NativeEngine.parseNac(e.sys.nac));
     }
 
     // ------------------------------------------------------------------ messages

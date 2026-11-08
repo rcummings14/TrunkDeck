@@ -91,7 +91,7 @@ public class HelpPage extends JPanel {
         boolean codec = p25monitor.nativeengine.EngineLibs.jmbeReady() || p25monitor.nativeengine.EngineLibs.findJmbe(f.app.profile, f.app.settings.getProperty("native.jmbe", "")) != null;
         set(codecOk, codec, "Voice codec (JMBE) installed", "Voice codec not installed yet - Engine page \u2192 Build voice codec (one time, about a minute)");
         RadioSystem s = f.app.current;
-        set(sysOk, s != null && !s.controlChannelsMHz.isEmpty(), "System selected: " + (s == null ? "" : s.name + " (" + s.freqText() + " MHz, " + s.talkgroups.size() + " talkgroups)"),
+        set(sysOk, s != null && !s.frequencies().isEmpty(), "System selected: " + (s == null ? "" : s.name + " (" + s.displayFreqs() + " MHz, " + s.talkgroups.size() + " talkgroups)"),
                 "Choose or add a system on the Systems page");
     }
 
@@ -167,6 +167,7 @@ public class HelpPage extends JPanel {
                 "Without it calls are listed but silent.<br>" +
                 "<h3 style='color:#00E5FF'>3. Choose a system</h3>" +
                 "Pick one in the <b>SYSTEM</b> box at the top, or add your own on the <b>Systems</b> page: type the control channel in MHz (e.g. <b>851.0125</b>). " +
+                "For a <b>conventional</b> P25 system (fixed channels, no control channel), choose Conventional and type the channel frequencies. Add a NAC after a colon if one channel uses its own (<b>155.2500:2D5</b>). " +
                 "<b>With a RadioReference Premium account:</b> Systems page (or Tools below) &rarr; <b>Set up from RadioReference</b> - sign in, pick your state, county, system, site and talkgroups, and TrunkDeck fills in the control channels and talkgroup names (builds with a RadioReference app key only). " +
                 "Add the alternate control channel after a comma: the site uses one at a time and TrunkDeck switches over by itself if the active one goes quiet.<br>" +
                 "<h3 style='color:#00E5FF'>4. Add talkgroups (optional but recommended)</h3>" +
@@ -175,10 +176,11 @@ public class HelpPage extends JPanel {
                 "<b>Radio IDs\u2026</b> on the same page names the radios: import a DSD+ <i>.radios</i> file or a CSV (radio_id,alias), or right-click a radio ID on the Monitor page \u2192 <b>Name this radio\u2026</b>. "
                 + "Sites of the same radio system share one talkgroup list. TrunkDeck matches a WACN plus System ID (leading zeros do not matter) or the same RadioReference system. "
                 + "A name, favorite, mute, record, priority or stream assignment is kept once: change it on any of those sites and the others follow. "
-                + "A site with none of those IDs keeps its own list, so two sites with blank IDs stay separate. "
+                + "A site with none of those IDs keeps its own list, so two sites with blank IDs stay separate. A conventional system keeps its own list too. "
                 + "Adding another site of a system you already have starts from the list you already keep, and a RadioReference import merges names into it and leaves favorites, mutes, record, priority and streams as they are.<br>" +
                 "<h3 style='color:#00E5FF'>5. Press START MONITORING</h3>" +
                 "The scanner display shows the call you are hearing. While TrunkDeck is scanning, the control channel on that display has a signal meter (bars and a level in dB). " +
+                "On a conventional system the same meter shows the channel being listened to. " +
                 SignalMeter.WHAT + " It stays readable while the display is dark. If the receiver cannot report a level, the meter stays empty. " +
                 "The <b>Active calls</b> table lists every call being decoded right now (talkgroup, frequency, tuner, level). " +
                 "The display stays lit until the last bit of a call's audio has played.<br>" +

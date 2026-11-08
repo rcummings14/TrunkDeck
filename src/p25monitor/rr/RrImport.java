@@ -68,6 +68,124 @@ public final class RrImport {
         n.mode = mode(t);
     }
 
+    /**
+     * A RadioReference system is conventional P25 when its type or flavor says so (for example "Project 25 Conventional").
+     * A normal trunked P25 system is not, even if a site forgot to mark its control channel.
+     */
+    public static boolean conventionalSystem(String typeName, String flavorName) {
+        String t = ((typeName == null ? "" : typeName) + " " + (flavorName == null ? "" : flavorName)).toLowerCase(Locale.ROOT);
+        if (!t.contains("conventional")) return false;
+        return t.contains("25") || t.contains("apco") || t.contains("p25");
+    }
+
+    public static boolean conventionalSystem(TrsDetails d) { return d != null && conventionalSystem(d.typeName(), d.flavorName()); }
+
+    /** Every frequency on the chosen sites, as a conventional channel. The site's NAC is kept when the sites don't all share one. */
+    public static List<RadioSystem.Channel> conventionalChannels(List<Site> sites) {
+        List<RadioSystem.Channel> l = new ArrayList<>();
+        String shared = sharedNac(sites);
+        for (Site s : sites) {
+            String nac = shared.isEmpty() ? nacOf(s.nac()) : "";
+            for (SiteFreq f : s.freqs()) {
+                boolean seen = false;
+                for (RadioSystem.Channel c : l) if (Math.abs(c.mhz - f.mhz()) < 1e-6) seen = true;
+                if (!seen) l.add(new RadioSystem.Channel(f.mhz(), nac, ""));
+            }
+        }
+        return l;
+    }
+
+    /** The one NAC every chosen site lists, or "" when they differ or none is set. Then the system NAC box is enough. */
+    static String sharedNac(List<Site> sites) {
+        String nac = null;
+        for (Site s : sites) {
+            String n = nacOf(s.nac());
+            if (n.isEmpty()) continue;
+            if (nac == null) nac = n;
+            else if (!nac.equals(n)) return "";
+        }
+        return nac == null ? "" : nac;
+    }
+
+    static String nacOf(String raw) {
+        int n = RadioSystem.parseNac(raw);
+        return n < 0 ? "" : String.format(Locale.ROOT, "%03X", n);
+    }
+
+    /**
+     * P25 channels from a conventional frequency list. FM, DMR and anything else are left out.
+     * A tone that looks like a NAC (3 hex digits, optional $ or "NAC") is kept; a PL tone is not.
+     * A numeric talkgroup on the frequency becomes a talkgroup row when {@link #talkgroupsFrom} is used.
+     */
+    public static boolean p25Mode(String mode) {
+        if (mode == null) return false;
+        String m = mode.trim().toUpperCase(Locale.ROOT).replace(" ", "");
+        return m.equals("P25") || m.equals("APCO") || m.equals("APCOP25") || m.startsWith("P25");
+    }
+
+    public static String nacFromTone(String tone) {
+        if (tone == null) return "";
+        String t = tone.trim();
+        t = t.replaceFirst("(?i)^nac\\s*", "");
+        t = t.replaceFirst("(?i)^(\\$|0x)", "");
+        if (!t.matches("(?i)[0-9a-f]{3}")) return "";
+        return t.toUpperCase(Locale.ROOT);
+    }
+
+    public static List<RadioSystem.Channel> p25Channels(List<Freq> freqs) {
+        List<RadioSystem.Channel> l = new ArrayList<>();
+        if (freqs == null) return l;
+        for (Freq f : freqs) {
+            if (f == null || !p25Mode(f.mode()) || f.outMhz() < 25) continue;
+            String name = !f.alpha().isBlank() ? f.alpha().trim() : f.descr().trim();
+            boolean seen = false;
+            for (RadioSystem.Channel c : l) if (Math.abs(c.mhz - f.outMhz()) < 1e-6) seen = true;
+            if (!seen) l.add(new RadioSystem.Channel(f.outMhz(), nacFromTone(f.tone()), name));
+        }
+        return l;
+    }
+
+    /** Talkgroups mentioned on those P25 frequencies (the tg field), skipping ones that are not a number. */
+    public static List<Talkgroup> talkgroupsFrom(List<Freq> freqs) {
+        Map<Integer, Talkgroup> m = new LinkedHashMap<>();
+        if (freqs == null) return new ArrayList<>();
+        for (Freq f : freqs) {
+            if (f == null || !p25Mode(f.mode())) continue;
+            int dec;
+            try { dec = Integer.parseInt(f.tg().trim()); } catch (Exception e) { continue; }
+            if (dec <= 0 || m.containsKey(dec)) continue;
+            Talkgroup t = new Talkgroup();
+            t.decimal = dec;
+            t.alphaTag = f.alpha() == null ? "" : f.alpha().trim();
+            t.description = f.descr() == null ? "" : f.descr().trim();
+            t.mode = f.enc() >= 2 ? "DE" : f.enc() == 1 ? "De" : "D";
+            m.put(dec, t);
+        }
+        return new ArrayList<>(m.values());
+    }
+
+    /** A conventional system from P25 channels RadioReference listed under a county subcategory. */
+    public static RadioSystem fromConventional(String name, List<Freq> freqs) {
+        RadioSystem s = new RadioSystem();
+        s.kind = RadioSystem.CONVENTIONAL;
+        s.name = name == null || name.isBlank() ? "P25 conventional" : name.trim();
+        s.channels = p25Channels(freqs);
+        String shared = null;
+        boolean differ = false;
+        for (RadioSystem.Channel c : s.channels) {
+            if (c.nac == null || c.nac.isBlank()) continue;
+            if (shared == null) shared = c.nac;
+            else if (!shared.equalsIgnoreCase(c.nac)) differ = true;
+        }
+        if (shared != null && !differ) {
+            s.nac = shared;
+            for (RadioSystem.Channel c : s.channels) c.nac = "";
+        }
+        s.talkgroups.addAll(talkgroupsFrom(freqs));
+        s.notes = "From RadioReference: P25 conventional channels.";
+        return s;
+    }
+
     /** Control channels of the chosen sites: each site's primary first, then its alternates; all frequencies if a site marks none. */
     public static List<Double> controlChannels(List<Site> sites) {
         List<Double> l = new ArrayList<>();
@@ -104,7 +222,13 @@ public final class RrImport {
     }
 
     static void applySystem(RadioSystem s, Fetched f, List<Site> sites) {
-        s.controlChannelsMHz = controlChannels(sites);
+        boolean conv = conventionalSystem(f.details());
+        s.kind = conv ? RadioSystem.CONVENTIONAL : RadioSystem.TRUNKED;
+        if (conv) {
+            s.channels = conventionalChannels(sites);
+            s.controlChannelsMHz = new ArrayList<>();
+            s.nac = sharedNac(sites);
+        } else { s.controlChannelsMHz = controlChannels(sites); s.channels = new ArrayList<>(); }
         StringJoiner names = new StringJoiner(" + ");
         for (Site x : sites) names.add(x.descr().isBlank() ? "Site " + x.label() : x.descr());
         s.site = names.toString();
@@ -114,10 +238,10 @@ public final class RrImport {
             s.rfss = first.rfss() > 0 ? String.valueOf(first.rfss()) : "";
             s.siteNumber = first.siteNumber() > 0 ? String.format("%03d", first.siteNumber()) : "";
         }
-        if (!f.details().sysids().isEmpty()) {
+        if (!conv && !f.details().sysids().isEmpty()) {
             s.sysId = f.details().sysids().get(0).sysid().trim().toUpperCase(Locale.ROOT);
             s.wacn = f.details().sysids().get(0).wacn().trim().toUpperCase(Locale.ROOT);
-        }
+        } else if (conv) { s.sysId = ""; s.wacn = ""; }
         s.rrSid = f.details().sid();
         StringJoiner ids = new StringJoiner(",");
         for (Site x : sites) ids.add(String.valueOf(x.siteId()));
@@ -142,6 +266,8 @@ public final class RrImport {
         public final List<String> renamed = new ArrayList<>();
         public int detailsUpdated, unchanged, notOnRr, newSkipped;
         public List<Double> ccBefore = List.of(), ccAfter = List.of();
+        /** "Control channels" or "Channels", matching the system that was refreshed. */
+        public String freqLabel = "Control channels";
         public boolean ccChanged() { return !ccBefore.equals(ccAfter); }
         public String text() {
             StringBuilder b = new StringBuilder();
@@ -153,8 +279,8 @@ public final class RrImport {
             b.append("\n").append(detailsUpdated).append(" with updated description, tag, category or mode");
             b.append("\n").append(unchanged).append(" unchanged");
             if (notOnRr > 0) b.append("\n").append(notOnRr).append(" no longer listed on RadioReference - kept, with your settings");
-            if (ccChanged()) b.append("\nControl channels: ").append(join(ccBefore)).append(" \u2192 ").append(join(ccAfter));
-            else b.append("\nControl channels unchanged");
+            if (ccChanged()) b.append("\n").append(freqLabel).append(": ").append(join(ccBefore)).append(" \u2192 ").append(join(ccAfter));
+            else b.append("\n").append(freqLabel).append(" unchanged");
             b.append("\nYour favourites, mutes, recording, priorities and stream assignments were kept.");
             return b.toString();
         }
@@ -169,7 +295,9 @@ public final class RrImport {
      */
     public static Summary merge(RadioSystem s, Fetched f, List<Site> sites, Set<Integer> addNew, boolean updateNames) {
         Summary sum = new Summary();
-        sum.ccBefore = new ArrayList<>(s.controlChannelsMHz);
+        boolean conv = conventionalSystem(f.details()) || s.conventional();
+        sum.freqLabel = conv ? "Channels" : "Control channels";
+        sum.ccBefore = conv ? s.frequencies() : new ArrayList<>(s.controlChannelsMHz);
         Map<Integer, Talkgroup> local = new HashMap<>();
         for (Talkgroup t : s.talkgroups) local.putIfAbsent(t.decimal, t);
         Set<Integer> seen = new HashSet<>(), before = seen(s);
@@ -199,7 +327,7 @@ public final class RrImport {
             s.name = keepName;
             if (keepNotes != null && !keepNotes.isBlank() && !keepNotes.startsWith("From RadioReference")) s.notes = keepNotes + "\n\n" + s.notes;
         }
-        sum.ccAfter = new ArrayList<>(s.controlChannelsMHz);
+        sum.ccAfter = new ArrayList<>(conv ? s.frequencies() : s.controlChannelsMHz);
         return sum;
     }
 

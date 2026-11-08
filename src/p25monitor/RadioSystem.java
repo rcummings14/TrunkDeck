@@ -5,13 +5,37 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 
-/** A monitored P25 system/site: control channel(s) + settings + its talkgroup list. */
+/**
+ * A monitored P25 system: a trunked site (control channel, then voice channels) or a conventional system
+ * (fixed channels, no control channel). Each saved system has its own talkgroup list, except trunked sites of the
+ * same radio system, which share one ({@link TalkgroupLists}).
+ */
 public class RadioSystem {
+    public static final String TRUNKED = "trunked", CONVENTIONAL = "conventional";
+
+    /** One fixed channel on a conventional system. A blank NAC uses the system's NAC; a blank name is just the frequency. */
+    public static final class Channel {
+        public double mhz;
+        public String nac = "";
+        public String name = "";
+        public Channel() {}
+        public Channel(double mhz, String nac, String name) {
+            this.mhz = mhz;
+            this.nac = nac == null ? "" : nac.trim();
+            this.name = name == null ? "" : name.trim();
+        }
+        public Channel copy() { return new Channel(mhz, nac, name); }
+    }
+
     public String id;                 // folder name
     public String name = "My P25 System";
     public String site = "Site 1";
+    /** {@link #TRUNKED} (default, including every system saved before conventional support) or {@link #CONVENTIONAL}. */
+    public String kind = TRUNKED;
     public List<Double> controlChannelsMHz = new ArrayList<>();
-    public String nac = "";           // informational (hex)
+    /** Conventional channels. Empty on a trunked system. */
+    public List<Channel> channels = new ArrayList<>();
+    public String nac = "";           // informational on a trunked system; on conventional, applies to every channel without its own
     public String wacn = "";          // informational (hex)
     public String sysId = "";         // informational (hex)
     public String rfss = "";
@@ -39,12 +63,103 @@ public class RadioSystem {
 
     @Override public String toString() { return name; }
 
+    public boolean conventional() { return CONVENTIONAL.equalsIgnoreCase(kind); }
+
     public String aliasListName() { return name.replaceAll("[\"<>&]", "").trim(); }
 
+    /** Control-channel frequencies, as saved. A conventional system's channels are separate. */
     public String freqText() {
         StringJoiner j = new StringJoiner(", ");
         for (double d : controlChannelsMHz) j.add(fmt(d));
         return j.toString();
+    }
+
+    /** Frequencies shown in lists: control channels, or the conventional channels. */
+    public String displayFreqs() {
+        if (!conventional()) return freqText();
+        StringJoiner j = new StringJoiner(", ");
+        for (Channel c : channels) j.add(fmt(c.mhz));
+        return j.toString();
+    }
+
+    /** Frequencies the engine tunes: control channels, or every conventional channel. */
+    public List<Double> frequencies() {
+        if (!conventional()) return controlChannelsMHz;
+        List<Double> l = new ArrayList<>();
+        for (Channel c : channels) l.add(c.mhz);
+        return l;
+    }
+
+    /** What the user types on the Systems page for a conventional system: {@code 155.2500:2D5 Fire, 155.3700}. */
+    public String channelText() {
+        StringJoiner j = new StringJoiner(", ");
+        for (Channel c : channels) {
+            String t = fmt(c.mhz);
+            if (c.nac != null && !c.nac.isBlank()) t += ":" + c.nac.trim();
+            if (c.name != null && !c.name.isBlank()) t += " " + c.name.trim();
+            j.add(t);
+        }
+        return j.toString();
+    }
+
+    /** Saved form of {@link #channels}: {@code mhz|nac|name} separated by semicolons. */
+    public String channelsProperty() {
+        StringJoiner j = new StringJoiner(";");
+        for (Channel c : channels) j.add(fmt(c.mhz) + "|" + clean(c.nac) + "|" + clean(c.name));
+        return j.toString();
+    }
+
+    static String clean(String s) { return s == null ? "" : s.replace('|', ' ').replace(';', ' ').trim(); }
+
+    /**
+     * The line on the scanner display for one conventional channel: the frequency, and the name when it has one.
+     * {@code hz} 0 (nothing heard yet) uses the only channel, or leaves the caller to say how many there are.
+     */
+    public String channelCaption(long hz) {
+        Channel c = channelAt(hz);
+        if (c == null && hz <= 0 && channels.size() == 1) c = channels.get(0);
+        if (c == null) return hz > 0 ? fmt(hz / 1e6) : "";
+        String s = fmt(c.mhz);
+        if (c.name != null && !c.name.isBlank()) s += "  " + c.name.trim();
+        return s;
+    }
+
+    /** Top of the glass while this system is not running, or before a channel has been heard. */
+    public String idleCaption() {
+        if (!conventional()) return freqText().isBlank() ? "" : "CC " + freqText();
+        if (channels.isEmpty()) return "";
+        if (channels.size() == 1) return channelCaption(Math.round(channels.get(0).mhz * 1e6));
+        return channels.size() + " channels";
+    }
+
+    public Channel channelAt(long hz) {
+        if (hz <= 0) return null;
+        Channel best = null;
+        long bestD = Long.MAX_VALUE;
+        for (Channel c : channels) {
+            long d = Math.abs(Math.round(c.mhz * 1e6) - hz);
+            if (d < 2000 && d < bestD) { best = c; bestD = d; }
+        }
+        return best;
+    }
+
+    /** NAC for this frequency: the channel's own, else the system's, else -1 (accept any). */
+    public int nacFor(long hz) {
+        if (conventional()) {
+            Channel c = channelAt(hz);
+            if (c != null) {
+                int n = parseNac(c.nac);
+                if (n >= 0) return n;
+            }
+        }
+        return parseNac(nac);
+    }
+
+    /** 12-bit hex NAC, or -1 when blank or not hex. */
+    public static int parseNac(String s) {
+        if (s == null || s.isBlank()) return -1;
+        try { return Integer.parseInt(s.trim().replaceFirst("(?i)^(\\$|0x)", ""), 16) & 0xfff; }
+        catch (Exception e) { return -1; }
     }
 
     public static String fmt(double mhz) {
@@ -72,6 +187,59 @@ public class RadioSystem {
         return out;
     }
 
+    /**
+     * Conventional channels from the Systems page. Commas, semicolons or newlines separate channels.
+     * A channel is a frequency, optionally {@code :NAC} and an optional name: {@code 155.2500:2D5 Fire Dispatch}.
+     * Several plain frequencies may also be separated by spaces: {@code 155.2500 155.3700}.
+     */
+    public static List<Channel> parseChannelText(String text) {
+        List<Channel> out = new ArrayList<>();
+        if (text == null || text.isBlank()) return out;
+        for (String piece : text.split("[,;\\n\\r]+")) {
+            piece = piece.trim();
+            if (piece.isEmpty()) continue;
+            String[] tokens = piece.split("\\s+");
+            boolean allFreq = tokens.length > 1;
+            if (allFreq) for (String t : tokens) if (!t.matches("(?i)[0-9]+(?:\\.[0-9]+)?(?::(?:\\$|0x)?[0-9a-f]{1,3})?")) { allFreq = false; break; }
+            if (allFreq) { for (String t : tokens) out.add(oneChannel(t, "")); continue; }
+            String name = tokens.length > 1 ? piece.substring(tokens[0].length()).trim() : "";
+            out.add(oneChannel(tokens[0], name));
+        }
+        return out;
+    }
+
+    /** {@code freq} or {@code freq:nac}, plus an optional channel name. */
+    static Channel oneChannel(String freqPart, String name) {
+        String nac = "";
+        int colon = freqPart.indexOf(':');
+        String freq = freqPart;
+        if (colon >= 0) {
+            freq = freqPart.substring(0, colon);
+            nac = freqPart.substring(colon + 1).trim();
+            if (parseNac(nac) < 0) throw new NumberFormatException(nac + " is not a NAC (use hex, like 2D5)");
+            nac = nac.replaceFirst("(?i)^(\\$|0x)", "").toUpperCase(Locale.ROOT);
+        }
+        double mhz = parseFreqs(freq).get(0);
+        return new Channel(mhz, nac, name);
+    }
+
+    public static List<Channel> parseChannelsProperty(String text) {
+        List<Channel> out = new ArrayList<>();
+        if (text == null || text.isBlank()) return out;
+        for (String piece : text.split(";")) {
+            piece = piece.trim();
+            if (piece.isEmpty()) continue;
+            String[] p = piece.split("\\|", -1);
+            try {
+                double mhz = parseFreqs(p[0]).get(0);
+                String nac = p.length > 1 ? p[1].trim() : "";
+                String name = p.length > 2 ? p[2].trim() : "";
+                out.add(new Channel(mhz, nac, name));
+            } catch (RuntimeException ignored) {}
+        }
+        return out;
+    }
+
     public Talkgroup find(int tg) {
         for (Talkgroup t : talkgroups) if (t.decimal == tg) return t;
         return null;
@@ -83,7 +251,9 @@ public class RadioSystem {
         Properties p = new Properties();
         p.setProperty("name", name);
         p.setProperty("site", site);
+        p.setProperty("kind", conventional() ? CONVENTIONAL : TRUNKED);
         p.setProperty("controlChannels", freqText());
+        if (conventional()) p.setProperty("channels", channelsProperty());
         p.setProperty("nac", nac);
         p.setProperty("wacn", wacn);
         p.setProperty("sysId", sysId);
@@ -115,7 +285,10 @@ public class RadioSystem {
         s.id = dir.getFileName().toString();
         s.name = p.getProperty("name", s.name);
         s.site = p.getProperty("site", s.site);
+        s.kind = CONVENTIONAL.equalsIgnoreCase(p.getProperty("kind", TRUNKED)) ? CONVENTIONAL : TRUNKED;
         try { s.controlChannelsMHz = parseFreqs(p.getProperty("controlChannels", "")); } catch (Exception ignored) {}
+        s.channels = parseChannelsProperty(p.getProperty("channels", ""));
+        if (s.conventional() && s.channels.isEmpty()) for (double d : s.controlChannelsMHz) s.channels.add(new Channel(d, "", ""));
         s.nac = p.getProperty("nac", "");
         s.wacn = p.getProperty("wacn", "");
         s.sysId = p.getProperty("sysId", "");

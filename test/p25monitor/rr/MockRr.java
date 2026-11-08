@@ -17,7 +17,7 @@ public final class MockRr implements AutoCloseable {
     public static final String KEY = "TEST-APP-KEY-0000";
     public static final String USER = "demo-user", PASS = "demo-pass&<\"'";   // XML characters on purpose
     public static final String LAPSED = "lapsed-user";
-    public static final int DEMO_SID = 9001, SMALL_SID = 9002, EDACS_SID = 9003;
+    public static final int DEMO_SID = 9001, SMALL_SID = 9002, EDACS_SID = 9003, CONV_SID = 9005;
 
     public record Req(String op, String soapAction, Map<String, String> params, Map<String, String> auth) {}
     public final List<Req> requests = Collections.synchronizedList(new ArrayList<>());
@@ -56,6 +56,8 @@ public final class MockRr implements AutoCloseable {
             new Object[]{70003, 3, "Demo Simulcast", 1, "3C7", "Demo County", 9101, "LSM", new String[]{"855.0125:", "855.4875:"}})));
         sites.put(SMALL_SID, new ArrayList<>(List.<Object[]>of(
             new Object[]{70101, 1, "Sample Hill", 2, "1A4", "Sample County", 9102, "C4FM", new String[]{"772.0063:d", "772.3063:a", "773.0563:"}})));
+        sites.put(CONV_SID, new ArrayList<>(List.<Object[]>of(
+            new Object[]{70501, 1, "Town Fire", 0, "2D5", "Demo County", 9101, "C4FM", new String[]{"154.2500:", "154.3700:"}})));
     }
 
     public String endpoint() { return "http://127.0.0.1:" + server.getAddress().getPort() + "/soap2/index.php"; }
@@ -96,7 +98,7 @@ public final class MockRr implements AutoCloseable {
 
     String answer(String op, Map<String, String> p, Map<String, String> auth) {
         int id = 0;
-        for (String k : List.of("sid", "stid", "ctid", "coid", "zipcode", "id")) if (p.containsKey(k)) try { id = Integer.parseInt(p.get(k).trim()); } catch (Exception ignored) {}
+        for (String k : List.of("sid", "stid", "ctid", "coid", "zipcode", "scid", "id")) if (p.containsKey(k)) try { id = Integer.parseInt(p.get(k).trim()); } catch (Exception ignored) {}
         switch (op) {
             case "getUserData": return "<return xsi:type=\"ns1:UserInfo\">" + v("username", "string", auth.get("username"))
                     + v("subExpireDate", "string", LAPSED.equals(auth.get("username")) ? "2024-01-01" : premiumExpires) + "</return>";
@@ -116,18 +118,27 @@ public final class MockRr implements AutoCloseable {
                         v("ctid", "int", 9102) + v("countyName", "string", "Sample") + v("countyHeader", "string", "Sample County")) : List.of()) + "</return>";
             case "getCountyInfo": return "<return xsi:type=\"ns1:CountyInfo\">" + v("ctid", "int", id) + v("countyName", "string", id == 9101 ? "Demo" : "Sample")
                     + v("countyHeader", "string", id == 9101 ? "Demo County" : "Sample County") + v("stid", "int", 99) + v("fips", "string", "99999")
-                    + arrNamed("cats", "Cats", "cat", List.of())
+                    + arrNamed("cats", "Cats", "cat", id == 9101 ? List.of(
+                        v("cid", "int", 1) + v("cName", "string", "Fire") + arrNamed("subcats", "SubCats", "subcat", List.of(
+                            v("scid", "int", 8801) + v("scName", "string", "Dispatch")))) : List.of())
                     + arrNamed("trsList", "TrsList", "TrsListDef", id == 9101 ? List.of(trs(DEMO_SID, "Demo County P25", 8, "Demo City"), trs(EDACS_SID, "Demo City EDACS (fictional)", 2, "Demo City"))
                         : List.of(trs(SMALL_SID, "Sample County P25", 8, "Sample"), trs(DEMO_SID, "Demo County P25", 8, "Demo City")))
                     + arrNamed("agencyList", "Agencies", "Agency", List.of()) + "</return>";
             case "getZipcodeInfo": return id == 99999 ? "<return xsi:type=\"ns1:ZipInfo\">" + v("zipCode", "int", 99999) + v("lat", "string", "0") + v("lon", "string", "0")
                     + v("city", "string", "Demo City") + v("stid", "int", 99) + v("ctid", "int", 9101) + "</return>" : null;
             case "getTrsBySysid": return "3C7".equalsIgnoreCase(p.get("sysid")) ? arr("TrsList", "TrsListDef", List.of(trs(DEMO_SID, "Demo County P25", 8, "Demo City"))) : arr("TrsList", "TrsListDef", List.of());
-            case "getTrsType": return arr("TrsType", "trsTypeDef", List.of(v("sType", "int", id) + v("sTypeDescr", "string", id == 8 ? "Project 25 Phase II" : id == 2 ? "EDACS Standard" : "Other")));
+            case "getTrsType": return arr("TrsType", "trsTypeDef", List.of(v("sType", "int", id) + v("sTypeDescr", "string", id == 9 ? "Project 25 Conventional" : id == 8 ? "Project 25 Phase II" : id == 2 ? "EDACS Standard" : "Other")));
+            case "getTrsFlavor": return arr("TrsFlavor", "trsFlavorDef", List.of(v("sType", "int", id) + v("sFlavor", "int", id == 9 ? 2 : 1) + v("sFlavorDescr", "string", id == 9 ? "Conventional" : "Phase II")));
+            case "getSubcatFreqs": return id != 8801 ? arr("Freqs", "freq", List.of()) : arr("Freqs", "freq", List.of(
+                    v("fid", "int", 1) + v("out", "decimal", "154.2500") + v("alpha", "string", "FIRE DISP") + v("descr", "string", "Fire dispatch") + v("tone", "string", "$2D5") + v("tg", "string", "101") + v("mode", "string", "P25") + v("enc", "int", 0),
+                    v("fid", "int", 2) + v("out", "decimal", "154.3700") + v("alpha", "string", "FIRE TAC") + v("descr", "string", "Fire tac") + v("tone", "string", "NAC 2D5") + v("tg", "string", "102") + v("mode", "string", "P25") + v("enc", "int", 0),
+                    v("fid", "int", 3) + v("out", "decimal", "154.0100") + v("alpha", "string", "FIRE OPS") + v("descr", "string", "Analog") + v("tone", "string", "156.7") + v("tg", "string", "") + v("mode", "string", "FM") + v("enc", "int", 0),
+                    v("fid", "int", 4) + v("out", "decimal", "154.4300") + v("alpha", "string", "FIRE ENC") + v("descr", "string", "Encrypted") + v("tone", "string", "2D5") + v("tg", "string", "109") + v("mode", "string", "P25") + v("enc", "int", 2)));
             case "getTrsDetails": {
                 if (!sites.containsKey(id) && id != EDACS_SID) return null;
-                String name = id == DEMO_SID ? "Demo County P25" : id == SMALL_SID ? "Sample County P25" : "Demo City EDACS (fictional)";
-                return "<return xsi:type=\"ns1:Trs\">" + v("sName", "string", name) + v("sType", "int", id == EDACS_SID ? 2 : 8) + v("sFlavor", "int", 1) + v("sVoice", "int", 1)
+                String name = id == DEMO_SID ? "Demo County P25" : id == SMALL_SID ? "Sample County P25" : id == CONV_SID ? "Demo Town Fire (conventional)" : "Demo City EDACS (fictional)";
+                int type = id == EDACS_SID ? 2 : id == CONV_SID ? 9 : 8;
+                return "<return xsi:type=\"ns1:Trs\">" + v("sName", "string", name) + v("sType", "int", type) + v("sFlavor", "int", id == CONV_SID ? 2 : 1) + v("sVoice", "int", 1)
                         + v("sCity", "string", "Demo City") + arrNamed("sCounty", "ctids", "ctid", List.of(v("ctid", "int", 9101))) + arrNamed("sState", "stids", "stid", List.of(v("stid", "int", 99)))
                         + v("sCountry", "string", "1") + arrNamed("sysid", "TrsSysid", "trsSysidDef", id == EDACS_SID ? List.of() : List.of(
                             v("sysid", "string", id == DEMO_SID ? "3c7" : "1a4") + v("ct", "string", "") + v("wacn", "string", "a1b2c") + v("model", "string", "")))

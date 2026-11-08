@@ -64,6 +64,9 @@ public final class TalkgroupShareTests {
         check(!TalkgroupLists.sameSystem(rrZero, rrZero2) && !TalkgroupLists.sameSystem(rr, site("x", "y", "", "", 0)), "RadioReference id 0 is not an id");
         check(TalkgroupLists.sameSystem(a, rrZero2), "a site with only the P25 id still matches the site that has that WACN and System ID");
         check(!TalkgroupLists.sameSystem(a, a), "a site is not paired with itself");
+        RadioSystem conv = site("Town Fire", "Repeater", "B1001", "2A1", 424242);
+        conv.kind = RadioSystem.CONVENTIONAL;
+        check(!TalkgroupLists.sameSystem(a, conv) && !TalkgroupLists.sameSystem(rr, conv), "a conventional system keeps its own talkgroup list");
     }
 
     static void mergeRules() {
