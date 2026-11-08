@@ -436,6 +436,17 @@ public class MonitorPage extends JPanel {
         return t;
     }
 
+    /** The home-network page changed the speaker mode: show it here without applying it a second time. */
+    void showSpeakerMode() {
+        int i = switch (f.nativeEngine.speakerMode()) {
+            case MIX -> 1; case HOLD -> 2; case QUEUE -> 3; default -> 0;
+        };
+        var ls = speakerBox.getActionListeners();
+        for (var l : ls) speakerBox.removeActionListener(l);
+        if (speakerBox.getSelectedIndex() != i) speakerBox.setSelectedIndex(i);
+        for (var l : ls) speakerBox.addActionListener(l);
+    }
+
     void applySpeaker() {
         int i = speakerBox.getSelectedIndex();
         var m = i == 3 ? p25monitor.nativeengine.NativeEngine.SpeakerMode.QUEUE : i == 1 ? p25monitor.nativeengine.NativeEngine.SpeakerMode.MIX : i == 2 ? p25monitor.nativeengine.NativeEngine.SpeakerMode.HOLD : p25monitor.nativeengine.NativeEngine.SpeakerMode.PRIORITY;

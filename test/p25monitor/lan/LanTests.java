@@ -69,16 +69,30 @@ public final class LanTests {
             if (id != 7) return false;
             mutes++; muted = m; return true;
         }
+        public boolean setFavorite(int id, boolean favorite) { return id == 7; }
+        public boolean setSpeaker(String mode, int talkgroup) { return !"HOLD".equals(mode) || talkgroup > 0; }
+        public void setVolume(int percent) {}
+        public void setSpeakerMuted(boolean muted) {}
         public LanServer.Snapshot now() {
             LanServer.Snapshot s = new LanServer.Snapshot();
             s.monitoring = running;
             s.activity = running ? "scanning" : "stopped";
-            s.talkgroup = running ? "" : "";
+            s.system = "Example System";
+            s.site = "Site 1";
+            s.control = "CC 450.0000";
+            s.channels.add("450.0000");
+            s.signalBars = running ? 4 : 0;
+            s.signalText = running ? "-42 dB" : "\u2014";
+            if (running) s.signalDb = -42;
+            LanServer.Active a = new LanServer.Active();
+            a.tg = 7; a.name = "North Dispatch"; a.radio = "Engine 4"; a.state = "VOICE"; a.onSpeaker = running;
+            s.active.add(a);
+            s.activeTitle = "ACTIVE CALLS  ·  0 DECODING  ·  SPEAKER: PRIORITY";
             LanServer.Group g = new LanServer.Group();
             g.id = 7; g.name = "Say \"hi\" <North>"; g.favorite = true; g.muted = muted;
             s.groups.add(g);
             LanServer.Recent r = new LanServer.Recent();
-            r.time = "12:00:00"; r.name = "North Dispatch"; r.radio = "Engine 4";
+            r.time = "12:00:00"; r.id = 7; r.name = "North Dispatch"; r.radio = "Engine 4";
             s.recent.add(r);
             return s;
         }
@@ -213,6 +227,8 @@ public final class LanTests {
     static void page(int port) throws Exception {
         Resp r = call(port, "GET", "/", null, null);
         check(r.code == 200 && r.body.contains("Listen") && r.body.contains(">Start<") && r.body.contains(">Stop<"), "page has Listen, Start and Stop");
+        check(r.body.contains("SCANNING") && r.body.contains("ACTIVE CALLS") && r.body.contains("UNIT / RADIO") && r.body.contains("Hold one talkgroup"),
+                "page is laid out like the Monitor");
         check(r.body.toLowerCase().contains("home network"), "page says it is for the home network");
         check(!r.body.contains("home-pin") && !r.body.toLowerCase().contains("password123"), "page does not contain a password");
         check(!r.body.contains("RadioReference"), "page does not mention RadioReference");
@@ -230,6 +246,9 @@ public final class LanTests {
         check(again.code == 200 && again.body.contains("Say \\\"hi\\\"") && again.body.contains("North Dispatch") && again.body.contains("Engine 4"),
                 "signed-in state has the talkgroup and a recent call");
         check(again.body.contains("\"favorite\":true"), "favorite is marked");
+        check(again.body.contains("\"system\":\"Example System\"") && again.body.contains("\"control\":\"CC 450.0000\"")
+                && again.body.contains("\"signalBars\"") && again.body.contains("North Dispatch") && again.body.contains("\"active\":["),
+                "state carries the monitor: system, control channel, signal, active call");
         Resp start = call(port, "POST", "/api/start", "{}", c);
         check(start.code == 200 && ui.starts == 1 && ui.running, "Start calls start");
         Resp startAgain = call(port, "POST", "/api/start", "{}", c);
@@ -333,14 +352,47 @@ public final class LanTests {
             engine.updateTalkgroups(system.talkgroups);
             return true;
         }
+        public boolean setFavorite(int id, boolean favorite) {
+            Talkgroup t = system.find(id);
+            if (t == null) return false;
+            t.favorite = favorite;
+            engine.updateTalkgroups(system.talkgroups);
+            return true;
+        }
+        public boolean setSpeaker(String mode, int talkgroup) {
+            NativeEngine.SpeakerMode m;
+            try { m = NativeEngine.SpeakerMode.valueOf(mode); } catch (Exception ex) { return false; }
+            if (m == NativeEngine.SpeakerMode.HOLD && talkgroup <= 0) return false;
+            engine.setSpeakerMode(m, talkgroup);
+            return true;
+        }
+        public void setVolume(int percent) { engine.setSpeakerVolume(percent); }
+        public void setSpeakerMuted(boolean muted) { engine.setSpeakerMuted(muted); }
         public LanServer.Snapshot now() {
             LanServer.Snapshot s = new LanServer.Snapshot();
             s.monitoring = engine.isRunning();
             s.activity = s.monitoring ? "scanning" : "stopped";
+            s.system = system.name;
+            s.site = system.site;
+            s.control = system.freqText().isBlank() ? "" : "CC " + system.freqText();
+            double db = engine.controlSignalDb();
+            s.signalDb = db;
+            s.signalBars = p25monitor.SignalMeter.bars(db);
+            s.signalText = p25monitor.SignalMeter.text(db);
+            s.speaker = engine.speakerMode().name();
+            s.holdTg = engine.holdTg();
+            s.volume = engine.speakerVolume();
+            s.speakerMuted = engine.speakerMuted();
             for (Talkgroup t : system.talkgroups) {
                 LanServer.Group g = new LanServer.Group();
                 g.id = t.decimal; g.name = t.displayName(); g.favorite = t.favorite; g.muted = t.muted;
                 s.groups.add(g);
+            }
+            if (engine.isRunning()) for (p25monitor.nativeengine.CallView c : engine.activeCalls()) {
+                LanServer.Active a = new LanServer.Active();
+                a.tg = c.tg; a.name = system.find(c.tg) == null ? "" : system.find(c.tg).displayName();
+                a.onSpeaker = c.onSpeaker; a.state = c.state == null ? "" : c.state;
+                s.active.add(a);
             }
             return s;
         }
@@ -381,8 +433,21 @@ public final class LanTests {
         check(mute.code == 200 && copy != null && copy.muted && engine.engineTalkgroup(202) != null && !engine.engineTalkgroup(202).muted,
                 "Mute uses the real talkgroup mute");
         check(mute.body.contains("North Dispatch") && mute.body.contains("\"favorite\":true"), "the list shows the name and the favorite");
+        check(mute.body.contains("\"system\":\"Example System\"") && mute.body.contains("\"control\":\"CC ") && mute.body.contains("\"signal\""),
+                "the live state includes the system, control channel and signal");
         Resp unknown = call(port, "POST", "/api/mute", "{\"id\":404,\"muted\":true}", cookie);
         check(unknown.code == 404, "mute of a talkgroup that is not in the list is refused");
+
+        int starts = engine.starts;
+        Resp holdNo = call(port, "POST", "/api/speaker", "{\"mode\":\"HOLD\"}", cookie);
+        check(holdNo.code == 400 && engine.speakerMode() != NativeEngine.SpeakerMode.HOLD, "Hold without a talkgroup is refused");
+        Resp hold = call(port, "POST", "/api/speaker", "{\"mode\":\"HOLD\",\"id\":101}", cookie);
+        check(hold.code == 200 && engine.speakerMode() == NativeEngine.SpeakerMode.HOLD && engine.holdTg() == 101, "Hold uses the real speaker hold");
+        Resp vol = call(port, "POST", "/api/volume", "{\"volume\":40}", cookie);
+        check(vol.code == 200 && engine.speakerVolume() == 40, "volume uses the real speaker volume");
+        Resp sm = call(port, "POST", "/api/speakermute", "{\"muted\":true}", cookie);
+        check(sm.code == 200 && engine.speakerMuted(), "speaker mute uses the real speaker mute");
+        check(engine.starts == starts, "speaker changes do not restart monitoring");
 
         Resp stop = call(port, "POST", "/api/stop", "{}", cookie);
         check(stop.code == 200 && !engine.isRunning(), "Stop runs the real engine stop");

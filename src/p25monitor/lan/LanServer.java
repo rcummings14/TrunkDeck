@@ -9,6 +9,7 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,28 +39,65 @@ public final class LanServer {
         void stop();
         /** @return false when that talkgroup is not in the current list */
         boolean setMuted(int id, boolean muted);
+        /** @return false when Hold is chosen with no talkgroup, or the mode is not one the speaker has */
+        boolean setSpeaker(String mode, int talkgroup);
+        void setVolume(int percent);
+        void setSpeakerMuted(boolean muted);
+        /** @return false when that talkgroup is not in the current list */
+        boolean setFavorite(int id, boolean favorite);
         Snapshot now();
     }
 
     public static final class Snapshot {
         public boolean monitoring;
-        /** {@code stopped}, {@code scanning}, or {@code call}. */
+        /** {@code stopped}, {@code scanning}, or {@code call}. {@code hang} is the tail of a call (big text still scans). */
         public String activity = "stopped";
-        public String talkgroup = "", radio = "";
+        public boolean hang;
+        public String system = "", site = "", control = "";
+        /** Control-channel frequencies the idle glass steps through, already formatted. */
+        public final List<String> channels = new ArrayList<>();
+        /** Control-channel level in dB of full scale. NaN = the receiver is not reporting one. */
+        public double signalDb = Double.NaN;
+        public int signalBars;
+        public String signalText = "\u2014";
+        public String engine = "";
+        public String talkgroup = "", category = "", tag = "", radio = "", frequency = "", event = "";
         public int talkgroupId = -1, radioId = -1;
+        public long callSeconds = -1, lastAgo = -1;
         public boolean favorite, muted, encrypted, emergency;
+        /** PRIORITY, MIX, HOLD, or QUEUE. Hold is the speaker only. */
+        public String speaker = "PRIORITY";
+        public int holdTg = -1, volume = 80;
+        public boolean speakerMuted;
+        public String activeTitle = "";
+        public Colors colors;
+        public final List<Active> active = new ArrayList<>();
         public final List<Group> groups = new ArrayList<>();
         public final List<Recent> recent = new ArrayList<>();
     }
 
+    /** Colours of the glass, so the page matches the display preset in use. Empty uses the cyan default. */
+    public static final class Colors {
+        public String talkgroup = "", tgid = "", radio = "", freq = "", system = "", scan = "", dark = "", lit = "", idle = "", label = "";
+    }
+
+    public static final class Active {
+        public int tg, radioId = -1;
+        public String name = "", radio = "", state = "", freq = "", marker = "";
+        public boolean onSpeaker, audible, encrypted, emergency, recording, favorite, muted;
+        public long durationMs;
+    }
+
     public static final class Group {
-        public int id;
-        public String name = "";
+        public int id, calls;
+        public long lastHeard;
+        public String name = "", category = "";
         public boolean favorite, muted;
     }
 
     public static final class Recent {
         public String time = "", name = "", radio = "";
+        public int id;
     }
 
     private final Actions actions;
@@ -160,6 +198,10 @@ public final class LanServer {
                 case "POST /api/start" -> { actions.start(); sendJson(ex, 200, stateJson()); }
                 case "POST /api/stop" -> { actions.stop(); sendJson(ex, 200, stateJson()); }
                 case "POST /api/mute" -> mute(ex);
+                case "POST /api/favorite" -> favorite(ex);
+                case "POST /api/speaker" -> speaker(ex);
+                case "POST /api/volume" -> volume(ex);
+                case "POST /api/speakermute" -> speakerMute(ex);
                 case "GET /api/audio" -> audio(ex);
                 default -> send(ex, 404, "text/plain; charset=utf-8", "Not found\n");
             }
@@ -191,6 +233,38 @@ public final class LanServer {
         Boolean muted = LanJson.boolField(body, "muted");
         if (id == null || muted == null) { sendJson(ex, 400, "{\"ok\":false,\"error\":\"Choose a talkgroup.\"}"); return; }
         if (!actions.setMuted(id, muted)) { sendJson(ex, 404, "{\"ok\":false,\"error\":\"That talkgroup is not in the list.\"}"); return; }
+        sendJson(ex, 200, stateJson());
+    }
+
+    private void favorite(HttpExchange ex) throws IOException {
+        String body = readBody(ex);
+        Integer id = LanJson.intField(body, "id");
+        Boolean fav = LanJson.boolField(body, "favorite");
+        if (id == null || fav == null) { sendJson(ex, 400, "{\"ok\":false,\"error\":\"Choose a talkgroup.\"}"); return; }
+        if (!actions.setFavorite(id, fav)) { sendJson(ex, 404, "{\"ok\":false,\"error\":\"That talkgroup is not in the list.\"}"); return; }
+        sendJson(ex, 200, stateJson());
+    }
+
+    private void speaker(HttpExchange ex) throws IOException {
+        String body = readBody(ex);
+        String mode = LanJson.stringField(body, "mode");
+        Integer id = LanJson.intField(body, "id");
+        if (mode == null) { sendJson(ex, 400, "{\"ok\":false,\"error\":\"Choose what the speaker plays.\"}"); return; }
+        if (!actions.setSpeaker(mode, id == null ? -1 : id)) { sendJson(ex, 400, "{\"ok\":false,\"error\":\"Select a call or talkgroup first.\"}"); return; }
+        sendJson(ex, 200, stateJson());
+    }
+
+    private void volume(HttpExchange ex) throws IOException {
+        Integer v = LanJson.intField(readBody(ex), "volume");
+        if (v == null) { sendJson(ex, 400, "{\"ok\":false,\"error\":\"Choose a volume.\"}"); return; }
+        actions.setVolume(v);
+        sendJson(ex, 200, stateJson());
+    }
+
+    private void speakerMute(HttpExchange ex) throws IOException {
+        Boolean m = LanJson.boolField(readBody(ex), "muted");
+        if (m == null) { sendJson(ex, 400, "{\"ok\":false,\"error\":\"Choose mute or unmute.\"}"); return; }
+        actions.setSpeakerMuted(m);
         sendJson(ex, 200, stateJson());
     }
 
@@ -236,31 +310,85 @@ public final class LanServer {
     private String stateJson() {
         Snapshot s = actions.now();
         if (s == null) s = new Snapshot();
-        StringBuilder b = new StringBuilder(256);
+        StringBuilder b = new StringBuilder(512);
         b.append("{\"ok\":true");
         b.append(",\"monitoring\":").append(s.monitoring);
         b.append(",\"activity\":").append(LanJson.quote(s.activity));
+        b.append(",\"hang\":").append(s.hang);
+        b.append(",\"system\":").append(LanJson.quote(s.system));
+        b.append(",\"site\":").append(LanJson.quote(s.site));
+        b.append(",\"control\":").append(LanJson.quote(s.control));
+        b.append(",\"channels\":[");
+        for (int i = 0; i < s.channels.size(); i++) { if (i > 0) b.append(','); b.append(LanJson.quote(s.channels.get(i))); }
+        b.append(']');
+        b.append(",\"signal\":");
+        if (Double.isNaN(s.signalDb) || Double.isInfinite(s.signalDb)) b.append("null");
+        else b.append(String.format(Locale.ROOT, "%.1f", s.signalDb));
+        b.append(",\"signalBars\":").append(s.signalBars);
+        b.append(",\"signalText\":").append(LanJson.quote(s.signalText));
+        b.append(",\"engine\":").append(LanJson.quote(s.engine));
         b.append(",\"talkgroup\":").append(LanJson.quote(s.talkgroup));
         b.append(",\"talkgroupId\":").append(s.talkgroupId);
+        b.append(",\"category\":").append(LanJson.quote(s.category));
+        b.append(",\"tag\":").append(LanJson.quote(s.tag));
         b.append(",\"radio\":").append(LanJson.quote(s.radio));
         b.append(",\"radioId\":").append(s.radioId);
+        b.append(",\"frequency\":").append(LanJson.quote(s.frequency));
+        b.append(",\"event\":").append(LanJson.quote(s.event));
+        b.append(",\"callSeconds\":").append(s.callSeconds);
+        b.append(",\"lastAgo\":").append(s.lastAgo);
         b.append(",\"favorite\":").append(s.favorite);
         b.append(",\"muted\":").append(s.muted);
         b.append(",\"encrypted\":").append(s.encrypted);
         b.append(",\"emergency\":").append(s.emergency);
-        b.append(",\"talkgroups\":[");
+        b.append(",\"speaker\":").append(LanJson.quote(s.speaker));
+        b.append(",\"holdTg\":").append(s.holdTg);
+        b.append(",\"volume\":").append(s.volume);
+        b.append(",\"speakerMuted\":").append(s.speakerMuted);
+        b.append(",\"activeTitle\":").append(LanJson.quote(s.activeTitle));
+        b.append(",\"colors\":");
+        if (s.colors == null) b.append("null");
+        else {
+            Colors c = s.colors;
+            b.append("{\"talkgroup\":").append(LanJson.quote(c.talkgroup))
+                    .append(",\"tgid\":").append(LanJson.quote(c.tgid))
+                    .append(",\"radio\":").append(LanJson.quote(c.radio))
+                    .append(",\"freq\":").append(LanJson.quote(c.freq))
+                    .append(",\"system\":").append(LanJson.quote(c.system))
+                    .append(",\"scan\":").append(LanJson.quote(c.scan))
+                    .append(",\"dark\":").append(LanJson.quote(c.dark))
+                    .append(",\"lit\":").append(LanJson.quote(c.lit))
+                    .append(",\"idle\":").append(LanJson.quote(c.idle))
+                    .append(",\"label\":").append(LanJson.quote(c.label)).append('}');
+        }
+        b.append(",\"active\":[");
+        for (int i = 0; i < s.active.size(); i++) {
+            Active a = s.active.get(i);
+            if (i > 0) b.append(',');
+            b.append("{\"tg\":").append(a.tg).append(",\"name\":").append(LanJson.quote(a.name))
+                    .append(",\"radio\":").append(LanJson.quote(a.radio)).append(",\"radioId\":").append(a.radioId)
+                    .append(",\"state\":").append(LanJson.quote(a.state)).append(",\"freq\":").append(LanJson.quote(a.freq))
+                    .append(",\"marker\":").append(LanJson.quote(a.marker))
+                    .append(",\"onSpeaker\":").append(a.onSpeaker).append(",\"audible\":").append(a.audible)
+                    .append(",\"encrypted\":").append(a.encrypted).append(",\"emergency\":").append(a.emergency)
+                    .append(",\"recording\":").append(a.recording).append(",\"favorite\":").append(a.favorite)
+                    .append(",\"muted\":").append(a.muted).append(",\"durationMs\":").append(a.durationMs).append('}');
+        }
+        b.append("],\"talkgroups\":[");
         for (int i = 0; i < s.groups.size(); i++) {
             Group g = s.groups.get(i);
             if (i > 0) b.append(',');
             b.append("{\"id\":").append(g.id).append(",\"name\":").append(LanJson.quote(g.name))
-                    .append(",\"favorite\":").append(g.favorite).append(",\"muted\":").append(g.muted).append('}');
+                    .append(",\"category\":").append(LanJson.quote(g.category))
+                    .append(",\"favorite\":").append(g.favorite).append(",\"muted\":").append(g.muted)
+                    .append(",\"calls\":").append(g.calls).append(",\"lastHeard\":").append(g.lastHeard).append('}');
         }
         b.append("],\"recent\":[");
         for (int i = 0; i < s.recent.size(); i++) {
             Recent r = s.recent.get(i);
             if (i > 0) b.append(',');
-            b.append("{\"time\":").append(LanJson.quote(r.time)).append(",\"name\":").append(LanJson.quote(r.name))
-                    .append(",\"radio\":").append(LanJson.quote(r.radio)).append('}');
+            b.append("{\"time\":").append(LanJson.quote(r.time)).append(",\"id\":").append(r.id)
+                    .append(",\"name\":").append(LanJson.quote(r.name)).append(",\"radio\":").append(LanJson.quote(r.radio)).append('}');
         }
         return b.append("]}").toString();
     }
