@@ -28,6 +28,9 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   can compare sites and antennas.
 * **Display only** mode: the window shrinks to just the scanner display (resizable, draggable, always-on-top option);
   double-click to get the full window back. Everything keeps running.
+* **Home network page:** from another computer on the same home network, a password-protected page that looks like the
+  Monitor (scanner display, signal meter, active calls, talkgroups). Listen, start and stop, mute, and hold. Turn it
+  on from Setup & Help → Home network. For the home network only.
 * **System tray:** close or minimize to the tray (or to Display only) - your choice.
 * **Streaming / uploads** (optional): **Broadcastify Calls**, **Broadcastify Feeds** / any Icecast server (MP3),
   **OpenMHz**, **Rdio Scanner**. Live talkgroup assignment, status and retry on the Streams page.

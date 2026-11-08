@@ -25,6 +25,8 @@ public class MainFrame extends JFrame {
     final JLabel statusPill = new JLabel();
     final JLabel footer = new JLabel(" ");
     MonitorPage monitor;
+    /** Home-network page (Monitor). Null only before the window is built. */
+    LanCard lanCard;
     TalkgroupPage talkgroups;
     SystemsPage systemsPage;
     StreamsPage streamsPage;
@@ -99,6 +101,7 @@ public class MainFrame extends JFrame {
         pages.setBackground(Theme.BG);
         pages.setBorder(new EmptyBorder(0, 0, 0, 12));
 
+        lanCard = new LanCard(this);
         monitor = new MonitorPage(this);
         talkgroups = new TalkgroupPage(this);
         systemsPage = new SystemsPage(this);
@@ -148,6 +151,7 @@ public class MainFrame extends JFrame {
         tick();
         tray.update();
         monitor.updateTrayControls();
+        lanCard.restore();
     }
 
     // ------------------------------------------------------------------ system tray (1.4.7)
@@ -607,6 +611,7 @@ public class MainFrame extends JFrame {
         boolean listed = t != null && s.find(t.decimal) != null;
         // only the call actually being heard drives the big display (other grants just go in the log)
         if ((e.isVoiceCall() || e.isEmergency()) && (!e.background || e.isEmergency())) display.onCall(e, listed ? t : null);
+        if (lanCard != null) lanCard.note(e, listed ? t : null);
         monitor.add(e, listed ? t : null, t);
         talkgroups.heard(t);
     }
@@ -622,6 +627,7 @@ public class MainFrame extends JFrame {
     void quit() {
         setTitle(App.NAME + " \u2014 stopping\u2026");
         saveTalkgroupsNow(true);
+        if (lanCard != null) lanCard.shutdown();
         nativeEngine.stop();
         AudioPlayer.stop();
         if (displayOnly != null) displayOnly.remember();

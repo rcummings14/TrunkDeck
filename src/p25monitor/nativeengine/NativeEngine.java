@@ -196,6 +196,9 @@ public final class NativeEngine {
     public volatile java.util.function.Consumer<long[]> retuneTap;
     /** Test hook: replaces the sound device. */
     public AudioOut.Sink audioSinkOverride;
+    /** Home-network page: speaker audio before this computer's volume and mute. Put back on any new {@link #audio}. */
+    volatile AudioOut.PcmTap speakerTap;
+    public void setSpeakerTap(AudioOut.PcmTap tap) { speakerTap = tap; audio.setPcmTap(tap); }
     // site info
     public volatile int nac = -1, sysId = -1, rfss = -1, site = -1;
     public volatile long wacn = -1, ccFreqHz;
@@ -253,6 +256,7 @@ public final class NativeEngine {
         speaker.setMode(sm, hold);
         speaker.speaker = null; speaker.last = null;
         if (audioSinkOverride != null) audio = new AudioOut(audioSinkOverride);
+        audio.setPcmTap(speakerTap);   // a new sound device would otherwise drop the home-network listen
         sys = s; mode = m; problem = null;
         callMap.clear(); recentlyEnded.clear(); adjacent.clear(); msgs.clear();
         nac = -1; sysId = -1; rfss = -1; site = -1; wacn = -1; msgTotal = 0; tsbkBad = 0; ccFreqHz = 0;

@@ -32,6 +32,13 @@ public final class AudioOut {
     public volatile int prebufferMs = 300, maxQueueMs = 1500;
     volatile float volume = 0.8f;
     volatile boolean muted;
+    /**
+     * Samples about to be queued for this computer's speaker, before volume and mute. The home-network
+     * page uses it so another computer hears the same call. Must not block, and must not keep the array.
+     */
+    public interface PcmTap { void pcm(float[] samples, int n); }
+    private volatile PcmTap pcmTap;
+    public void setPcmTap(PcmTap tap) { pcmTap = tap; }
     String error;
     Sink sink;
     final Sink testSink;
@@ -87,7 +94,14 @@ public final class AudioOut {
 
     /** Queues decoded audio of call id (any length; split into 20 ms frames). Never blocks. */
     public void play(long id, float[] s, int n) {
-        if (!run) return;
+        if (!run || s == null || n <= 0) return;
+        n = Math.min(n, s.length);
+        PcmTap tap = pcmTap;
+        if (tap != null) {
+            int m = Math.min(n, s.length);
+            float[] copy = java.util.Arrays.copyOf(s, m);
+            try { tap.pcm(copy, m); } catch (Throwable ignored) {}
+        }
         synchronized (q) {
             if (partialLen > 0 && partialId != id) { q.add(java.util.Arrays.copyOf(partial, FRAME)); qIds.add(partialId); partial = new float[FRAME]; partialLen = 0; }
             partialId = id;
