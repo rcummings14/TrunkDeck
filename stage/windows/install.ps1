@@ -5,7 +5,7 @@ $ProgressPreference = 'SilentlyContinue'   # makes downloads much faster in Wind
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
 
 $AppName       = 'TrunkDeck'
-$AppVersion    = '1.7.3'
+$AppVersion    = '1.7.4'
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Pkg  = Split-Path -Parent $Here
 $Dest = Join-Path $env:LOCALAPPDATA "Programs\$AppName"
