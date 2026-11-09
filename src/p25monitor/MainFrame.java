@@ -86,6 +86,11 @@ public class MainFrame extends JFrame {
         };
         display.litState = () -> System.currentTimeMillis() < demoUntil ? -1 : nativeEngine.isRunning() ? nativeEngine.displayState() : 0;
         display.controlSignal = () -> nativeEngine.isRunning() ? nativeEngine.controlSignalDb() : Double.NaN;
+        display.channelLine = () -> {
+            RadioSystem s = app.current;
+            if (s == null || !s.conventional() || !nativeEngine.isRunning()) return null;
+            return nativeEngine.conventionalCaption();
+        };
         setIconImages(List.of(Theme.logo(16), Theme.logo(24), Theme.logo(32), Theme.logo(48), Theme.logo(64), Theme.logo(128), Theme.logo(256)));
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         // 1.4.7: with a tray icon, X (and minimize, if chosen) hides the window to the tray; without one, as before
@@ -528,7 +533,7 @@ public class MainFrame extends JFrame {
     void startMonitoring() {
         RadioSystem s = app.current;
         if (s == null) { show("Systems"); toast("Add a system first."); return; }
-        if (s.controlChannelsMHz.isEmpty()) { show("Systems"); toast("Enter the control channel frequency for " + s.name + "."); return; }
+        if (s.frequencies().isEmpty()) { show("Systems"); toast(s.conventional() ? "Enter at least one channel frequency for " + s.name + "." : "Enter the control channel frequency for " + s.name + "."); return; }
         startNative(s);
     }
 

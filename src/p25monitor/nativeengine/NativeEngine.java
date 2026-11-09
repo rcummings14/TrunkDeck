@@ -146,6 +146,15 @@ public final class NativeEngine {
     RadioSystem sys;
     Mode mode;
     volatile boolean running, huntable;
+    /** This run is a conventional system: fixed channels, no control channel. */
+    volatile boolean conventional;
+    /** Channel decoders parked on a frequency (not a followed trunked call). */
+    final Set<ChannelDecoder> parkedDecoders = Collections.newSetFromMap(new IdentityHashMap<>());
+    /** When there are more channel groups than receivers, this tuner visits {@link #scanGroups} in turn. */
+    Tuner scanTuner;
+    List<List<Long>> scanGroups = List.of();
+    int scanIndex;
+    long lastScanAt;
     volatile String state = "STOPPED", problem;
     final ConcurrentLinkedDeque<String> log = new ConcurrentLinkedDeque<>();
     final ConcurrentLinkedDeque<Msg> msgs = new ConcurrentLinkedDeque<>();
@@ -248,6 +257,7 @@ public final class NativeEngine {
         undecodable.clear(); tdma.clear(); ambeMissingLogged.set(false); voiceOnCcLogged.clear(); retunes = 0; follows = 0; phase2Calls = 0; lastDiag = null; iqRecorded = 0;
         lsmPreferred = "lsm".equalsIgnoreCase(s.nativeModulation); ccDemodLogged = "";
         usage.clear(); missed.clear(); missedRecent.clear(); peakConcurrent = 0; tuners.clear(); huntCount = 0; fixedWideCenter = 0; widePlanned = false;
+        conventional = s.conventional(); parkedDecoders.clear(); scanTuner = null; scanGroups = List.of(); scanIndex = 0; lastScanAt = 0;
         SpeakerMode sm;
         try { sm = SpeakerMode.valueOf(app.settings.getProperty("native.speaker", "PRIORITY")); } catch (Exception e) { sm = SpeakerMode.PRIORITY; }
         int hold;
@@ -262,8 +272,10 @@ public final class NativeEngine {
         nac = -1; sysId = -1; rfss = -1; site = -1; wacn = -1; msgTotal = 0; tsbkBad = 0; ccFreqHz = 0;
         startedAt = System.currentTimeMillis(); lastTsbkAt = 0; lastHuntAt = 0; lastCcPlanAt = startedAt; usageDecayAt = startedAt;
         List<Long> ccs = new ArrayList<>();
-        for (double f : s.controlChannelsMHz) ccs.add(Math.round(f * 1e6));
+        for (double f : s.frequencies()) ccs.add(Math.round(f * 1e6));
         ccFreqs = ccs;
+        if (ccs.isEmpty()) throw new IllegalStateException(conventional ? "Enter at least one channel frequency." : "Enter a control channel frequency.");
+        if (conventional) { int n = parseNac(s.nac); if (n >= 0) nac = n; }
         int expectedNac = parseNac(s.nac);
         if (EngineLibs.loadJmbe(EngineLibs.findJmbe(app.profile, app.settings.getProperty("native.jmbe", "")))) log("Voice codec: " + EngineLibs.jmbeStatus());
         else log("Voice codec not available (" + EngineLibs.jmbeStatus() + ") - calls are followed and logged but stay silent. See the Engine page.");
@@ -294,9 +306,10 @@ public final class NativeEngine {
         }
         ccSource = ccTuner.src;
         if (!tuners.contains(ccTuner)) tuners.add(0, ccTuner);
-        cc.buildDecoders(expectedNac);
+        if (conventional) arrangeConventional();
+        else cc.buildDecoders(expectedNac);
         running = true;
-        state = "LOOKING FOR CONTROL CHANNEL";
+        state = conventional ? (scanGroups.size() > 1 ? "SCANNING CHANNELS" : "LISTENING") : "LOOKING FOR CONTROL CHANNEL";
         speaker.start();
         for (Tuner t : tuners) startTuner(t);
         house = Executors.newSingleThreadScheduledExecutor(r -> { Thread t = new Thread(r, "engine-housekeeping"); t.setDaemon(true); return t; });
@@ -304,8 +317,8 @@ public final class NativeEngine {
         // end of a transmission without a terminator (fade, lost TDU): checked every 50 ms so uploads start promptly
         house.scheduleAtFixedRate(() -> { try { calls.transmissionTick(System.currentTimeMillis()); } catch (Throwable t) { log("transmission check: " + t); } }, 50, 50, TimeUnit.MILLISECONDS);
         StringBuilder w = new StringBuilder();
-        for (Tuner t : tuners) w.append(w.length() > 0 ? "; " : "").append("T").append(t.id).append(t == ccTuner ? " control " : " voice ").append(t.window());
-        log("TrunkDeck engine started (" + m + "), " + tuners.size() + " tuner(s): " + w);
+        for (Tuner t : tuners) w.append(w.length() > 0 ? "; " : "").append("T").append(t.id).append(t == ccTuner ? (conventional ? " channels " : " control ") : " voice ").append(t.window());
+        log("TrunkDeck engine started (" + m + (conventional ? ", conventional" : "") + "), " + tuners.size() + " tuner(s): " + w);
     }
 
     void startFile(List<Long> ccs) throws Exception {
@@ -338,6 +351,7 @@ public final class NativeEngine {
             log("Custom signal sources: " + n);
             return;
         }
+        if (conventional) log("The built-in test signal is a sample trunked system, so it does not play these conventional channels. Plug in a receiver to listen to them.");
         SyntheticSource ss = new SyntheticSource(s, expectedNac < 0 ? 0x293 : expectedNac);
         ccTuner = new Tuner(1, "built-in test signal", ss, Tuner.Role.CONTROL);
         ccCenter = ss.centerHz(); ccTuner.center = ccCenter;
@@ -402,7 +416,10 @@ public final class NativeEngine {
         synchronized (this) {
             boolean rebuild = false;
             for (ChannelDecoder d : ccDecoders) if (d.faulted) rebuild = true;
-            if (rebuild && sys != null && ccTuner != null) { log("Control-channel decoders rebuilt after repeated errors"); cc.buildDecoders(parseNac(sys.nac)); }
+            if (rebuild && sys != null && ccTuner != null) {
+                if (conventional) installParked(ccTuner, covered(ccTuner));
+                else { log("Control-channel decoders rebuilt after repeated errors"); cc.buildDecoders(parseNac(sys.nac)); }
+            }
             for (ActiveCall a : new ArrayList<>(callMap.values())) { ChannelDecoder v = a.vd; if (v != null && v.faulted && !a.ended) calls.endCall(a, "decoder error"); }
             for (Tuner t : tuners) for (ChannelDecoder d : t.decoders) if (d.faulted) {
                 boolean used = false; for (ActiveCall a : callMap.values()) if (a.vd == d && !a.ended) used = true;
@@ -520,7 +537,9 @@ public final class NativeEngine {
         if (ca == null && cs == null && ci == null) for (AirspyR2.Info a : usable) if (AirspySettings.load(app.settings, a.key()).role.equals("auto")) { ca = a; break; }
         if (ca == null && cs == null && ci == null) for (SoapySdr.Info a : soapyUsable) if (SoapySettings.load(app.settings, a.key(), a.driver).role.equals("auto")) { cs = a; break; }
         if (ca == null && cs == null && ci == null) for (RtlSdr.Info d : found) if (TunerSettings.load(app.settings, d.key()).role.equals("auto")) { ci = d; break; }
-        if (ca == null && cs == null && ci == null) throw new IllegalStateException("No receiver is assigned to the control channel (Engine page \u2192 Tuners).");
+        if (ca == null && cs == null && ci == null) throw new IllegalStateException(conventional
+                ? "No receiver is set to listen (Engine page \u2192 Tuners)."
+                : "No receiver is assigned to the control channel (Engine page \u2192 Tuners).");
         int id = 2;
         if (ca != null || cs != null) {
             IqSource src; String label; long fixed;
@@ -534,15 +553,16 @@ public final class NativeEngine {
                 ccGroup = 0;
                 fixedWideCenter = fixed;
                 long c0 = fixedWideCenter > 0 ? fixedWideCenter : TunerPlanner.planWide(ccs, Map.of(), List.of(), x -> false, ccTuner.halfSpan(), ccTuner.dcGuard, 0);
-                cc.retuneTo(c0 > 0 ? c0 : centerFor(ccGroups.get(0)), fixedWideCenter > 0 ? "fixed centre from the Engine page" : "start: covers the control channels; re-centred for the voice band once the site's channel plan is known");
-                log("Control tuner T1: " + label + " (" + String.format(Locale.ROOT, "%.1f MS/s", src.sampleRate() / 1e6) + ", wideband: control channel + every voice channel in "
+                cc.retuneTo(c0 > 0 ? c0 : centerFor(ccGroups.get(0)), fixedWideCenter > 0 ? "fixed centre from the Engine page" : conventional ? "listening on the saved channels" : "start: covers the control channels; re-centred for the voice band once the site's channel plan is known");
+                log((conventional ? "Tuner T1: " : "Control tuner T1: ") + label + " (" + String.format(Locale.ROOT, "%.1f MS/s", src.sampleRate() / 1e6) + ", wideband: "
+                        + (conventional ? "every saved channel in " : "control channel + every voice channel in ")
                         + String.format(Locale.ROOT, "%.1f MHz", 2 * ccTuner.halfSpan() / 1e6) + ")");
             } else {   // a SoapySDR receiver at a rate the filter bank cannot split: decoded like an RTL dongle
                 ccGroups = groupChannels(ccs, (long) (2 * ccTuner.halfSpan()));
                 ccGroup = 0;
                 long c0 = TunerPlanner.plan(ccs, Map.of(), x -> false, ccTuner.halfSpan(), ccTuner.dcGuard, 0);
-                cc.retuneTo(c0 > 0 ? c0 : centerFor(ccGroups.get(0)), "start");
-                log("Control tuner T1: " + label + " (" + String.format(Locale.ROOT, "%.3f MS/s", src.sampleRate() / 1e6) + ", not a wideband rate: decoded like an RTL dongle)");
+                cc.retuneTo(c0 > 0 ? c0 : centerFor(ccGroups.get(0)), conventional ? "listening on the saved channels" : "start");
+                log((conventional ? "Tuner T1: " : "Control tuner T1: ") + label + " (" + String.format(Locale.ROOT, "%.3f MS/s", src.sampleRate() / 1e6) + ", not a wideband rate: decoded like an RTL dongle)");
             }
         } else {
             ccGroups = groupChannels(ccs, 2_000_000);
@@ -552,8 +572,8 @@ public final class NativeEngine {
             tuners.add(ccTuner);
             ccSource = d;
             long c0 = TunerPlanner.plan(ccs, Map.of(), x -> false, ccTuner.halfSpan(), ccTuner.dcGuard, 0);  // main + alternate if they fit
-            cc.retuneTo(c0 > 0 ? c0 : centerFor(ccGroups.get(0)), "start");
-            log("Control tuner T1: " + ci.label() + " (" + d.tunerName() + ")");
+            cc.retuneTo(c0 > 0 ? c0 : centerFor(ccGroups.get(0)), conventional ? "listening on the saved channels" : "start");
+            log((conventional ? "Tuner T1: " : "Control tuner T1: ") + ci.label() + " (" + d.tunerName() + ")");
         }
         for (AirspyR2.Info v : usable) {
             if (v == ca) continue;
@@ -561,7 +581,7 @@ public final class NativeEngine {
             if (role.equals("control")) continue;
             AirspyR2 r = openAirspy(v);
             tuners.add(new Tuner(id++, v.label().trim(), r, Tuner.Role.ROAMING));
-            log("Voice tuner T" + (id - 1) + ": " + v.label() + " (wideband, roams to cover voice grants outside the other windows)");
+            log("Voice tuner T" + (id - 1) + ": " + v.label() + (conventional ? " (wideband, parked on a conventional channel)" : " (wideband, roams to cover voice grants outside the other windows)"));
         }
         for (SoapySdr.Info v : soapyUsable) {
             if (v == cs) continue;
@@ -571,7 +591,7 @@ public final class NativeEngine {
             try { r = openSoapy(v); } catch (RuntimeException e) { log("Voice tuner " + v.tagged() + " not used: " + e.getMessage()); continue; }   // a voice receiver that fails does not stop the engine
             Tuner t = new Tuner(id++, v.tagged(), r, Tuner.Role.ROAMING);
             tuners.add(t);
-            log("Voice tuner T" + (id - 1) + ": " + v.tagged() + " (" + (t.wideband() ? "wideband, " : "") + "roams to cover voice grants outside the other windows)");
+            log("Voice tuner T" + (id - 1) + ": " + v.tagged() + " (" + (t.wideband() ? "wideband, " : "") + (conventional ? "parked on a conventional channel" : "roams to cover voice grants outside the other windows") + ")");
         }
         for (RtlSdr.Info v : found) {
             if (v == ci) continue;
@@ -579,9 +599,9 @@ public final class NativeEngine {
             if (role.equals("off") || role.equals("control")) continue;
             RtlSdr r = openDongle(v);
             tuners.add(new Tuner(id++, v.label().trim(), r, Tuner.Role.ROAMING));
-            log("Voice tuner T" + (id - 1) + ": " + v.label() + " (" + r.tunerName() + ") - roams to cover voice grants outside the other windows");
+            log("Voice tuner T" + (id - 1) + ": " + v.label() + " (" + r.tunerName() + ")" + (conventional ? " - parked on a conventional channel" : " - roams to cover voice grants outside the other windows"));
         }
-        if (tuners.size() == 1) log(ccTuner.wideband() ? (ccTuner.src instanceof AirspyR2 ? "One Airspy" : "One wideband receiver") + ": every voice channel inside its window is decoded (" + ccTuner.window() + ")."
+        if (tuners.size() == 1 && !conventional) log(ccTuner.wideband() ? (ccTuner.src instanceof AirspyR2 ? "One Airspy" : "One wideband receiver") + ": every voice channel inside its window is decoded (" + ccTuner.window() + ")."
                 : "Only one dongle: voice channels are decoded only when they fall inside the control dongle's window (about 2 MHz).");
         for (Tuner t : tuners) if (t.src instanceof SoapySdr) { log("Note: " + SoapyDriver.UNTESTED_NOTE); break; }
     }
@@ -647,6 +667,159 @@ public final class NativeEngine {
             if (clash) c -= 150_000;
         }
         return c;
+    }
+
+    // ------------------------------------------------------------------ conventional (fixed channels)
+    /** Park each receiver on as many saved channels as fit. One receiver scans whatever is left. */
+    void arrangeConventional() {
+        List<Tuner> ts = new ArrayList<>(tuners);
+        if (ts.isEmpty() || ccFreqs.isEmpty()) return;
+        double[] half = new double[ts.size()];
+        long[] guard = new long[ts.size()];
+        for (int i = 0; i < ts.size(); i++) { half[i] = ts.get(i).halfSpan(); guard[i] = ts.get(i).dcGuard; }
+        ConventionalPlan.Result plan = ConventionalPlan.assign(half, guard, ccFreqs);
+        for (ConventionalPlan.Park p : plan.parks) tunePark(ts.get(p.tuner), p.centerHz, "channels " + mhzList(p.channels));
+        if (plan.scanning()) {
+            scanTuner = ts.get(plan.scanTuner);
+            scanGroups = plan.scanGroups;
+            scanIndex = 0;
+            lastScanAt = System.currentTimeMillis();
+            List<Long> g = scanGroups.get(0);
+            tunePark(scanTuner, ConventionalPlan.center(g, scanTuner.halfSpan(), scanTuner.dcGuard), "scanning " + scanGroups.size() + " groups, starting with " + mhzList(g));
+            log("More channels than receivers: T" + scanTuner.id + " checks the rest a group at a time, and stays while a call is on it.");
+        } else log("Conventional: listening on " + ccFreqs.size() + " channel" + (ccFreqs.size() == 1 ? "" : "s") + ".");
+    }
+
+    void tunePark(Tuner t, long center, String why) {
+        if (t == null) return;
+        if (t == ccTuner) cc.retuneTo(center, why);
+        else retunePark(t, center, why);
+    }
+
+    /** Parks a receiver that is not the first one, and listens on the saved channels inside its window. */
+    void retunePark(Tuner t, long c, String why) {
+        if (t == null || t.src == null) return;
+        if (!t.src.tune(c)) { installParked(t, covered(t)); return; }
+        var tap = retuneTap; if (tap != null) tap.accept(new long[]{t.id, calls.callsOn(t), c});
+        t.center = c; t.retunes++; t.lastRetuneAt = System.currentTimeMillis(); retunes++;
+        log("Tuner T" + t.id + " -> " + t.window() + " (" + why + ")");
+        installParked(t, covered(t));
+    }
+
+    List<Long> covered(Tuner t) {
+        List<Long> l = new ArrayList<>();
+        if (t == null) return l;
+        for (long f : ccFreqs) if (t.covers(f)) l.add(f);
+        return l;
+    }
+
+    /** Decoders for these conventional channels. Trunked voice-call decoders on the same receiver are left alone. */
+    void installParked(Tuner t, List<Long> freqs) {
+        if (t == null) return;
+        List<Long> want = new ArrayList<>();
+        if (freqs != null) for (long f : freqs) if (f > 0 && t.covers(f) && !want.contains(f)) want.add(f);
+        if (t == ccTuner) {
+            parkedDecoders.removeAll(ccDecoders);
+            List<ChannelDecoder> list = new ArrayList<>();
+            for (long f : want) { ChannelDecoder d = voiceDecoder(t, f); parkedDecoders.add(d); list.add(d); }
+            ccDecoders.clear();
+            ccDecoders.addAll(list);
+        } else {
+            t.decoders.removeIf(parkedDecoders::remove);
+            for (long f : want) { ChannelDecoder d = voiceDecoder(t, f); parkedDecoders.add(d); t.decoders.add(d); }
+        }
+    }
+
+    ChannelDecoder voiceDecoder(Tuner t, long f) {
+        int nac = sys == null ? -1 : sys.nacFor(f);
+        ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {
+            public void ldu(int n, int duid, byte[][] imbe, P25Framer.LinkControl lc, P25Framer.EncryptionSync ess) { voice.onConventional(f, n, imbe, lc, ess); }
+            public void terminator(int n, int duid) { voice.onConventionalEnd(f); }
+        }, 0, modulation(), lsmPreferred, nac);
+        if (nac >= 0) for (ChannelDecoder.Demod p : d.paths) p.framer.enforceNac = true;
+        d.anchor = () -> tunerAnchor(t, d, f);
+        return d;
+    }
+
+    Tuner tunerFor(long f) {
+        for (ChannelDecoder d : ccDecoders) if (d.freqHz == f) return ccTuner;
+        for (Tuner t : tuners) for (ChannelDecoder d : t.decoders) if (d.freqHz == f && parkedDecoders.contains(d)) return t;
+        return ccTuner;
+    }
+
+    static String mhzList(List<Long> fs) {
+        StringJoiner j = new StringJoiner(", ");
+        for (long f : fs) j.add(mhz(f));
+        return j + " MHz";
+    }
+
+    /** Listening, or stepping to the next group when this receiver has more channels than it can hear at once. */
+    void conventionalHousekeeping(long now) {
+        int dec = 0;
+        synchronized (this) {
+            for (ActiveCall c : callMap.values()) if (!c.ended && c.conventional && now - c.lastVoice < 1500) dec++;
+            if (scanTuner != null && scanGroups.size() > 1 && (mode == Mode.RTL || huntable)
+                    && !scanBusy(now) && now - lastScanAt >= Long.getLong("trunkdeck.convScanMs", 5_000L)) {
+                lastScanAt = now;
+                scanIndex = (scanIndex + 1) % scanGroups.size();
+                List<Long> g = scanGroups.get(scanIndex);
+                for (ActiveCall c : new ArrayList<>(callMap.values())) if (c.tuner == scanTuner && !c.ended) calls.endCall(c, "changing channel");
+                tunePark(scanTuner, ConventionalPlan.center(g, scanTuner.halfSpan(), scanTuner.dcGuard), "next channels (" + mhzList(g) + ")");
+            }
+        }
+        for (Tuner t : tuners) if (t.src.error() != null && problem == null) { problem = "TUNER ERROR"; log("Tuner T" + t.id + " error: " + t.src.error()); }
+        if (mode == Mode.FILE && ccSource != null && !ccSource.running()) {
+            if (!"FILE FINISHED".equals(state)) log("End of I/Q file.");
+            state = "FILE FINISHED";
+            return;
+        }
+        ActiveCall cur = speaker.speaker;
+        if (cur != null) state = (cur.encrypted ? "ENCRYPTED " : "VOICE ") + "TG " + cur.tg + (dec > 1 ? "  +" + (dec - 1) : "");
+        else if (dec > 0) state = dec + " CALL" + (dec == 1 ? "" : "S");
+        else state = scanGroups.size() > 1 ? "SCANNING CHANNELS" : "LISTENING";
+    }
+
+    boolean scanBusy(long now) {
+        if (scanTuner == null) return false;
+        if (calls.callsOn(scanTuner) > 0) return true;
+        for (ChannelDecoder d : decodersOn(scanTuner)) if (now - d.lastFrameAt < 1200) return true;
+        return false;
+    }
+
+    List<ChannelDecoder> decodersOn(Tuner t) {
+        List<ChannelDecoder> l = new ArrayList<>();
+        if (t == null) return l;
+        if (t == ccTuner) l.addAll(ccDecoders);
+        for (ChannelDecoder d : t.decoders) if (parkedDecoders.contains(d)) l.add(d);
+        return l;
+    }
+
+    /** The channel the signal meter is showing, and its level. */
+    static final class Reading { long hz; double db = Double.NaN; }
+
+    Reading channelReading() {
+        List<ChannelDecoder> ds = new ArrayList<>();
+        ds.addAll(Arrays.asList(ccDecoders.toArray(new ChannelDecoder[0])));
+        for (Tuner t : tuners) for (ChannelDecoder d : t.decoders.toArray(new ChannelDecoder[0])) if (parkedDecoders.contains(d) && !ds.contains(d)) ds.add(d);
+        Reading r = new Reading();
+        if (ds.isEmpty()) return r;
+        long[] hz = new long[ds.size()];
+        double[] db = new double[ds.size()];
+        boolean[] lk = new boolean[ds.size()];
+        long now = System.currentTimeMillis();
+        for (int i = 0; i < ds.size(); i++) { hz[i] = ds.get(i).freqHz; db[i] = ds.get(i).signalDb; lk[i] = ds.get(i).locked(now); }
+        ActiveCall cur = speaker.speaker;
+        int i = SignalMeter.pickIndex(cur != null ? cur.freq : 0, hz, db, lk);
+        if (i >= 0) { r.hz = hz[i]; r.db = db[i]; }
+        else if (cur != null && cur.freq > 0) r.hz = cur.freq;
+        return r;
+    }
+
+    /** Frequency (and channel name) for the scanner display while a conventional system is running. */
+    public String conventionalCaption() {
+        if (sys == null) return "";
+        String live = sys.channelCaption(channelReading().hz);
+        return live == null || live.isBlank() ? sys.idleCaption() : live;
     }
 
     // ------------------------------------------------------------------ live settings (1.4.4)
@@ -733,7 +906,7 @@ public final class NativeEngine {
         soapys.clear();
         if (widePool != null) { widePool.shutdownNow(); widePool = null; }
         tuners.clear();
-        ccTuner = null; ccSource = null; ccDecoders.clear(); tdma.clear();
+        ccTuner = null; ccSource = null; ccDecoders.clear(); parkedDecoders.clear(); scanTuner = null; scanGroups = List.of(); tdma.clear();
         speaker.stop();
         if (streaming != null) {
             if (keepStreams) keptStreams = true;
@@ -778,6 +951,7 @@ public final class NativeEngine {
             if (n > 0) listener.messages(n, last);
             calls.housekeep(now);
             tdma.refreshScrambler();
+            if (conventional) { conventionalHousekeeping(now); return; }
             synchronized (this) { cc.plan(now); }
             boolean anyLock = false;
             for (ChannelDecoder d : ccDecoders) if (d.locked(now)) anyLock = true;
@@ -865,6 +1039,7 @@ public final class NativeEngine {
      * the channel power those decoders already measure from the samples; RTL-SDR, Airspy and SoapySDR all feed that path.
      */
     public double controlSignalDb() {
+        if (conventional) return !running ? Double.NaN : channelReading().db;
         if (!running || ccTuner == null) return Double.NaN;
         ChannelDecoder[] ds = ccDecoders.toArray(new ChannelDecoder[0]);   // one snapshot; a rebuild must not leave a 0 dB hole
         if (ds.length == 0) return Double.NaN;
@@ -927,6 +1102,14 @@ public final class NativeEngine {
     }
 
     public String siteSummary() {
+        if (conventional) {
+            StringBuilder s = new StringBuilder("conventional");
+            if (nac >= 0) s.append(String.format("   NAC %03X", nac));
+            long hz = channelReading().hz;
+            if (hz > 0) s.append("   ").append(mhz(hz)).append(" MHz");
+            s.append("   ").append(ccFreqs.size()).append(" channel").append(ccFreqs.size() == 1 ? "" : "s");
+            return s.toString();
+        }
         StringBuilder s = new StringBuilder();
         if (nac >= 0) s.append(String.format("NAC %03X", nac));
         if (wacn >= 0) s.append(String.format("   WACN %05X", wacn));

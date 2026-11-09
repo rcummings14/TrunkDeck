@@ -26,6 +26,10 @@ public class ScannerDisplay extends JComponent {
     // status
     String systemName = "NO SYSTEM", siteName = "", ccText = "", engineState = "STOPPED";
     boolean engineLive;
+    /** Conventional system: the glass shows the channel, not a control channel. */
+    boolean conventional;
+    /** While a conventional system is running, the channel (frequency, and its name) the signal meter belongs to. Null uses {@link #ccText}. */
+    public volatile java.util.function.Supplier<String> channelLine;
     /**
      * Control-channel level in dB of full scale. NaN = not reporting. Used when {@link #controlSignal} is null
      * (tests, and the demo, which has no receiver).
@@ -187,9 +191,10 @@ public class ScannerDisplay extends JComponent {
     public void setSystem(RadioSystem s) {
         systemName = s == null ? "NO SYSTEM" : s.name;
         siteName = s == null ? "" : s.site;
-        ccText = s == null ? "" : "CC " + s.freqText();
+        conventional = s != null && s.conventional();
+        ccText = s == null ? "" : s.idleCaption();
         ccFreqs.clear(); voiceFreqs.clear();
-        if (s != null) ccFreqs.addAll(s.controlChannelsMHz);
+        if (s != null) ccFreqs.addAll(s.frequencies());
         repaint();
     }
 
@@ -283,7 +288,7 @@ public class ScannerDisplay extends JComponent {
         java.util.List<double[]> sl = anim ? scanList() : java.util.List.of();
         if (!sl.isEmpty()) {   // classic scanner: the frequency readout steps through the system's real channels
             double[] fq = sl.get((int) ((now / STEP_MS) % sl.size()));
-            field(g, fq[1] > 0 ? "SCAN \u00b7 CONTROL CH" : "SCAN \u00b7 VOICE CH", String.format(Locale.ROOT, "%.5f MHz", fq[0]), x0, by, false, cF - 10, th.get(DisplayPalette.Field.SCAN));
+            field(g, fq[1] > 0 ? (conventional ? "SCAN \u00b7 CHANNEL" : "SCAN \u00b7 CONTROL CH") : "SCAN \u00b7 VOICE CH", String.format(Locale.ROOT, "%.5f MHz", fq[0]), x0, by, false, cF - 10, th.get(DisplayPalette.Field.SCAN));
         } else field(g, "FREQUENCY", freq.isEmpty() ? "-" : freq + " MHz", x0, by, active, cF - 10, DisplayPalette.Field.FREQ);
         var rl = radioLabel;
         String rtext = radioId > 0 && rl != null ? rl.apply(radioId) : radio;
@@ -297,8 +302,13 @@ public class ScannerDisplay extends JComponent {
         int mx = pad * 2 + lcdW, mw = meterW, mh = (lcdH - pad) / 2;
         double rate = decodeRate();
         boolean lock = engineLive && System.currentTimeMillis() - lastMessageAt < 3000;
-        meter(g, mx, pad, mw, mh, "CONTROL CHANNEL", lock ? String.format(Locale.ROOT, "LOCK  %.0f msg/s", rate) : engineLive ? "SEARCHING" : "OFF",
-                lock ? Theme.GREEN : engineLive ? Theme.AMBER : Theme.DIM, decode, 40);
+        boolean hearing = conventional && engineLive && SignalMeter.available(readSignal());
+        String sideTitle = conventional ? "CHANNEL" : "CONTROL CHANNEL";
+        String sideValue = conventional
+                ? (hearing ? "LISTENING" : engineLive ? "SCANNING" : "OFF")
+                : (lock ? String.format(Locale.ROOT, "LOCK  %.0f msg/s", rate) : engineLive ? "SEARCHING" : "OFF");
+        Color sideColor = conventional ? (hearing ? Theme.GREEN : engineLive ? Theme.AMBER : Theme.DIM) : (lock ? Theme.GREEN : engineLive ? Theme.AMBER : Theme.DIM);
+        meter(g, mx, pad, mw, mh, sideTitle, sideValue, sideColor, decode, 40);
         double calls = 0; for (double a : activity) calls += a;
         meter(g, mx, pad * 2 + mh, mw, mh, "ACTIVITY", String.format(Locale.ROOT, "%.0f calls / 2 min", calls), Theme.CYAN, activity, 4);
         g.dispose();
@@ -317,6 +327,11 @@ public class ScannerDisplay extends JComponent {
         String head = (systemName + (siteName.isBlank() ? "" : "  \u00b7  " + siteName)).toUpperCase();
         String cc = ccText == null ? "" : ccText;
         g.setColor(th.get(DisplayPalette.Field.SYSTEM));
+        var line = channelLine;
+        if (conventional && engineLive && line != null) {
+            String live = line.get();
+            if (live != null && !live.isBlank()) cc = live;
+        }
         if (!engineLive) {
             signalX = -1; signalTip = null;
             g.drawString(head, x0, y);

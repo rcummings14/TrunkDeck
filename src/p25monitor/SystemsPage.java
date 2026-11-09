@@ -5,13 +5,20 @@ import javax.swing.border.*;
 import java.awt.*;
 import java.util.*;
 
-/** Add/edit systems: name, site, control channel(s), demodulator and extras. */
+/** Add/edit systems: trunked (control channel) or conventional (fixed channels), plus demodulator and extras. */
 public class SystemsPage extends JPanel {
     final MainFrame f;
     final DefaultListModel<RadioSystem> listModel = new DefaultListModel<>();
     final JList<RadioSystem> list = new JList<>(listModel);
+    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)"});
+    /** Shown under Kind, the same way an untested receiver is marked on the Engine page. */
+    final JLabel untestedNote = new JLabel("<html><span style='color:#FFB300;font-size:11px'>P25 conventional has not been tested on a real radio system yet. If something doesn't work, please report it on GitHub Issues ("
+            + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").</span></html>");
     final JTextField name = new JTextField(), site = new JTextField(), cc = new JTextField(), nac = new JTextField(), wacn = new JTextField(),
             sysId = new JTextField(), rfss = new JTextField(), siteNo = new JTextField(), tuner = new JTextField();
+    final JLabel freqLabel = new JLabel("Control channel(s) MHz");
+    final JLabel freqHelp = new JLabel();
+    final JPanel trunkIds = new JPanel(new GridLayout(1, 0, 6, 0));
     final JComboBox<String> modulation = new JComboBox<>(new String[]{"C4FM (normal)", "CQPSK / LSM (simulcast)"});
     final JComboBox<String> nativeMod = new JComboBox<>(new String[]{"Auto - try C4FM and LSM, use the better one", "C4FM only", "LSM / CQPSK only (simulcast)"});
     final JSpinner traffic = new JSpinner(new SpinnerNumberModel(20, 1, 32, 1));
@@ -54,7 +61,8 @@ public class SystemsPage extends JPanel {
                 super.getListCellRendererComponent(l, v, i, s, fo);
                 RadioSystem r = (RadioSystem) v;
                 setBorder(new EmptyBorder(8, 10, 8, 10));
-                setText("<html><b style='color:#DCE6F0'>" + MonitorPage.esc(r.name) + "</b><br><span style='color:#7D8FA3'>" + r.freqText() + " MHz \u00b7 " +
+                setText("<html><b style='color:#DCE6F0'>" + MonitorPage.esc(r.name) + "</b><br><span style='color:#7D8FA3'>"
+                        + (r.conventional() ? "Conventional" : "Trunked") + " \u00b7 " + r.displayFreqs() + " MHz \u00b7 " +
                         r.talkgroups.size() + " talkgroups</span></html>");
                 return this;
             }
@@ -73,22 +81,27 @@ public class SystemsPage extends JPanel {
         c.insets = new Insets(5, 4, 5, 8);
         c.fill = GridBagConstraints.HORIZONTAL;
         int y = 0;
-        cc.putClientProperty("JTextField.placeholderText", "e.g. 851.0125, 851.5125");
         cc.setFont(Theme.mono(Font.BOLD, 15f));
         tuner.putClientProperty("JTextField.placeholderText", "optional - e.g. Airspy 0x26A464DC2B5A7C9F (see Setup & Help \u2192 Tuners)");
+        kindBox.addActionListener(e -> showKind(kindBox.getSelectedIndex() == 1));
+        y = row(g, c, y, "Kind", kindBox, "Trunked follows a control channel. Conventional stays on the frequencies you type. There is no control channel.");
+        c.gridy = y; c.gridx = 1; c.weightx = 1; c.gridwidth = 1;
+        c.insets = new Insets(0, 4, 8, 8);
+        g.add(untestedNote, c);
+        c.insets = new Insets(5, 4, 5, 8);
+        y++;
         y = row(g, c, y, "System name", name, null);
         y = row(g, c, y, "Site name", site, null);
-        y = row(g, c, y, "Control channel(s) MHz", cc, "Primary first; add alternate control channels separated by commas. TrunkDeck rotates through them until one locks.");
+        y = freqRow(g, c, y);
         y = row(g, c, y, "Demodulator", nativeMod, "Auto runs both demodulators (C4FM and LSM/CQPSK for simulcast) on every channel and uses the one with fewer bit errors (shown on the Engine page).");
-        JPanel ids = new JPanel(new GridLayout(1, 0, 6, 0));
+        JPanel nacOnly = idBox("NAC", nac);
+        trunkIds.setOpaque(false);
+        for (Object[] o : new Object[][]{{"WACN", wacn}, {"Sys ID", sysId}, {"RFSS", rfss}, {"Site #", siteNo}}) trunkIds.add(idBox((String) o[0], (JComponent) o[1]));
+        JPanel ids = new JPanel(new BorderLayout(6, 0));
         ids.setOpaque(false);
-        for (Object[] o : new Object[][]{{"NAC", nac}, {"WACN", wacn}, {"Sys ID", sysId}, {"RFSS", rfss}, {"Site #", siteNo}}) {
-            JPanel p = new JPanel(new BorderLayout(4, 0)); p.setOpaque(false);
-            JLabel l = new JLabel((String) o[0]); l.setForeground(Theme.DIM);
-            Jargon.explain(l, (String) o[0]); ((JComponent) o[1]).setToolTipText(l.getToolTipText());
-            p.add(l, BorderLayout.WEST); p.add((JComponent) o[1], BorderLayout.CENTER); ids.add(p);
-        }
-        y = row(g, c, y, "IDs (optional)", ids, "Sites with the same WACN and System ID share one talkgroup list (leading zeros do not matter). The engine still reads the live IDs from the control channel.");
+        ids.add(nacOnly, BorderLayout.WEST);
+        ids.add(trunkIds, BorderLayout.CENTER);
+        y = row(g, c, y, "IDs (optional)", ids, "On a trunked system, sites with the same WACN and System ID share one talkgroup list. A conventional system keeps its own list. NAC makes the receiver ignore other traffic on the same frequency.");
         y = row(g, c, y, "Max simultaneous calls", traffic, "How many calls the engine decodes at the same time (each uses about 4% of one CPU core). Calls must also fall inside a dongle's window.");
         JPanel checks = new JPanel(new GridLayout(0, 1));
         checks.setOpaque(false);
@@ -135,6 +148,39 @@ public class SystemsPage extends JPanel {
         return y + 1;
     }
 
+    static JPanel idBox(String label, JComponent field) {
+        JPanel p = new JPanel(new BorderLayout(4, 0)); p.setOpaque(false);
+        JLabel l = new JLabel(label); l.setForeground(Theme.DIM);
+        Jargon.explain(l, label); field.setToolTipText(l.getToolTipText());
+        p.add(l, BorderLayout.WEST); p.add(field, BorderLayout.CENTER);
+        return p;
+    }
+
+    int freqRow(JPanel g, GridBagConstraints c, int y) {
+        c.gridy = y; c.gridx = 0; c.weightx = 0; c.gridwidth = 1;
+        freqLabel.setFont(Theme.ui(Font.BOLD, 12f));
+        g.add(freqLabel, c);
+        c.gridx = 1; c.weightx = 1;
+        g.add(cc, c);
+        c.gridy = ++y; c.gridx = 1;
+        c.insets = new Insets(0, 4, 6, 8);
+        g.add(freqHelp, c);
+        c.insets = new Insets(5, 4, 5, 8);
+        showKind(false);
+        return y + 1;
+    }
+
+    void showKind(boolean conventional) {
+        freqLabel.setText(conventional ? "Channels MHz" : "Control channel(s) MHz");
+        Jargon.explain(freqLabel, conventional ? "Channels MHz" : "Control channel(s) MHz");
+        cc.setToolTipText(freqLabel.getToolTipText());
+        cc.putClientProperty("JTextField.placeholderText", conventional ? "e.g. 155.2500, 155.3700:2D5" : "e.g. 851.0125, 851.5125");
+        freqHelp.setText("<html><span style='color:#7D8FA3;font-size:10px'>" + (conventional
+                ? "The frequencies to listen on, separated by commas. Add a NAC after a colon when one channel uses its own, for example 155.2500:2D5. The NAC below applies to every channel without its own."
+                : "Primary first; add alternate control channels separated by commas. TrunkDeck rotates through them until one locks.") + "</span></html>");
+        trunkIds.setVisible(!conventional);
+    }
+
     void refreshList() {
         listModel.clear();
         for (RadioSystem s : f.app.systems) listModel.addElement(s);
@@ -145,7 +191,10 @@ public class SystemsPage extends JPanel {
 
     void edit(RadioSystem s) {
         editing = s;
-        name.setText(s.name); site.setText(s.site); cc.setText(s.freqText());
+        name.setText(s.name); site.setText(s.site);
+        kindBox.setSelectedIndex(s.conventional() ? 1 : 0);
+        showKind(s.conventional());
+        cc.setText(s.conventional() ? s.channelText() : s.freqText());
         nac.setText(s.nac); wacn.setText(s.wacn); sysId.setText(s.sysId); rfss.setText(s.rfss); siteNo.setText(s.siteNumber);
         modulation.setSelectedIndex("CQPSK".equals(s.modulation) ? 1 : 0);
         nativeMod.setSelectedIndex(s.nativeModulation.startsWith("c4") ? 1 : s.nativeModulation.startsWith("lsm") ? 2 : 0);
@@ -158,15 +207,26 @@ public class SystemsPage extends JPanel {
     }
 
     boolean readForm(RadioSystem s) {
+        boolean conventional = kindBox.getSelectedIndex() == 1;
         try {
-            java.util.List<Double> fr = RadioSystem.parseFreqs(cc.getText());
-            if (fr.isEmpty()) throw new NumberFormatException("enter at least one control channel");
-            s.controlChannelsMHz = fr;
+            if (conventional) {
+                java.util.List<RadioSystem.Channel> ch = RadioSystem.parseChannelText(cc.getText());
+                if (ch.isEmpty()) throw new NumberFormatException("enter at least one channel");
+                s.channels = ch;
+                s.controlChannelsMHz = new ArrayList<>();
+            } else {
+                java.util.List<Double> fr = RadioSystem.parseFreqs(cc.getText());
+                if (fr.isEmpty()) throw new NumberFormatException("enter at least one control channel");
+                s.controlChannelsMHz = fr;
+                s.channels = new ArrayList<>();
+            }
         } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(f, "Control channel: " + ex.getMessage() + "\nExample: 851.0125, 851.5125", "Check the frequency", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(f, (conventional ? "Channel: " : "Control channel: ") + ex.getMessage()
+                    + (conventional ? "\nExample: 155.2500, 155.3700:2D5" : "\nExample: 851.0125, 851.5125"), "Check the frequency", JOptionPane.WARNING_MESSAGE);
             return false;
         }
         if (name.getText().isBlank()) { JOptionPane.showMessageDialog(f, "Give the system a name."); return false; }
+        s.kind = conventional ? RadioSystem.CONVENTIONAL : RadioSystem.TRUNKED;
         s.name = name.getText().trim(); s.site = site.getText().trim();
         s.nac = nac.getText().trim(); s.wacn = wacn.getText().trim(); s.sysId = sysId.getText().trim(); s.rfss = rfss.getText().trim(); s.siteNumber = siteNo.getText().trim();
         s.modulation = modulation.getSelectedIndex() == 1 ? "CQPSK" : "C4FM";
@@ -178,8 +238,8 @@ public class SystemsPage extends JPanel {
         return true;
     }
 
-    /** The system settings the radio engine only reads when it starts (tuning plan, control-channel hunt, demodulator). */
-    static String restartKey(RadioSystem s) { return s.controlChannelsMHz + "|" + s.nac.trim() + "|" + s.nativeModulation; }
+    /** The system settings the radio engine only reads when it starts (tuning plan, control-channel hunt or conventional channels, demodulator). */
+    static String restartKey(RadioSystem s) { return s.kind + "|" + s.controlChannelsMHz + "|" + s.channelsProperty() + "|" + s.nac.trim() + "|" + s.nativeModulation; }
 
     void save(boolean monitor) {
         if (editing == null) return;
@@ -194,7 +254,7 @@ public class SystemsPage extends JPanel {
             f.display.setSystem(editing);
         }
         f.reloadSystems();
-        f.toast("Saved " + editing.name + (needsRestart && editing == f.app.current && f.running() ? " - press Restart to apply for the new control channel / NAC / demodulator (feeds stay connected)" : ""));
+        f.toast("Saved " + editing.name + (needsRestart && editing == f.app.current && f.running() ? " - press Restart to apply the new frequencies / NAC / demodulator (feeds stay connected)" : ""));
         if (monitor) {
             if (f.app.current != editing) { f.systemBox.setSelectedItem(editing); if (f.app.current != editing) f.selectSystem(editing); }
             f.show("Monitor");
@@ -223,7 +283,9 @@ public class SystemsPage extends JPanel {
 
     static RadioSystem copy(RadioSystem o) {
         RadioSystem s = new RadioSystem();
-        s.name = o.name; s.site = o.site; s.controlChannelsMHz = new ArrayList<>(o.controlChannelsMHz); s.nac = o.nac; s.wacn = o.wacn; s.sysId = o.sysId;
+        s.name = o.name; s.site = o.site; s.kind = o.kind; s.controlChannelsMHz = new ArrayList<>(o.controlChannelsMHz);
+        for (RadioSystem.Channel ch : o.channels) s.channels.add(ch.copy());
+        s.nac = o.nac; s.wacn = o.wacn; s.sysId = o.sysId;
         s.rfss = o.rfss; s.siteNumber = o.siteNumber; s.modulation = o.modulation; s.nativeModulation = o.nativeModulation; s.trafficChannels = o.trafficChannels; s.ignoreDataCalls = o.ignoreDataCalls;
         s.preferredTuner = o.preferredTuner; s.recordAll = o.recordAll; s.decodeMeter = o.decodeMeter; s.notes = o.notes;
         s.rrSid = o.rrSid; s.rrSites = o.rrSites; s.rrUpdated = o.rrUpdated; s.rrSeen = o.rrSeen;

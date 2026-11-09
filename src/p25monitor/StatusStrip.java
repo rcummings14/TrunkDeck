@@ -17,10 +17,10 @@ public class StatusStrip extends JPanel {
     public enum Level { OK, WARN, BAD, OFF }
 
     public static final class Light extends JComponent {
-        final String name; Level level = Level.OFF; String text = "";
+        final String name; String heading; Level level = Level.OFF; String text = "";
         Runnable onClick;
         Light(String name) {
-            this.name = name;
+            this.name = name; this.heading = name;
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             setFont(Theme.ui(Font.BOLD, 12f));
             addMouseListener(new MouseAdapter() { public void mouseClicked(MouseEvent e) { if (onClick != null) onClick.run(); } });
@@ -34,7 +34,8 @@ public class StatusStrip extends JPanel {
         }
         public Level level() { return level; }
         public String text() { return text; }
-        String label() { return name + ": " + text; }
+        void title(String s) { if (s != null && !s.equals(heading)) { heading = s; revalidate(); repaint(); } }
+        String label() { return heading + ": " + text; }
         static Color color(Level l) { return switch (l) { case OK -> Theme.GREEN; case WARN -> Theme.AMBER; case BAD -> Theme.RED; default -> Theme.DIM; }; }
         @Override public Dimension getPreferredSize() {
             FontMetrics fm = getFontMetrics(getFont());
@@ -143,11 +144,19 @@ public class StatusStrip extends JPanel {
             else if (codec) receiver.set(Level.WARN, "voice codec missing", "Calls are followed but silent: the voice codec (JMBE) is not installed. Set it up on the Engine page.");
             else receiver.set(Level.OK, "tuner OK", plural(h.tuners, "tuner") + " receiving normally.");
         }
-        // ---------- control channel
-        if (!h.running) control.set(Level.OFF, "off", "Monitoring is stopped.");
-        else if (h.lastCcMessageAt > 0 && now - h.lastCcMessageAt < 3000) control.set(Level.OK, "locked", "Receiving the system's control channel (" + h.ccMessages + " messages so far): calls are being found.");
-        else if (now - runningSince > 60_000 && h.ccMessages == 0) control.set(Level.BAD, "not found", "No control channel data for over a minute. Check the control channel frequency (Systems page), the antenna and the tuner.");
-        else control.set(Level.WARN, "searching", "Looking for the control channel" + (h.ccMessages > 0 ? " (it was locked earlier - the signal may have faded)" : "") + ".");
+        // ---------- control channel, or the channel of a conventional system
+        if (h.conventional) {
+            control.title("Channel");
+            if (!h.running) control.set(Level.OFF, "off", "Monitoring is stopped.");
+            else if (h.lastChannelAt > 0 && now - h.lastChannelAt < 3000) control.set(Level.OK, "listening", "Receiving a channel on this conventional system.");
+            else control.set(Level.WARN, "listening", "Waiting for a call on the saved channels. A quiet channel is normal until someone talks.");
+        } else {
+            control.title("Control channel");
+            if (!h.running) control.set(Level.OFF, "off", "Monitoring is stopped.");
+            else if (h.lastCcMessageAt > 0 && now - h.lastCcMessageAt < 3000) control.set(Level.OK, "locked", "Receiving the system's control channel (" + h.ccMessages + " messages so far): calls are being found.");
+            else if (now - runningSince > 60_000 && h.ccMessages == 0) control.set(Level.BAD, "not found", "No control channel data for over a minute. Check the control channel frequency (Systems page), the antenna and the tuner.");
+            else control.set(Level.WARN, "searching", "Looking for the control channel" + (h.ccMessages > 0 ? " (it was locked earlier - the signal may have faded)" : "") + ".");
+        }
         // ---------- feeds
         List<EngineHealth.Stream> fs = new ArrayList<>(), cs = new ArrayList<>(), os = new ArrayList<>(), rs = new ArrayList<>();
         for (EngineHealth.Stream s : h.streams) (s.kind == EngineHealth.Kind.FEED ? fs : s.kind == EngineHealth.Kind.CALLS ? cs : s.kind == EngineHealth.Kind.RDIO ? rs : os).add(s);

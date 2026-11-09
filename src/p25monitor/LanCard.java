@@ -350,8 +350,14 @@ final class LanCard {
         s.engine = s.monitoring ? eng.state() : "STOPPED";
         s.system = sys == null ? "NO SYSTEM" : sys.name;
         s.site = sys == null ? "" : sys.site;
-        s.control = sys == null || sys.freqText().isBlank() ? "" : "CC " + sys.freqText();
-        if (sys != null) for (double mhz : sys.controlChannelsMHz) s.channels.add(RadioSystem.fmt(mhz));
+        s.conventional = sys != null && sys.conventional();
+        if (s.conventional) {
+            s.control = s.monitoring ? eng.conventionalCaption() : sys.idleCaption();
+            for (RadioSystem.Channel ch : sys.channels) s.channels.add(RadioSystem.fmt(ch.mhz));
+        } else {
+            s.control = sys == null || sys.freqText().isBlank() ? "" : "CC " + sys.freqText();
+            if (sys != null) for (double mhz : sys.controlChannelsMHz) s.channels.add(RadioSystem.fmt(mhz));
+        }
         if (s.monitoring) {
             double db = eng.controlSignalDb();
             s.signalDb = db;

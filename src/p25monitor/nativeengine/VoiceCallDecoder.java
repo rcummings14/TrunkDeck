@@ -101,21 +101,30 @@ final class VoiceCallDecoder {
         }
         if (c.mismatchRun > 0) return;
         if (lc != null && c.conventional && lc.isGroupVoice()) {
+            c.lastLcTg = lc.talkgroup();
             if (c.tg != lc.talkgroup() || c.src != lc.source()) {
                 c.tg = lc.talkgroup(); c.src = lc.source(); c.t = e.tg(c.tg);
+                if (c.t != null) c.priority = c.t.priority;
                 c.ev.to = String.valueOf(c.tg); c.ev.talkgroup = c.tg; c.ev.from = String.valueOf(c.src); c.ev.radioId = c.src;
                 e.listener.callUpdated(c.ev); e.logTalker(c);
-            }
+            } else if (c.t == null) { c.t = e.tg(c.tg); if (c.t != null) c.priority = c.t.priority; }
             if (lc.encrypted()) markEncrypted(c, "LC");
+            if (e.conventional) applyListenPolicy(c);
         }
-        if (ess != null) { c.alg = ess.algorithm(); if (ess.encrypted()) markEncrypted(c, ess.algorithmName()); }
+        if (ess != null) { c.alg = ess.algorithm(); if (ess.encrypted()) { markEncrypted(c, ess.algorithmName()); if (e.conventional) c.eligible = false; } }
         if (c.hang) { c.hang = false; c.ptts++; }
         c.lastVoice = now;
         c.lastSeen = Math.max(c.lastSeen, now);
         c.voiceFrames++;
         ChannelDecoder vd = c.vd;
         if (vd != null) c.maxAbsOffset = Math.max(c.maxAbsOffset, Math.abs(vd.frequencyError()));
+        if (e.conventional && c.conventional && !c.eligible) { c.unconfirmed.clear(); return; }
         if (c.encrypted || c.imbe == null) return;
+        // a saved conventional system waits until the talkgroup is known, so mute / favorites / "only my list" apply
+        if (e.conventional && c.conventional && c.lastLcTg < 0) {
+            if (c.ldus < 4) { c.unconfirmed.add(imbe); if (c.unconfirmed.size() > 2) c.unconfirmed.poll(); return; }
+            if (e.app.listenMode() != p25monitor.ListenMode.ALL) return;
+        }
         if (!c.conventional && !c.unitToUnit && !c.patch && c.lastLcTg == -1 && c.ldus < 4) {
             c.unconfirmed.add(imbe);
             if (c.unconfirmed.size() > 2) c.unconfirmed.poll();
@@ -171,6 +180,18 @@ final class VoiceCallDecoder {
                 System.arraycopy(a, 0, c.pcm, c.pcmLen, n);
                 c.pcmLen += n;
             }
+        }
+    }
+
+    /** Mute, favorites-only, and "only my list" — the same rules as a trunked grant. Encrypted calls are already flagged. */
+    void applyListenPolicy(ActiveCall c) {
+        if (c.encrypted) { c.eligible = false; c.unconfirmed.clear(); return; }
+        String why = e.calls.skipReason(c);
+        c.eligible = why == null;
+        if (why != null) {
+            c.unconfirmed.clear();
+            String up = why.toUpperCase(java.util.Locale.ROOT);
+            if (c.ev.details == null || !c.ev.details.equals(up)) { c.ev.details = up; e.listener.callUpdated(c.ev); }
         }
     }
 
@@ -266,6 +287,7 @@ final class VoiceCallDecoder {
     }
 
     boolean conventionalAllowed() {
+        if (e.conventional) return true;
         if (e.mode == NativeEngine.Mode.FILE) return true;
         return e.msgTotal == 0 && System.currentTimeMillis() - e.startedAt > 10000;
     }
@@ -286,7 +308,7 @@ final class VoiceCallDecoder {
                 c.src = lc != null && lc.isGroupVoice() ? lc.source() : -1;
                 c.t = e.tg(c.tg);
                 c.imbe = EngineLibs.newImbe();
-                c.followed = true; c.eligible = true; c.tuner = e.ccTuner;
+                c.followed = true; c.eligible = true; c.tuner = e.tunerFor(f);
                 CallEvent ev = new CallEvent();
                 ev.timestamp = e.ts.format(new Date()); ev.protocol = "APCO-25"; ev.event = "Group Call"; ev.to = String.valueOf(c.tg); ev.talkgroup = c.tg;
                 ev.from = c.src > 0 ? String.valueOf(c.src) : ""; ev.radioId = c.src; ev.frequencyMHz = f / 1e6;

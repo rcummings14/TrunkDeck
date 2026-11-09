@@ -33,6 +33,12 @@ final class RrWizard extends JDialog {
     RrSoap rr;
     RrImport.Fetched fetched;
     int chosenCtid;
+    /** The county just shown, so "P25 conventional channels" can read its groups. */
+    CountyInfo countyInfo;
+    /** Subcategory id (negative sid in the system list) -> the frequencies RadioReference returned. */
+    final Map<Integer, List<Freq>> convFreqs = new HashMap<>();
+    /** A conventional system built from county frequencies, waiting on the last step. */
+    RadioSystem pendingConv;
 
     // step 1
     final JTextField user = new JTextField(22);
@@ -291,18 +297,22 @@ final class RrWizard extends JDialog {
             }
         });
         JPanel lists = new JPanel(new GridLayout(1, 2, 10, 0)); lists.setOpaque(false);
-        lists.add(titled("County", counties)); lists.add(titled("Trunked systems", systems));
+        lists.add(titled("County", counties)); lists.add(titled("Systems", systems));
         JPanel bottom = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0)); bottom.setOpaque(false);
         bottom.add(dim("Or open it by ID:")); bottom.add(idKind); bottom.add(idField);
         JButton open = MainFrame.button("Open", null, Theme.CYAN); bottom.add(open);
         open.addActionListener(e -> openById()); idField.addActionListener(e -> openById());
+        JButton conv = MainFrame.button("P25 conventional channels", null, Theme.CYAN);
+        conv.setToolTipText("Look through this county's channel groups for P25 channels that stay on one frequency");
+        conv.addActionListener(e -> findConventional());
+        bottom.add(conv);
         JButton reload = MainFrame.button("Reload lists", Theme.Glyph.APPLY, Theme.DIM);
         reload.setToolTipText("Place lists are kept on this computer for " + RrSoap.CACHE_DAYS + " days; this asks RadioReference again");
         reload.addActionListener(e -> { RrSoap.clearCache(f.app.profile.resolve("rr-cache")); rr.cacheIn(f.app.profile.resolve("rr-cache")); clearSession(); loadCountries(); });
         bottom.add(Box.createHorizontalStrut(16)); bottom.add(reload);
         JPanel south = new JPanel(new BorderLayout(0, 6)); south.setOpaque(false);
         south.add(bottom, BorderLayout.NORTH);
-        south.add(note("The system ID is the number at the end of the system page address on the RadioReference website (…/sid/<b>1234</b>). TrunkDeck decodes P25 (Phase 1 and 2) systems."), BorderLayout.SOUTH);
+        south.add(note("The system ID is the number at the end of the system page address on the RadioReference website (…/sid/<b>1234</b>). TrunkDeck decodes trunked P25 and conventional P25. Use <b>P25 conventional channels</b> for a county's fixed P25 frequencies."), BorderLayout.SOUTH);
         JPanel in = new JPanel(new BorderLayout(0, 10)); in.setOpaque(false);
         in.add(top, BorderLayout.NORTH); in.add(lists, BorderLayout.CENTER); in.add(south, BorderLayout.SOUTH);
         c.add(in, BorderLayout.CENTER);
@@ -366,6 +376,8 @@ final class RrWizard extends JDialog {
         if (STATEWIDE.equals(v)) { chosenCtid = 0; for (TrsRef t : stateInfo.systems()) systemModel.addElement(t); preselectSystem(); return; }
         County c = (County) v;
         run("Loading systems in " + c.name(), () -> rr.getCountyInfo(c.ctid()), ci -> {
+            countyInfo = ci;
+            convFreqs.clear();
             chosenCtid = c.ctid();
             f.app.settings.setProperty("rr.lastCounty", String.valueOf(c.ctid()));
             f.app.saveSettings();
@@ -415,7 +427,47 @@ final class RrWizard extends JDialog {
     void openSystem() {
         TrsRef t = systems.getSelectedValue();
         if (t == null) { error("Pick a system first."); return; }
+        if (t.sid() < 0) { openConventional(t); return; }
+        pendingConv = null;
         fetchSystem(t.sid(), chosenCtid, null);
+    }
+
+    /** County groups that actually have P25 channels, added under the trunked systems. */
+    void findConventional() {
+        if (countyInfo == null || countyInfo.subcats().isEmpty()) { info("Pick a county first. If it has no channel groups, RadioReference has no conventional list to search."); return; }
+        CountyInfo ci = countyInfo;
+        run("Looking for P25 conventional channels", () -> {
+            Map<Integer, List<Freq>> found = new LinkedHashMap<>();
+            for (Subcat sc : ci.subcats()) {
+                List<Freq> freqs = rr.getSubcatFreqs(sc.scid());
+                if (!RrImport.p25Channels(freqs).isEmpty()) found.put(sc.scid(), freqs);
+            }
+            return found;
+        }, found -> {
+            convFreqs.clear();
+            convFreqs.putAll(found);
+            if (found.isEmpty()) { info("RadioReference lists no P25 conventional channels in " + ci.name() + "."); return; }
+            int added = 0;
+            for (Subcat sc : ci.subcats()) if (found.containsKey(sc.scid())) {
+                String label = (sc.category().isBlank() ? "" : sc.category() + " — ") + sc.name();
+                boolean have = false;
+                for (int i = 0; i < systemModel.size(); i++) if (systemModel.get(i).sid() == -sc.scid()) have = true;
+                if (!have) { systemModel.addElement(new TrsRef(-sc.scid(), label, 0, 0, 0, "P25 conventional")); added++; }
+            }
+            if (systemModel.size() == added) systems.setSelectedIndex(0);
+            next.setEnabled(systems.getSelectedValue() != null);
+            info(found.size() + " P25 conventional channel group" + (found.size() == 1 ? "" : "s") + ". Pick one and press Next.");
+        });
+    }
+
+    void openConventional(TrsRef t) {
+        List<Freq> freqs = convFreqs.get(-t.sid());
+        if (freqs == null || RrImport.p25Channels(freqs).isEmpty()) { error("Those channels are no longer available. Press P25 conventional channels again."); return; }
+        pendingConv = RrImport.fromConventional(t.name(), freqs);
+        fetched = null;
+        prepareFinish();
+        go(4);
+        info(pendingConv.channels.size() + " P25 channel" + (pendingConv.channels.size() == 1 ? "" : "s") + ".");
     }
 
     /** getTrsDetails + getTrsSites + getTrsTalkgroupCats + getTrsTalkgroups: the only system data fetched, on Next. */
@@ -448,14 +500,15 @@ final class RrWizard extends JDialog {
         siteNote.setFont(Theme.ui(Font.PLAIN, 12f));
         JPanel s = new JPanel(new BorderLayout(0, 4)); s.setOpaque(false);
         s.add(siteNote, BorderLayout.NORTH);
-        s.add(note("Usually the nearest site. With several sites, TrunkDeck tries their control channels in turn until one locks (primary control "
-                + "channel first, then the alternates). Sites with no control channel marked on RadioReference contribute all their frequencies."), BorderLayout.SOUTH);
+        s.add(note("Usually the nearest site. On a trunked system TrunkDeck tries the control channels in turn until one locks (primary first, then the alternates). "
+                + "A conventional P25 system has no control channel: every frequency you tick is a channel TrunkDeck listens on."), BorderLayout.SOUTH);
         in.add(s, BorderLayout.SOUTH);
         c.add(in, BorderLayout.CENTER);
         return c;
     }
 
     void fillSites(int ctid) {
+        siteModel.conventional = RrImport.conventionalSystem(fetched.details());
         siteModel.sites = new ArrayList<>(fetched.sites());
         siteModel.on = new boolean[siteModel.sites.size()];
         Set<String> want = new HashSet<>();
@@ -470,15 +523,17 @@ final class RrWizard extends JDialog {
 
     void updateSiteNote() {
         List<Site> ch = chosenSites();
-        List<Double> cc = RrImport.controlChannels(ch);
+        boolean conv = siteModel.conventional;
+        List<Double> cc = conv ? channelFreqs(RrImport.conventionalChannels(ch)) : RrImport.controlChannels(ch);
         siteNote.setForeground(ch.isEmpty() ? Theme.AMBER : Theme.TEXT);
-        siteNote.setText(ch.isEmpty() ? "No site chosen yet." : "<html>" + ch.size() + " site" + (ch.size() == 1 ? "" : "s") + " \u00b7 control channels: <b>" + freqs(cc) + "</b> MHz</html>");
+        siteNote.setText(ch.isEmpty() ? "No site chosen yet." : "<html>" + ch.size() + " site" + (ch.size() == 1 ? "" : "s") + (conv ? " \u00b7 channels: " : " \u00b7 control channels: ") + "<b>" + freqs(cc) + "</b> MHz</html>");
     }
 
     void sitesChosen() {
         List<Site> ch = chosenSites();
         if (ch.isEmpty()) { error("Tick at least one site."); return; }
-        if (RrImport.controlChannels(ch).isEmpty()) { error("RadioReference lists no frequencies for that site - pick another one."); return; }
+        List<Double> have = siteModel.conventional ? channelFreqs(RrImport.conventionalChannels(ch)) : RrImport.controlChannels(ch);
+        if (have.isEmpty()) { error("RadioReference lists no frequencies for that site - pick another one."); return; }
         fillTalkgroups();
         go(3);
     }
@@ -555,6 +610,7 @@ final class RrWizard extends JDialog {
         if (fetched == null) return false;
         RadioSystem probe = new RadioSystem();
         probe.rrSid = fetched.details().sid();
+        if (RrImport.conventionalSystem(fetched.details())) probe.kind = RadioSystem.CONVENTIONAL;
         if (!fetched.details().sysids().isEmpty()) {
             probe.sysId = fetched.details().sysids().get(0).sysid();
             probe.wacn = fetched.details().sysids().get(0).wacn();
@@ -564,6 +620,7 @@ final class RrWizard extends JDialog {
     }
 
     void prepareFinish() {
+        if (pendingConv != null) { prepareConventionalFinish(); return; }
         List<Site> sites = chosenSites();
         Set<Integer> tgs = chosenTalkgroups();
         StringBuilder h = new StringBuilder("<html><body style='font-family:sans-serif'>");
@@ -574,8 +631,10 @@ final class RrWizard extends JDialog {
             startNow.setText(running ? "Start monitoring it now (TrunkDeck is monitoring \u201c" + (f.app.current == null ? "" : f.app.current.name) + "\u201d - switch from the System box at the top when you're ready)" : "Start monitoring it now");
             Set<String> cats = new TreeSet<>(); int enc = 0;
             for (Tg t : fetched.ordered()) if (tgs.contains(t.dec())) { cats.add(fetched.category(t.tgCid())); if (t.encrypted()) enc++; }
+            boolean conv = RrImport.conventionalSystem(fetched.details());
+            List<Double> shown = conv ? channelFreqs(RrImport.conventionalChannels(sites)) : RrImport.controlChannels(sites);
             h.append("<p>TrunkDeck will create <b>").append(Util.xml(sysName.getText().isBlank() ? RrImport.defaultName(fetched, sites) : sysName.getText())).append("</b>:</p><ul>")
-             .append("<li>Control channels: <b>").append(freqs(RrImport.controlChannels(sites))).append("</b> MHz (").append(sites.size()).append(" site").append(sites.size() == 1 ? "" : "s").append(")</li>")
+             .append("<li>").append(conv ? "Channels" : "Control channels").append(": <b>").append(freqs(shown)).append("</b> MHz (").append(sites.size()).append(" site").append(sites.size() == 1 ? "" : "s").append(")</li>")
              .append("<li><b>").append(tgs.size()).append("</b> talkgroups in ").append(cats.size()).append(" categories, with names, tags and categories")
              .append(enc > 0 ? " (" + enc + " encrypted - their calls are skipped)" : "").append("</li>")
              .append("<li>Usual settings: demodulator Auto (C4FM and LSM), up to 20 calls at once. Change them on the Systems page any time.</li>")
@@ -601,7 +660,23 @@ final class RrWizard extends JDialog {
         finishText.setCaretPosition(0);
     }
 
+    void prepareConventionalFinish() {
+        RadioSystem s = pendingConv;
+        if (sysName.getText().isBlank()) sysName.setText(s.name);
+        boolean running = f.running();
+        startNow.setSelected(!running); startNow.setEnabled(!running);
+        startNow.setText(running ? "Start monitoring it now (TrunkDeck is already monitoring another system)" : "Start monitoring it now");
+        StringBuilder h = new StringBuilder("<html><body style='font-family:sans-serif'><p>TrunkDeck will create <b>")
+                .append(Util.xml(sysName.getText().isBlank() ? s.name : sysName.getText())).append("</b>, a conventional P25 system:</p><ul>")
+                .append("<li>Channels: <b>").append(freqs(channelFreqs(s.channels))).append("</b> MHz</li>")
+                .append("<li><b>").append(s.talkgroups.size()).append("</b> talkgroup").append(s.talkgroups.size() == 1 ? "" : "s").append(" named from RadioReference</li>")
+                .append("<li>No control channel. TrunkDeck listens on these frequencies and decodes P25 voice. Encrypted calls are skipped.</li></ul></body></html>");
+        finishText.setText(h.toString());
+        finishText.setCaretPosition(0);
+    }
+
     void apply() {
+        if (pendingConv != null) { applyConventional(); return; }
         List<Site> sites = chosenSites();
         Set<Integer> tgs = chosenTalkgroups();
         if (refresh == null) {
@@ -619,7 +694,7 @@ final class RrWizard extends JDialog {
             done = true;
             boolean sharedList = TalkgroupLists.sharing(f.app.systems, s).size() > 1;
             finishText.setText("<html><body style='font-family:sans-serif'><p><b style='color:#2BFF88'>\u2713 " + Util.xml(s.name) + " is ready</b> - "
-                    + s.talkgroups.size() + " talkgroups, control channels " + freqs(s.controlChannelsMHz) + " MHz.</p>"
+                    + s.talkgroups.size() + " talkgroups, " + (s.conventional() ? "channels " : "control channels ") + freqs(s.frequencies()) + " MHz.</p>"
                     + (sharedList ? "<p>It uses the talkgroup list already kept for this system, so names, favorites, mutes, record, priority and streams stay in one place.</p>" : "")
                     + (start ? "<p>Monitoring starts now.</p>" : f.app.current == s ? "" : "<p>It's in the System box at the top: pick it when you want to listen to it (switching restarts the radio part; feeds stay connected).</p>")
                     + "<p style='color:#7D8FA3'>Check it any time on the Systems and Talkgroups pages. To update it later: Systems page \u2192 Refresh from RadioReference.</p></body></html>");
@@ -652,20 +727,49 @@ final class RrWizard extends JDialog {
         }
     }
 
+    void applyConventional() {
+        RadioSystem s = pendingConv;
+        s.name = sysName.getText().isBlank() ? s.name : sysName.getText().trim();
+        s.id = f.app.uniqueId(RadioSystem.safeId(s.name));
+        try { f.app.save(s); } catch (Exception ex) { error("Could not save the system: " + ex.getMessage()); return; }
+        f.app.systems.add(s);
+        f.app.bindTalkgroups();
+        f.app.systems.sort(Comparator.comparing(x -> x.name.toLowerCase()));
+        boolean start = startNow.isSelected() && startNow.isEnabled() && !f.running();
+        if (start || f.app.current == null) { f.app.current = s; f.app.settings.setProperty("lastSystem", s.id); f.app.saveSettings(); }
+        f.reloadSystems();
+        f.systemsPage.select(start || f.app.current == s ? s : f.app.current);
+        if (f.rrBanner != null) f.dismissRrOffer();
+        done = true;
+        pendingConv = null;
+        finishText.setText("<html><body style='font-family:sans-serif'><p><b style='color:#2BFF88'>\u2713 " + Util.xml(s.name) + " is ready</b> - "
+                + s.channels.size() + " channel" + (s.channels.size() == 1 ? "" : "s") + ", " + freqs(s.frequencies()) + " MHz.</p>"
+                + (start ? "<p>Monitoring starts now.</p>" : "") + "</body></html>");
+        finishText.setCaretPosition(0);
+        go(4);
+        f.toast("Set up " + s.name + " (" + s.channels.size() + " conventional channels).");
+        if (start) { dispose(); f.show("Monitor"); SwingUtilities.invokeLater(f::startMonitoring); }
+    }
+
     // ------------------------------------------------------------------ tables
     static final class SiteModel extends AbstractTableModel {
         List<Site> sites = new ArrayList<>(); boolean[] on = new boolean[0];
+        boolean conventional;
         final String[] cols = {"", "Site", "Name", "County", "NAC", "Control channels (MHz)", "Modulation"};
+        public String getColumnName(int c) { return c == 5 && conventional ? "Channels (MHz)" : cols[c]; }
         public int getRowCount() { return sites.size(); }
         public int getColumnCount() { return cols.length; }
-        public String getColumnName(int c) { return cols[c]; }
         public Class<?> getColumnClass(int c) { return c == 0 ? Boolean.class : String.class; }
         public boolean isCellEditable(int r, int c) { return c == 0; }
         public Object getValueAt(int r, int c) {
             Site s = sites.get(r);
             return switch (c) {
                 case 0 -> on[r]; case 1 -> s.label(); case 2 -> s.descr(); case 3 -> s.county(); case 4 -> s.nac();
-                case 5 -> { List<Double> cc = s.controlChannels(); yield cc.isEmpty() ? "(none marked - all " + s.freqs().size() + " frequencies)" : freqs(cc); }
+                case 5 -> {
+                    if (conventional) yield freqs(channelFreqs(RrImport.conventionalChannels(List.of(s))));
+                    List<Double> cc = s.controlChannels();
+                    yield cc.isEmpty() ? "(none marked - all " + s.freqs().size() + " frequencies)" : freqs(cc);
+                }
                 default -> s.modulation();
             };
         }
@@ -781,6 +885,7 @@ final class RrWizard extends JDialog {
 
     // ------------------------------------------------------------------ small helpers
     static String freqs(List<Double> l) { StringJoiner j = new StringJoiner(", "); for (double d : l) j.add(RadioSystem.fmt(d)); return l.isEmpty() ? "none" : j.toString(); }
+    static List<Double> channelFreqs(List<RadioSystem.Channel> ch) { List<Double> l = new ArrayList<>(); for (RadioSystem.Channel c : ch) l.add(c.mhz); return l; }
     static JPanel form() { JPanel g = new JPanel(new GridBagLayout()); g.setOpaque(false); return g; }
     static GridBagConstraints gbc() { GridBagConstraints k = new GridBagConstraints(); k.insets = new Insets(5, 4, 5, 8); k.fill = GridBagConstraints.HORIZONTAL; k.anchor = GridBagConstraints.WEST; k.gridy = -1; return k; }
     static void addRow(JPanel g, GridBagConstraints k, String label, JComponent c) {

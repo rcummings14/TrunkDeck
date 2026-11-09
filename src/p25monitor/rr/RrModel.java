@@ -20,14 +20,21 @@ public final class RrModel {
     public record TrsRef(int sid, String name, int sType, int sFlavor, int sVoice, String city) { @Override public String toString() { return name; } }
     /** StateInfo: its counties and statewide trunked systems. */
     public record StateInfo(int stid, String name, List<County> counties, List<TrsRef> systems) {}
-    /** CountyInfo: its trunked systems. */
-    public record CountyInfo(int ctid, String name, int stid, List<TrsRef> systems) {}
+    /** A conventional-frequency subcategory inside a county (getCountyInfo cats / subcats). */
+    public record Subcat(int scid, String category, String name) {}
+    /** CountyInfo: its trunked systems and conventional subcategories (frequencies are fetched separately). */
+    public record CountyInfo(int ctid, String name, int stid, List<TrsRef> systems, List<Subcat> subcats) {}
+    /**
+     * One conventional frequency (getSubcatFreqs). {@code tone} is often the NAC on P25; {@code tg} is a talkgroup
+     * number when RadioReference has one; {@code mode} is the emission (P25, FM, DMR, ...).
+     */
+    public record Freq(int fid, double outMhz, String alpha, String descr, String tone, String tg, String mode, int enc) {}
     /** ZipInfo. */
     public record ZipInfo(int zip, String city, int stid, int ctid) {}
     /** trsSysidDef. */
     public record Sysid(String sysid, String wacn) {}
-    /** Trs (getTrsDetails) plus the type description (getTrsType). */
-    public record TrsDetails(int sid, String name, int sType, int sFlavor, int sVoice, String city, String typeName, List<Sysid> sysids) {}
+    /** Trs (getTrsDetails) plus the type description (getTrsType) and flavor description (getTrsFlavor). */
+    public record TrsDetails(int sid, String name, int sType, int sFlavor, int sVoice, String city, String typeName, String flavorName, List<Sysid> sysids) {}
     /** TrsSiteFreq: use "d" = primary control channel, "a" = alternate control channel, "" = voice. */
     public record SiteFreq(int lcn, double mhz, String use) {
         public boolean control() { return use != null && (use.trim().equalsIgnoreCase("d") || use.trim().equalsIgnoreCase("a")); }

@@ -167,6 +167,24 @@ public final class RrTests {
             check(client(m, MockRr.KEY, MockRr.USER, MockRr.PASS).cacheIn(cache).getStateInfo(99) != null && m.count("getStateInfo") == 2, "Reload lists clears the cache");
             long n0 = m.requests.size(); Thread.sleep(1500);
             check(m.requests.size() == n0, "nothing is fetched in the background");
+
+            System.out.println("Conventional P25 from RadioReference");
+            CountyInfo convCounty = rr.getCountyInfo(9101);
+            check(convCounty.subcats().size() == 1 && convCounty.subcats().get(0).scid() == 8801, "county lists a conventional channel group");
+            List<Freq> raw = rr.getSubcatFreqs(8801);
+            List<RadioSystem.Channel> p25 = RrImport.p25Channels(raw);
+            check(p25.size() == 3 && p25.get(0).mhz == 154.25 && p25.get(0).name.equals("FIRE DISP") && p25.get(0).nac.equals("2D5"), "P25 channels kept, FM left out, NAC from the tone: " + p25);
+            check(p25.get(2).name.equals("FIRE ENC"), "an encrypted P25 channel is still a channel (calls on it are skipped later)");
+            RadioSystem conv = RrImport.fromConventional("Town Fire", raw);
+            check(conv.conventional() && conv.nac.equals("2D5") && conv.channels.size() == 3 && conv.channels.get(0).nac.isEmpty(), "one shared NAC goes on the system, not repeated on every channel");
+            check(conv.find(101) != null && conv.find(101).alphaTag.equals("FIRE DISP") && conv.find(102) != null && conv.find(109) != null && conv.find(109).isEncrypted(), "talkgroups come from the frequencies; encrypted ones stay marked");
+            TrsDetails cd = rr.getTrsDetails(MockRr.CONV_SID);
+            check(cd.typeName().equals("Project 25 Conventional") && cd.flavorName().equals("Conventional") && RrImport.conventionalSystem(cd), "a Project 25 Conventional system is recognized");
+            List<Site> csites = rr.getTrsSites(MockRr.CONV_SID);
+            RadioSystem built = RrImport.build(new RrImport.Fetched(cd, csites, List.of(), List.of()), csites, Set.of(), null);
+            check(built.conventional() && built.frequencies().equals(List.of(154.25, 154.37)) && built.nac.equals("2D5") && built.wacn.isEmpty() && built.sysId.isEmpty(),
+                    "system import uses the fixed channels and does not borrow a trunked WACN: " + built.displayFreqs());
+            check(!RrImport.conventionalSystem(d), "a normal trunked P25 system stays trunked");
         }
 
         System.out.println("App key: where it is found");

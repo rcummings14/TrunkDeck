@@ -18,6 +18,11 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
 * **Native P25 engine** (written in Java from the TIA-102 standards): Phase 1 control channel (C4FM, and LSM/CQPSK for
   simulcast with automatic selection), Phase 1 (IMBE) and Phase 2 TDMA (AMBE+2, both slots) voice, encryption and
   emergency flags, priority, talkgroup mute / lockout, radio-ID names (DSD+ `.radios` or CSV import).
+* **P25 conventional** (untested): save a system of fixed channels (from RadioReference when it lists them, or by typing the
+  name and the frequencies yourself, with an optional NAC). Press Start the same way as a trunked system. TrunkDeck
+  listens on those channels and decodes the P25 voice. Encrypted calls are skipped. P25 conventional has not been tested
+  on a real radio system yet. If something doesn't work, please report it on
+  [GitHub Issues](https://github.com/rcummings14/TrunkDeck/issues).
 * **Receivers:** one **Airspy R2** (about 8.8 MHz at 10 MS/s - often a whole site at once, many calls decoded in parallel)
   and/or one or more **RTL-SDR** dongles (a control dongle plus roaming voice dongles). Own drivers - no SDR# / SDRTrunk.
   New in 1.7.0 and **untested**: **SDRplay**, **HackRF One**, **LimeSDR** and **Ettus USRP** through SoapySDR - see

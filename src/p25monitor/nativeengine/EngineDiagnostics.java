@@ -115,11 +115,15 @@ final class EngineDiagnostics {
             v.id = c.id; v.tg = c.tg; v.src = Math.max(0, c.src); v.alias = c.alias(); v.mhz = c.freq / 1e6; v.durationMs = now - c.start; v.tuner = c.tuner == null ? "-" : "T" + c.tuner.id;
             v.onSpeaker = c == spk; v.audible = e.speaker.audible(c);
             v.encrypted = c.encrypted; v.emergency = c.emergency; v.slot = c.phase2 && c.slot >= 0 ? c.slot + 1 : 0;
-            v.recording = c.vd != null && ((c.t != null && c.t.record) || e.calls.recordAll());
+            boolean live = c.vd != null || (c.conventional && c.voiceFrames > 0 && now - c.lastVoice < 1500);
+            v.recording = live && ((c.t != null && c.t.record) || e.calls.recordAll());
             ChannelDecoder d = c.vd;
             if (d != null && !Double.isNaN(d.syncPower)) v.levelDb = d.syncPower;
+            if ((d == null || Double.isNaN(v.levelDb)) && c.conventional) {
+                for (ChannelDecoder p : e.decodersOn(c.tuner)) if (p.freqHz == c.freq && !Double.isNaN(p.signalDb)) v.levelDb = p.signalDb;
+            }
             if (c.imbeFrames > 0) v.bitsPerFrame = (double) c.imbeErrSum / c.imbeFrames;
-            v.state = c.waiting ? "WAITING FOR TUNER" : c.encrypted ? "ENCRYPTED" : v.audible ? "PLAYING" : c.hang ? "HANG" : c.vd != null && now - c.lastVoice < 800 ? "VOICE" : c.vd != null ? "LISTENING" : "-";
+            v.state = c.waiting ? "WAITING FOR TUNER" : c.encrypted ? "ENCRYPTED" : v.audible ? "PLAYING" : c.hang ? "HANG" : live && now - c.lastVoice < 800 ? "VOICE" : live ? "LISTENING" : "-";
             out.add(v);
         }
         out.sort(Comparator.comparing((CallView v) -> !v.onSpeaker).thenComparing(v -> !v.audible).thenComparingDouble(v -> v.mhz));

@@ -229,6 +229,7 @@ public final class LanTests {
         check(r.code == 200 && r.body.contains("Listen") && r.body.contains(">Start<") && r.body.contains(">Stop<"), "page has Listen, Start and Stop");
         check(r.body.contains("SCANNING") && r.body.contains("ACTIVE CALLS") && r.body.contains("UNIT / RADIO") && r.body.contains("Hold one talkgroup"),
                 "page is laid out like the Monitor");
+        check(r.body.contains("SCAN · CHANNEL") && r.body.contains("SCAN · CONTROL CH"), "conventional systems label the channel, trunked systems the control channel");
         check(r.body.toLowerCase().contains("home network"), "page says it is for the home network");
         check(!r.body.contains("home-pin") && !r.body.toLowerCase().contains("password123"), "page does not contain a password");
         check(!r.body.contains("RadioReference"), "page does not mention RadioReference");

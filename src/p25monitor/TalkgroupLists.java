@@ -31,9 +31,13 @@ public final class TalkgroupLists {
         catch (NumberFormatException e) { return ""; }
     }
 
-    /** True when the two sites belong to one radio system. A site is never "the same" as itself. */
+    /**
+     * True when the two sites belong to one trunked radio system. A site is never "the same" as itself.
+     * A conventional system keeps its own talkgroup list, even when a WACN, System ID or RadioReference id matches.
+     */
     public static boolean sameSystem(RadioSystem a, RadioSystem b) {
         if (a == null || b == null || a == b) return false;
+        if (a.conventional() || b.conventional()) return false;
         String pa = p25Key(a), pb = p25Key(b);
         if (!pa.isEmpty() && pa.equals(pb)) return true;
         return a.rrSid > 0 && a.rrSid == b.rrSid;

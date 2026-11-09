@@ -17,6 +17,9 @@ public final class TalkgroupShareTests {
         memory();
         disk();
         check(HelpPage.guideHtml().contains("share one talkgroup list"), "in-app help explains the shared list");
+        check(HelpPage.guideHtml().contains("P25 conventional has not been tested on a real radio system yet")
+                && HelpPage.guideHtml().contains("https://github.com/rcummings14/TrunkDeck/issues"),
+                "help says conventional P25 is untested and where to report problems");
         check(Jargon.tip("WACN").contains("share one talkgroup list") && Jargon.tip("Sys ID").contains("share one talkgroup list"), "WACN and System ID tips mention the shared list");
         System.out.println("TalkgroupShareTests: " + pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);
@@ -64,6 +67,9 @@ public final class TalkgroupShareTests {
         check(!TalkgroupLists.sameSystem(rrZero, rrZero2) && !TalkgroupLists.sameSystem(rr, site("x", "y", "", "", 0)), "RadioReference id 0 is not an id");
         check(TalkgroupLists.sameSystem(a, rrZero2), "a site with only the P25 id still matches the site that has that WACN and System ID");
         check(!TalkgroupLists.sameSystem(a, a), "a site is not paired with itself");
+        RadioSystem conv = site("Town Fire", "Repeater", "B1001", "2A1", 424242);
+        conv.kind = RadioSystem.CONVENTIONAL;
+        check(!TalkgroupLists.sameSystem(a, conv) && !TalkgroupLists.sameSystem(rr, conv), "a conventional system keeps its own talkgroup list");
     }
 
     static void mergeRules() {
