@@ -17,6 +17,9 @@ public final class TalkgroupShareTests {
         memory();
         disk();
         check(HelpPage.guideHtml().contains("share one talkgroup list"), "in-app help explains the shared list");
+        check(HelpPage.guideHtml().contains("P25 conventional has not been tested on a real radio system yet")
+                && HelpPage.guideHtml().contains("https://github.com/rcummings14/TrunkDeck/issues"),
+                "help says conventional P25 is untested and where to report problems");
         check(Jargon.tip("WACN").contains("share one talkgroup list") && Jargon.tip("Sys ID").contains("share one talkgroup list"), "WACN and System ID tips mention the shared list");
         System.out.println("TalkgroupShareTests: " + pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);

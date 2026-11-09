@@ -10,7 +10,10 @@ public class SystemsPage extends JPanel {
     final MainFrame f;
     final DefaultListModel<RadioSystem> listModel = new DefaultListModel<>();
     final JList<RadioSystem> list = new JList<>(listModel);
-    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels)"});
+    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)"});
+    /** Shown under Kind, the same way an untested receiver is marked on the Engine page. */
+    final JLabel untestedNote = new JLabel("<html><span style='color:#FFB300;font-size:11px'>P25 conventional has not been tested on a real radio system yet. If something doesn't work, please report it on GitHub Issues ("
+            + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").</span></html>");
     final JTextField name = new JTextField(), site = new JTextField(), cc = new JTextField(), nac = new JTextField(), wacn = new JTextField(),
             sysId = new JTextField(), rfss = new JTextField(), siteNo = new JTextField(), tuner = new JTextField();
     final JLabel freqLabel = new JLabel("Control channel(s) MHz");
@@ -81,7 +84,12 @@ public class SystemsPage extends JPanel {
         cc.setFont(Theme.mono(Font.BOLD, 15f));
         tuner.putClientProperty("JTextField.placeholderText", "optional - e.g. Airspy 0x26A464DC2B5A7C9F (see Setup & Help \u2192 Tuners)");
         kindBox.addActionListener(e -> showKind(kindBox.getSelectedIndex() == 1));
-        y = row(g, c, y, "Kind", kindBox, "Trunked follows a control channel. Conventional stays on the frequencies you type — there is no control channel.");
+        y = row(g, c, y, "Kind", kindBox, "Trunked follows a control channel. Conventional stays on the frequencies you type. There is no control channel.");
+        c.gridy = y; c.gridx = 1; c.weightx = 1; c.gridwidth = 1;
+        c.insets = new Insets(0, 4, 8, 8);
+        g.add(untestedNote, c);
+        c.insets = new Insets(5, 4, 5, 8);
+        y++;
         y = row(g, c, y, "System name", name, null);
         y = row(g, c, y, "Site name", site, null);
         y = freqRow(g, c, y);
