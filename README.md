@@ -66,7 +66,7 @@ Download the file for your system from the [Releases](../../releases) page.
 
 ### Windows 10/11 (64-bit)
 
-1. Unzip **`TrunkDeck-1.7.3-windows.zip`**, open `TrunkDeck\windows` and double-click **`Install.bat`**
+1. Unzip **`TrunkDeck-1.7.4-windows.zip`**, open `TrunkDeck\windows` and double-click **`Install.bat`**
    (SmartScreen: *More info → Run anyway*). It downloads the Eclipse Temurin Java runtime into TrunkDeck's own folder
    (checksum-verified) and adds Start Menu and Desktop shortcuts. Installs for your user only, no admin rights needed.
 2. **USB driver (once per receiver):** run [Zadig](https://zadig.akeo.ie), *Options → List All Devices*, pick the
@@ -79,7 +79,7 @@ Uninstall: *Settings → Apps → TrunkDeck*.
 ### Linux (Fedora, Ubuntu, Debian, Mint, Arch, Raspberry Pi OS 64-bit)
 
 ```bash
-tar xzf TrunkDeck-1.7.3-linux.tar.gz
+tar xzf TrunkDeck-1.7.4-linux.tar.gz
 cd TrunkDeck/linux
 ./install.sh
 ```
