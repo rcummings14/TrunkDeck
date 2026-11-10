@@ -18,6 +18,8 @@ streams.properties
 
 # Optional local test recordings (README: never committed).
 samples/
+# Real DMR IQ captures for DmrCapture (-Ddmr.captures). Licenses are unknown.
+dmr-captures/
 
 # Folders created when you build or package the app. Not part of the source tree.
 build/

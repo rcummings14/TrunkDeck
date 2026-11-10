@@ -13,10 +13,18 @@ public final class Fsk4Demod {
     private final float[] box = new float[SPS];
     private int boxPos, samp;
     private float boxSum;
+    /** Multiplies the ETSI deviations. Some recordings measure about twice ±648 / ±1944 Hz. */
+    private float gain = 1f;
+    /** Added to every symbol, in Hz. Tracks a carrier that is not exactly on the channel centre. */
+    private float offset;
 
     public Fsk4Demod(DmrFramer framer) { this.framer = framer; }
 
-    public void reset() { pi = 1; pq = 0; boxPos = 0; samp = 0; boxSum = 0; java.util.Arrays.fill(box, 0); framer.reset(); }
+    public void reset() {
+        pi = 1; pq = 0; boxPos = 0; samp = 0; boxSum = 0; gain = 1f; offset = 0;
+        java.util.Arrays.fill(box, 0);
+        framer.reset();
+    }
 
     public void process(float[] i, float[] q, int n) {
         for (int k = 0; k < n; k++) step(i[k], q[k]);
@@ -30,7 +38,22 @@ public final class Fsk4Demod {
         box[boxPos] = hz;
         if (++boxPos == SPS) boxPos = 0;
         if ((++samp % SPS) != 0) return;
-        framer.dibit(slice(boxSum / SPS));
+        float sym = boxSum / SPS;
+        float unit = Math.max(200f, gain * DEV);
+        float[] pred = {offset - 3 * unit, offset - unit, offset + unit, offset + 3 * unit};
+        int nearest = 0;
+        float best = Math.abs(sym - pred[0]);
+        for (int k = 1; k < 4; k++) {
+            float d = Math.abs(sym - pred[k]);
+            if (d < best) { best = d; nearest = k; }
+        }
+        float err = sym - pred[nearest];
+        // A small carrier error shifts every level together. Deviation scale stays at the ETSI values;
+        // recordings whose raw hertz are about twice that still fall on the same side of the ±2·648 Hz fences.
+        if (Math.abs(err) < unit) offset += 0.02f * err;
+        if (offset > 1500) offset = 1500;
+        if (offset < -1500) offset = -1500;
+        framer.dibit(switch (nearest) { case 0 -> 3; case 1 -> 2; case 3 -> 1; default -> 0; });
     }
 
     /** +3 → 01, +1 → 00, −1 → 10, −3 → 11. */

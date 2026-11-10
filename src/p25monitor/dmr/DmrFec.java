@@ -242,7 +242,9 @@ public final class DmrFec {
         // 9 rows × 11 data columns. Row 0 starts with R2, R1, R0 then I(95)..I(88).
         int[] row = new int[9];
         boolean[] data = new boolean[99];
-        for (int i = 0; i < 96; i++) data[3 + i] = info96[95 - i]; // I(95) first after the three reserved bits
+        // Bit 0 of the 96 is the first information bit (PF of an LC). On the air that bit sits at the I(0) end of figure B.1;
+        // a real voice LC header only passes the Reed-Solomon check with this order.
+        for (int i = 0; i < 96; i++) data[3 + i] = info96[i];
         for (int r = 0; r < 9; r++) {
             int info = 0;
             for (int c = 0; c < 11; c++) info = (info << 1) | (data[r * 11 + c] ? 1 : 0);
@@ -277,7 +279,7 @@ public final class DmrFec {
         boolean[] data = new boolean[99];
         for (int r = 0; r < 9; r++) for (int c = 0; c < 11; c++) data[r * 11 + c] = ((row[r] >> (10 - c)) & 1) == 1;
         boolean[] info = new boolean[96];
-        for (int i = 0; i < 96; i++) info[95 - i] = data[3 + i];
+        for (int i = 0; i < 96; i++) info[i] = data[3 + i];
         return info;
     }
 }

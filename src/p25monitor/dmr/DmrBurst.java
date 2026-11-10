@@ -91,9 +91,9 @@ public final class DmrBurst {
         boolean[] lc = new boolean[72];
         DmrBits.write(lc, 2, flco, 6);
         DmrBits.write(lc, 8, fid, 8);
-        DmrBits.write(lc, 16, target, 24);
-        DmrBits.write(lc, 40, source, 24);
-        if (encrypted) lc[64] = true;
+        DmrBits.write(lc, 24, target, 24);
+        DmrBits.write(lc, 48, source, 24);
+        if (encrypted) lc[17] = true;
         return DmrFec.fullLc(lc, mask);
     }
 

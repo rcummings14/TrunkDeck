@@ -30,8 +30,10 @@ public final class DmrLc {
     }
 
     static DmrLc fields(boolean[] info96, boolean ok) {
+        // Full LC: PF, reserved, FLCO, FID, then the service-options octet (privacy is its second bit),
+        // then a 24-bit destination and a 24-bit source. A real header with radio 1473 only lines up this way.
         return new DmrLc(DmrBits.read(info96, 2, 6), DmrBits.read(info96, 8, 8),
-                DmrBits.read(info96, 16, 24), DmrBits.read(info96, 40, 24), info96[64], ok);
+                DmrBits.read(info96, 24, 24), DmrBits.read(info96, 48, 24), info96.length > 17 && info96[17], ok);
     }
 
     public boolean group() { return ok && flco == GROUP && !encrypted; }

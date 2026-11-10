@@ -90,9 +90,9 @@ public class DmrTests {
         int plain = DmrFec.crcCcitt(csbk, 0, 80);
         check((masked ^ DmrFec.MASK_CSBK) == plain, "CSBK CRC is masked with A5A5");
         boolean[] info96 = new boolean[96];
-        info96[95] = true;
+        info96[0] = true;
         boolean[] tx = DmrFec.bptcEncode(info96);
-        check(tx[136], "BPTC puts I(95) at interleave index 136 (table B.3, TX 59)");
+        check(tx[136], "BPTC puts the first information bit at interleave index 136");
         boolean[] back = DmrFec.bptcDecode(tx);
         boolean same = true;
         for (int i = 0; i < 96; i++) if (back[i] != info96[i]) same = false;
@@ -119,14 +119,14 @@ public class DmrTests {
         boolean[] info = DmrBurst.linkControl(DmrLc.GROUP, 0, 100, 7, false);
         DmrLc lc = DmrLc.parse(info);
         check(lc.group() && lc.target == 100 && lc.source == 7, "group call TG 100 from radio 7");
-        info[64] = true;
+        info[17] = true;
         DmrBurst.sealLc(info, DmrFec.MASK_VOICE_LC);
         check(DmrLc.parse(info).encrypted && !DmrLc.parse(info).group(), "encrypted group call is flagged and not played");
         boolean[] alias = DmrBurst.linkControl(DmrLc.ALIAS_HEADER, 0, 0, 7, false);
-        DmrBits.write(alias, 16, 0, 24);
+        DmrBits.write(alias, 24, 0, 24);
         long packed = (('S' - 32L) << 36) | (('A' - 32L) << 30) | (('M' - 32L) << 24);
-        DmrBits.write(alias, 16, (int) (packed >>> 24), 24);
-        DmrBits.write(alias, 40, (int) (packed & 0xFFFFFF), 24);
+        DmrBits.write(alias, 24, (int) (packed >>> 24), 24);
+        DmrBits.write(alias, 48, (int) (packed & 0xFFFFFF), 24);
         DmrBurst.sealLc(alias, DmrFec.MASK_VOICE_LC);
         check("SAM".equals(DmrLc.parse(alias).alias()), "talker alias letters");
     }
@@ -134,8 +134,8 @@ public class DmrTests {
     static void embedded() {
         boolean[] lc = new boolean[72];
         DmrBits.write(lc, 2, DmrLc.GROUP, 6);
-        DmrBits.write(lc, 16, 100, 24);
-        DmrBits.write(lc, 40, 7, 24);
+        DmrBits.write(lc, 24, 100, 24);
+        DmrBits.write(lc, 48, 7, 24);
         boolean[][] frag = DmrEmbedded.fragments(lc);
         check(frag[0][0] == lc[0], "embedded fragment B starts with LC(71)");
         frag[1][4] = !frag[1][4];
