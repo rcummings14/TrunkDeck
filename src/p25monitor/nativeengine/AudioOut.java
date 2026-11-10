@@ -99,7 +99,7 @@ public final class AudioOut {
         PcmTap tap = pcmTap;
         if (tap != null) {
             int m = Math.min(n, s.length);
-            float[] copy = java.util.Arrays.copyOf(s, m);
+            float[] copy = p25monitor.TouchControls.silenceAll ? new float[m] : java.util.Arrays.copyOf(s, m);
             try { tap.pcm(copy, m); } catch (Throwable ignored) {}
         }
         synchronized (q) {
@@ -185,7 +185,7 @@ public final class AudioOut {
                     framesPlayed++;
                 } else f = SILENCE;
             }
-            float g = muted ? 0 : volume;
+            float g = p25monitor.TouchControls.outputGain(muted, p25monitor.TouchControls.silenceAll, volume);
             for (int i = 0; i < FRAME; i++) {
                 float v = f[i] * g;
                 out[i] = v > 0.98f ? 0.98f : v < -0.98f ? -0.98f : v;

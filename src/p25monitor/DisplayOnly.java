@@ -3,6 +3,8 @@ package p25monitor;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -34,6 +36,13 @@ final class DisplayOnly {
     final JPopupMenu menu = new JPopupMenu();
     final JMenuItem fullItem = new JMenuItem("Full window"), trayItem = new JMenuItem("Minimize to tray"), quitItem = new JMenuItem("Quit");
     final JCheckBoxMenuItem onTopItem = new JCheckBoxMenuItem("Always on top"), muteItem = new JCheckBoxMenuItem("Mute speaker");
+    final JPanel touchBar = new JPanel(new GridLayout(1, 4, 8, 0));
+    final JButton muteAllBtn = touchButton("Mute all");
+    final JButton muteTgBtn = touchButton("Mute talkgroup");
+    final JButton holdBtn = touchButton("Hold");
+    final JComboBox<String> mutedList = new JComboBox<>();
+    final List<Integer> mutedIds = new ArrayList<>();
+    boolean fillingList;
     /** Saves the remembered size / position a moment after the last move (not on every pixel). */
     final javax.swing.Timer saveLater;
     Point dragFrom, frameFrom;
@@ -78,6 +87,34 @@ final class DisplayOnly {
         trayItem.addActionListener(e -> { if (!f.tray.hideToTray()) f.toast("No system tray on this desktop"); });
         quitItem.addActionListener(e -> f.quit());
         menu.add(fullItem); menu.add(onTopItem); menu.add(muteItem); menu.add(trayItem); menu.addSeparator(); menu.add(quitItem);
+        touchBar.setOpaque(false);
+        touchBar.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        touchBar.setName("touchBar");
+        muteAllBtn.setName("touchMuteAll");
+        muteTgBtn.setName("touchMuteTg");
+        holdBtn.setName("touchHold");
+        mutedList.setName("touchMutedList");
+        muteAllBtn.setToolTipText("Silence everything you hear. Calls are still decoded, logged, recorded and streamed.");
+        muteTgBtn.setToolTipText("Mute the talkgroup on the display, or the latest call if the display is idle. It stays muted everywhere.");
+        holdBtn.setToolTipText("Stay on the talkgroup that is on the air, and ignore other talkgroups, until you tap again. Not remembered after a restart.");
+        mutedList.setToolTipText("Talkgroups muted from this button. Tap one to unmute it.");
+        Font listFont = UIManager.getFont("Label.font");
+        mutedList.setFont(listFont == null ? new Font(Font.SANS_SERIF, Font.BOLD, 16) : listFont.deriveFont(Font.BOLD, 16f));
+        mutedList.addActionListener(e -> {
+            if (fillingList) return;
+            int i = mutedList.getSelectedIndex();
+            if (i <= 0 || i > mutedIds.size()) return;
+            int id = mutedIds.get(i - 1);
+            String why = f.touchUnmute(id);
+            if (why != null) f.toast(why);
+            refreshTouch();
+        });
+        muteAllBtn.addActionListener(e -> { f.touchMuteAll(!f.touch.muteAll()); refreshTouch(); });
+        muteTgBtn.addActionListener(e -> { String why = f.touchMuteTalkgroup(); if (why != null) f.toast(why); refreshTouch(); });
+        holdBtn.addActionListener(e -> { String why = f.touchHoldToggle(); if (why != null) f.toast(why); refreshTouch(); });
+        touchBar.add(muteAllBtn); touchBar.add(muteTgBtn); touchBar.add(holdBtn); touchBar.add(mutedList);
+        root.add(touchBar, BorderLayout.SOUTH);
+        refreshTouch();
         // keys while the display is shown: Esc = full window, M = mute (as on the Monitor page)
         InputMap im = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         im.put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "fullWindow");
@@ -128,6 +165,7 @@ final class DisplayOnly {
         if (Toolkit.getDefaultToolkit().isAlwaysOnTopSupported()) f.setAlwaysOnTop(onTop());
         root.revalidate(); updateZoom(); root.repaint();
         f.host.showWindow();
+        refreshTouch();
         SwingUtilities.invokeLater(root::requestFocusInWindow);
     }
 
@@ -154,10 +192,51 @@ final class DisplayOnly {
     /** The display's size follows the window: 1 at its size in the main window, larger or smaller with the window. */
     void updateZoom() {
         if (!on) return;
-        int w = root.getWidth(), h = root.getHeight();
+        int w = f.display.getWidth(), h = f.display.getHeight();
+        if (w <= 0 || h <= 0) { w = root.getWidth(); h = Math.max(0, root.getHeight() - touchBar.getPreferredSize().height); }
         if (w <= 0 || h <= 0) return;
         f.display.zoom = zoomFor(w, h);
         f.display.repaint();
+    }
+
+    static JButton touchButton(String text) {
+        JButton b = new JButton(text);
+        Font base = UIManager.getFont("Label.font");
+        if (base == null) base = new Font(Font.SANS_SERIF, Font.PLAIN, 16);
+        b.setFont(base.deriveFont(Font.BOLD, 16f));
+        b.setFocusPainted(false);
+        b.setPreferredSize(new Dimension(160, 56));
+        b.setMargin(new Insets(10, 12, 10, 12));
+        return b;
+    }
+
+    /** Button labels and the muted list, from the shared touch state. */
+    void refreshTouch() {
+        boolean all = f.touch.muteAll();
+        muteAllBtn.setText(all ? "All muted" : "Mute all");
+        muteAllBtn.setBackground(all ? Theme.RED : Theme.PANEL2);
+        muteAllBtn.setForeground(all ? Color.WHITE : Theme.TEXT);
+        boolean holding = f.touch.hold();
+        holdBtn.setText(holding ? "Holding" : "Hold");
+        holdBtn.setBackground(holding ? Theme.AMBER : Theme.PANEL2);
+        holdBtn.setForeground(holding ? Color.BLACK : Theme.TEXT);
+        fillingList = true;
+        mutedIds.clear();
+        mutedList.removeAllItems();
+        java.util.List<Talkgroup> rows = TouchControls.listed(f.app.current);
+        if (rows.isEmpty()) {
+            mutedList.addItem("No muted talkgroups");
+            mutedList.setEnabled(false);
+        } else {
+            mutedList.setEnabled(true);
+            mutedList.addItem("Muted list");
+            for (Talkgroup t : rows) {
+                mutedIds.add(t.decimal);
+                mutedList.addItem(t.displayName() + "  " + t.decimal);
+            }
+        }
+        mutedList.setSelectedIndex(0);
+        fillingList = false;
     }
 
     static double zoomFor(int w, int h) { return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.min(h / (double) BASE_H, w / (double) BASE_W))); }

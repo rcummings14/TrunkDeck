@@ -319,6 +319,22 @@ final class LanCard {
             public void setSpeakerMuted(boolean muted) {
                 onEdt(() -> { if (muted != f.nativeEngine.speakerMuted()) f.monitor.toggleSpeakerMute(); });
             }
+            public void setTouchMuteAll(boolean on) { onEdt(() -> f.touchMuteAll(on)); }
+            public String touchMuteTalkgroup() {
+                String[] why = {null};
+                onEdt(() -> why[0] = f.touchMuteTalkgroup());
+                return why[0];
+            }
+            public String touchHold() {
+                String[] why = {null};
+                onEdt(() -> why[0] = f.touchHoldToggle());
+                return why[0];
+            }
+            public boolean touchUnmute(int id) {
+                boolean[] ok = {false};
+                onEdt(() -> ok[0] = f.touchUnmute(id) == null);
+                return ok[0];
+            }
             public LanServer.Snapshot now() {
                 LanServer.Snapshot[] box = new LanServer.Snapshot[1];
                 onEdt(() -> box[0] = snapshot());
@@ -376,6 +392,15 @@ final class LanCard {
         s.holdTg = eng.holdTg();
         s.volume = eng.speakerVolume();
         s.speakerMuted = eng.speakerMuted();
+        f.touchReconcileHold();
+        s.touchMuteAll = f.touch.muteAll();
+        s.touchHold = f.touch.hold();
+        for (Talkgroup t : TouchControls.listed(sys)) {
+            LanServer.TouchRow row = new LanServer.TouchRow();
+            row.id = t.decimal;
+            row.name = t.displayName();
+            s.touchMuted.add(row);
+        }
         int decoding = 0;
         for (CallView c : s.monitoring ? eng.activeCalls() : java.util.List.<CallView>of()) {
             if (c.state == null || !c.state.startsWith("WAITING")) decoding++;
@@ -400,6 +425,8 @@ final class LanCard {
             }
         }
         synchronized (recent) { s.recent.addAll(recent); }
+        s.autoStartIn = f.autoStartSeconds();
+        s.autoStartName = f.autoStartName() == null ? "" : f.autoStartName();
         return s;
     }
 

@@ -57,6 +57,10 @@ public class MainFrame extends JFrame {
     final Tray.Host host = trayHost();
     /** The process exit at the end of quit(); tests replace it. */
     static java.util.function.IntConsumer exitHook = System::exit;
+    /** Launch auto-start countdown. Null when it is not running. */
+    javax.swing.Timer autoStartTimer;
+    int autoStartLeft;
+    RadioSystem autoStartTarget;
 
     public MainFrame(App app) {
         super(App.NAME + " \u2014 P25 Trunking Monitor");
@@ -443,6 +447,7 @@ public class MainFrame extends JFrame {
     }
 
     void selectSystem(RadioSystem s) {
+        cancelAutoStart();
         boolean wasRunning = running();
         if (wasRunning && JOptionPane.showConfirmDialog(this, "Switch to \"" + s.name + "\"? Monitoring will restart.", App.NAME,
                 JOptionPane.OK_CANCEL_OPTION) != JOptionPane.OK_OPTION) { systemBox.setSelectedItem(app.current); return; }
@@ -483,8 +488,72 @@ public class MainFrame extends JFrame {
         RadioSystem s = app.current;
         if (s == null) return;
         nativeEngine.updateTalkgroups(s.talkgroups);
+        TouchControls.reconcile(app);
+        if (displayOnly != null) displayOnly.refreshTouch();
         tgPending.add(s);
         tgSaveTimer.restart();
+    }
+
+    /** Touch buttons (Display only and the home-network page). Not shown on the main Monitor window. */
+    final TouchControls touch = new TouchControls();
+
+    String touchMuteAll(boolean on) {
+        touch.setMuteAll(on);
+        if (displayOnly != null) displayOnly.refreshTouch();
+        return null;
+    }
+
+    /** Mute the talkgroup on the display, or the latest call when the display is idle. */
+    String touchMuteTalkgroup() {
+        int id = monitor == null ? -1 : monitor.touchMuteTarget();
+        if (id <= 0 || app.current == null) return "No talkgroup to mute.";
+        Talkgroup t = monitor.tgFor(id);
+        RadioSystem s = app.current;
+        if (s.find(t.decimal) == null) {
+            if (t.alphaTag == null || t.alphaTag.isBlank()) t.alphaTag = "TG " + t.decimal;
+            if ("(not in list)".equals(t.category)) t.category = "";
+            s.talkgroups.add(t);
+            unlisted.remove(t.decimal);
+        }
+        TouchControls.markMuted(t);
+        talkgroupsEdited();
+        return null;
+    }
+
+    String touchHoldToggle() {
+        touch.releaseHoldIfChanged(nativeEngine.speakerMode() == p25monitor.nativeengine.NativeEngine.SpeakerMode.HOLD, nativeEngine.holdTg());
+        if (!touch.hold()) {
+            int id = monitor == null ? -1 : monitor.touchHoldTarget();
+            String why = touch.toggleHold(id);
+            if (why != null) return why;
+            nativeEngine.setSpeakerMode(p25monitor.nativeengine.NativeEngine.SpeakerMode.HOLD, touch.holdTg(), false);
+        } else {
+            touch.toggleHold(-1);
+            restoreSavedSpeaker();
+        }
+        if (monitor != null) monitor.showSpeakerMode();
+        if (displayOnly != null) displayOnly.refreshTouch();
+        return null;
+    }
+
+    void restoreSavedSpeaker() {
+        p25monitor.nativeengine.NativeEngine.SpeakerMode m;
+        try { m = p25monitor.nativeengine.NativeEngine.SpeakerMode.valueOf(app.settings.getProperty("native.speaker", "PRIORITY")); }
+        catch (Exception e) { m = p25monitor.nativeengine.NativeEngine.SpeakerMode.PRIORITY; }
+        int tg = -1;
+        try { tg = Integer.parseInt(app.settings.getProperty("native.holdTg", "-1").trim()); } catch (Exception ignored) {}
+        nativeEngine.setSpeakerMode(m, m == p25monitor.nativeengine.NativeEngine.SpeakerMode.HOLD ? tg : -1, false);
+    }
+
+    String touchUnmute(int id) {
+        String why = TouchControls.unmute(app.current, id);
+        if (why != null) return why;
+        talkgroupsEdited();
+        return null;
+    }
+
+    void touchReconcileHold() {
+        touch.releaseHoldIfChanged(nativeEngine.speakerMode() == p25monitor.nativeengine.NativeEngine.SpeakerMode.HOLD, nativeEngine.holdTg());
     }
 
     /** Saves the edited talkgroup lists now; wait = until written (exit). */
@@ -531,6 +600,7 @@ public class MainFrame extends JFrame {
 
     // ------------------------------------------------------------------ engine
     void startMonitoring() {
+        dismissAutoStart();
         RadioSystem s = app.current;
         if (s == null) { show("Systems"); toast("Add a system first."); return; }
         if (s.frequencies().isEmpty()) { show("Systems"); toast(s.conventional() ? "Enter at least one channel frequency for " + s.name + "." : "Enter the control channel frequency for " + s.name + "."); return; }
@@ -565,6 +635,7 @@ public class MainFrame extends JFrame {
     }
 
     void stopMonitoring() {
+        cancelAutoStart();
         userStopped = true;
         setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
         nativeEngine.stop();
@@ -630,6 +701,7 @@ public class MainFrame extends JFrame {
     void toast(String msg) { footer.setText(msg); }
 
     void quit() {
+        cancelAutoStart();
         setTitle(App.NAME + " \u2014 stopping\u2026");
         saveTalkgroupsNow(true);
         if (lanCard != null) lanCard.shutdown();
@@ -640,6 +712,89 @@ public class MainFrame extends JFrame {
         tray.dispose();
         dispose();
         exitHook.accept(0);
+    }
+
+    // ------------------------------------------------------------------ auto-start on launch
+    /**
+     * If a system is marked Auto-start, show the Monitor page and count down, then start it the same way
+     * as the Start button. No click is needed. Cancel stops the countdown and leaves monitoring off.
+     * A failed start shows the usual message and is not retried.
+     */
+    void maybeBeginAutoStart() {
+        if (autoStartTimer != null && autoStartTimer.isRunning()) return;
+        RadioSystem s = app.autoStartSystem();
+        if (s == null || running()) return;
+        if (app.current != s) {
+            app.current = s;
+            app.settings.setProperty("lastSystem", s.id);
+            app.saveSettings();
+            unlisted.clear();
+            loadingBox = true;
+            systemBox.setSelectedItem(s);
+            loadingBox = false;
+            applySystemToPages();
+        }
+        show("Monitor");
+        autoStartTarget = s;
+        autoStartLeft = App.AUTO_START_SECONDS;
+        if (monitor != null) monitor.showAutoStart(s.name, autoStartLeft);
+        autoStartTimer = new javax.swing.Timer(1000, e -> autoStartTick());
+        autoStartTimer.start();
+    }
+
+    void autoStartTick() {
+        autoStartLeft--;
+        RadioSystem s = autoStartTarget;
+        if (s == null || autoStartLeft <= 0) {
+            finishAutoStart();
+            return;
+        }
+        if (monitor != null) monitor.showAutoStart(s.name, autoStartLeft);
+    }
+
+    /** Seconds left on the launch countdown, or 0 if none is running. Used by the home-network page. */
+    int autoStartSeconds() {
+        return autoStartTimer != null && autoStartTimer.isRunning() ? Math.max(0, autoStartLeft) : 0;
+    }
+
+    String autoStartName() { return autoStartTarget == null ? "" : autoStartTarget.name; }
+
+    /** Cancel the countdown and do not start. Safe to call when no countdown is running. */
+    void cancelAutoStart() {
+        boolean was = autoStartTimer != null && autoStartTimer.isRunning();
+        dismissAutoStart();
+        if (was) toast("Auto-start cancelled.");
+    }
+
+    /** Hide the countdown without starting and without a cancelled message (Start was pressed, or it finished). */
+    void dismissAutoStart() {
+        stopAutoStartTimer();
+        autoStartTarget = null;
+        autoStartLeft = 0;
+        if (monitor != null) monitor.hideAutoStart();
+    }
+
+    /** Countdown finished: start the marked system once, the same way as the Start button. */
+    void finishAutoStart() {
+        RadioSystem s = autoStartTarget;
+        stopAutoStartTimer();
+        autoStartTarget = null;
+        autoStartLeft = 0;
+        if (monitor != null) monitor.hideAutoStart();
+        if (s == null || running()) return;
+        // startMonitoring() also calls cancelAutoStart(); the timer is already stopped, so that is a no-op
+        if (app.current != s) {
+            app.current = s;
+            loadingBox = true;
+            systemBox.setSelectedItem(s);
+            loadingBox = false;
+            applySystemToPages();
+        }
+        startMonitoring();
+    }
+
+    void stopAutoStartTimer() {
+        if (autoStartTimer != null) { autoStartTimer.stop(); autoStartTimer = null; }
     }
 
     // ------------------------------------------------------------------ 1.6.0: RadioReference offer on first run

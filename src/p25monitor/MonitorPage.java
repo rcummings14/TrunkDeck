@@ -60,12 +60,30 @@ public class MonitorPage extends JPanel {
     final JButton customize = new JButton("Colors\u2026");
     final JCheckBox tintApp = new JCheckBox("Tint the whole app in these colours");
     final JComboBox<String> speakerBox = new JComboBox<>(new String[]{"One call at a time (priority)", "Mix all calls", "Hold one talkgroup", "Queue all calls (one after another)"});
+    /** Countdown shown when a system will auto-start after TrunkDeck opens. Hidden otherwise. */
+    final JPanel autoStartBar = new JPanel(new BorderLayout(12, 0));
+    final JLabel autoStartLbl = new JLabel();
+    final JButton autoStartCancel = MainFrame.button("Cancel", Theme.Glyph.STOP, Theme.AMBER);
 
     MonitorPage(MainFrame f) {
         super(new BorderLayout(0, 12));
         this.f = f;
         setBackground(Theme.BG);
-        add(f.display, BorderLayout.NORTH);
+        autoStartBar.setOpaque(true);
+        autoStartBar.setBackground(new Color(0x1A2A22));
+        autoStartBar.setBorder(new CompoundBorder(new LineBorder(Theme.GREEN, 1, true), new EmptyBorder(8, 12, 8, 12)));
+        autoStartLbl.setFont(Theme.ui(Font.BOLD, 15f));
+        autoStartLbl.setForeground(Theme.GREEN);
+        autoStartCancel.setToolTipText("Do not start this system automatically");
+        autoStartCancel.addActionListener(e -> f.cancelAutoStart());
+        autoStartBar.add(autoStartLbl, BorderLayout.CENTER);
+        autoStartBar.add(autoStartCancel, BorderLayout.EAST);
+        autoStartBar.setVisible(false);
+        JPanel north = new JPanel(new BorderLayout(0, 8));
+        north.setOpaque(false);
+        north.add(autoStartBar, BorderLayout.NORTH);
+        north.add(f.display, BorderLayout.CENTER);
+        add(north, BorderLayout.NORTH);
 
         // live log
         JPanel logCard = MainFrame.card("Live call log");
@@ -625,7 +643,31 @@ public class MonitorPage extends JPanel {
         table.repaint();
     }
 
+    /** The talkgroup to mute from the touch button: the one on the display, or the latest call if the display is idle. */
+    int touchMuteTarget() {
+        int shown = f.display.shownTalkgroup();
+        if (shown > 0) return shown;
+        for (Row r : live.rows) if (r.e != null && r.e.isVoiceCall() && r.e.talkgroup > 0) return r.e.talkgroup;
+        return currentTg == null ? -1 : currentTg.decimal;
+    }
+
+    /** The talkgroup to hold: only the one on the air right now. */
+    int touchHoldTarget() { return f.display.shownTalkgroup(); }
+
     void updated() { live.fireTableDataChanged(); }
+
+    void showAutoStart(String name, int seconds) {
+        autoStartLbl.setText(App.autoStartMessage(name, seconds));
+        autoStartBar.setVisible(true);
+        revalidate();
+        repaint();
+    }
+
+    void hideAutoStart() {
+        autoStartBar.setVisible(false);
+        revalidate();
+        repaint();
+    }
 
     void reset() { live.rows.clear(); live.fireTableDataChanged(); hotModel.clear(); focus(null); }
 

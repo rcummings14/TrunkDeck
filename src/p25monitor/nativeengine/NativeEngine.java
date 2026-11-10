@@ -982,10 +982,18 @@ public final class NativeEngine {
     }
 
     // ------------------------------------------------------------------ public API for the UI
-    public void setSpeakerMode(SpeakerMode m, int tg) {
+    public void setSpeakerMode(SpeakerMode m, int tg) { setSpeakerMode(m, tg, true); }
+
+    /**
+     * @param save false for the Display only / home-network Hold button, which is temporary and must not be
+     *             remembered the next time TrunkDeck opens
+     */
+    public void setSpeakerMode(SpeakerMode m, int tg, boolean save) {
         speaker.setMode(m, tg);
-        app.settings.setProperty("native.speaker", m.name());
-        app.settings.setProperty("native.holdTg", String.valueOf(tg));
+        if (save) {
+            app.settings.setProperty("native.speaker", m.name());
+            app.settings.setProperty("native.holdTg", String.valueOf(tg));
+        }
         log("Speaker: " + (m == SpeakerMode.PRIORITY ? "one call at a time by priority" : m == SpeakerMode.MIX ? "mix all calls"
                 : m == SpeakerMode.QUEUE ? "queue - every call, one after another (max delay " + speaker.queueMaxDelay() / 1000 + " s)" : "hold TG " + tg));
     }

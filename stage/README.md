@@ -84,6 +84,11 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
   tray* (greyed out without a tray) and *Quit*. Size, position and Always on top are remembered
   (`ui.displayOnly.bounds`, `ui.displayOnly.onTop`); if that place is no longer on a screen it is put back on one.
   Monitoring, the speaker, recordings, feeds and uploads keep running — nothing restarts or reconnects.
+  Under the display, large buttons: **Mute all** (silence what you hear; decoding, the log, recordings and streams
+  keep going), **Mute talkgroup** (the talkgroup on the display, or the latest call if the display is idle; muted
+  everywhere, and only those show in **Muted list** — tap one to unmute), and **Hold** (stay on the talkgroup that
+  is on the air until you tap again; forgotten when TrunkDeck closes). The home-network page has the same buttons.
+  The main Monitor window does not.
 * Monitor page → Listening: **Close (X)** and **Minimize** each offer *Quit (normal)* / *Taskbar (normal)*,
   *System tray* and *Display only*. Defaults are as before (X → System tray, Minimize → Taskbar); settings from
   1.4.7–1.4.9 carry over (`ui.trayClose` / `ui.trayMinimize` are still written for older versions). The tray icon's
@@ -303,7 +308,7 @@ in a few seconds - your feeds stay connected (listeners hear silence for that mo
 |---|---|
 | **Monitor** | The scanner display (the call on the speaker: big alpha tag, talkgroup, category/tag, frequency, radio ID, call timer, ENC / EMERGENCY / FAV / MUTED badges; a dimmed SCANNING when no call is playing), control-channel meter, activity graph). Below it: the **Active calls** table, the live call log (double-click a call, or **Play**, to hear its recording), **Hot talkgroups**, the **Speaker** choice, and quick buttons for the selected talkgroup (**Favorite, Mute, Add to list, Replay last**). **What to play:** *Everything*, *Only talkgroups in my list*, or *Favorites only*. |
 | **Talkgroups** | Your list for the selected system. **Import CSV**, **Export CSV**, **Save CSV template**, search box, category filter, *Favorites* / *Heard* filters. Tick ★ (favorite), **Mute** and **Rec** (record) per talkgroup. Edit names, categories and **Priority** (1 = most important, 100 = normal) in the table. Select rows (Ctrl/Shift-click or Ctrl+A) to favorite, mute, record or assign streams in bulk. |
-| **Systems** | Add or edit systems: name, site, **control channel(s) in MHz**, demodulator (Auto / C4FM / LSM for simulcast), optional NAC/WACN/System ID/RFSS/Site, **Max simultaneous calls**, and *Record every call*. **Add preset** brings back the fictional example presets. |
+| **Systems** | Add or edit systems: name, site, **control channel(s) in MHz**, demodulator (Auto / C4FM / LSM for simulcast), optional NAC/WACN/System ID/RFSS/Site, **Max simultaneous calls**, *Record every call*, and *Auto-start when TrunkDeck opens* (only one system; the next time TrunkDeck opens it starts after a short countdown on the Monitor page, with Cancel). The home-network page can show the countdown but cannot change this checkbox. **Add preset** brings back the fictional example presets. |
 | **Streams** | Broadcastify Calls, Broadcastify Feeds and Icecast. See below. |
 | **Recordings** | Recorded calls, one file per call (talkgroups with **Rec** ticked, or every call). Double-click a recording (or **Play** / **Pause**) to hear it in TrunkDeck. The talkgroup name and time stay on screen while it plays. A live call on the speaker pauses it. Volume slider, *Open folder*, *Choose folder...* and *Use default*. *Choose folder...* sets where new recordings are saved (used right away, no restart). *Use default* returns to the usual folder in your home directory. Recordings already saved are left in place and can still be played. If the folder is missing or can't be written, TrunkDeck explains and uses the usual folder. The home-network page cannot change it. |
 | **Engine** | Dongles (role, PPM, gain, bias-T), live site info and tuner windows, voice codec, voice-call diagnostics, decoded control-channel messages, and *Test with an I/Q recording*. See *Engine page*. |

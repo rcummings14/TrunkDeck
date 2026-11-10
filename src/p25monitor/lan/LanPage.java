@@ -93,7 +93,12 @@ final class LanPage {
   .when { width: 5.4em; color: #7D8FA3; font-family: Consolas, monospace; }
   #login { max-width: 420px; margin: 40px auto; }
   #login input { width: 100%; margin-top: 6px; padding: 10px 12px; border-radius: 8px; border: 1px solid #243244; background: #0A0E13; color: #DCE6F0; }
-  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } .fields { grid-template-columns: 1fr 1fr; } }
+  .touch { display: flex; gap: 8px; margin: 0 0 12px; }
+  .touch button, .touch select { flex: 1; min-height: 64px; font-size: 18px; font-weight: 700; border-radius: 12px; }
+  .touch button.on { background: #3a1820; color: #FFB3BA; border-color: #6e2a34; }
+  .touch button.hold { background: #3a3010; color: #FFB300; border-color: #6a5420; }
+  .touch select { background: #18212D; color: #DCE6F0; border: 1px solid #243244; padding: 8px 10px; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } .fields { grid-template-columns: 1fr 1fr; } .touch { flex-wrap: wrap; } .touch button, .touch select { flex: 1 1 46%; } }
 </style>
 </head>
 <body>
@@ -106,8 +111,15 @@ final class LanPage {
   <span id="pill" class="pill">STOPPED</span>
 </div>
 <p class="note">Home network only. This is the same Monitor as on the TrunkDeck computer.</p>
+<p id="countdown" class="note" hidden></p>
 <p id="err" class="err"></p>
 <main id="app" hidden>
+  <div class="touch">
+    <button id="muteAll" type="button">Mute all</button>
+    <button id="muteTg" type="button">Mute talkgroup</button>
+    <button id="touchHold" type="button">Hold</button>
+    <select id="mutedList" aria-label="Muted list"><option value="">No muted talkgroups</option></select>
+  </div>
   <div class="bezel" id="bezel">
     <div class="glass" id="glass">
       <div class="grow-top">
@@ -258,6 +270,15 @@ function paint(s) {
   cssColors(s.colors);
   const on = !!s.monitoring;
   const call = s.activity === 'call';
+  const cd = $('countdown');
+  const left = s.autoStartIn || 0;
+  if (left > 0) {
+    cd.hidden = false;
+    cd.textContent = 'Starting ' + (s.autoStartName || 'the system') + ' in ' + left + ' second' + (left === 1 ? '' : 's');
+  } else {
+    cd.hidden = true;
+    cd.textContent = '';
+  }
   $('glass').className = 'glass' + (call ? ' call' : '');
   const sys = (s.system || 'NO SYSTEM') + (s.site ? '  ·  ' + s.site : '');
   $('sys').textContent = sys.toUpperCase();
@@ -266,7 +287,8 @@ function paint(s) {
   bars(s.signalBars, s.signalText, on);
   const big = $('big');
   big.className = 'big';
-  if (!on) { big.classList.add('idle'); big.textContent = (s.engine || 'STOPPED').toUpperCase(); }
+  if (!on && left > 0) { big.classList.add('idle'); big.textContent = 'STARTING IN ' + left; }
+  else if (!on) { big.classList.add('idle'); big.textContent = (s.engine || 'STOPPED').toUpperCase(); }
   else if (call) {
     big.style.color = s.emergency ? '#FF4D5E' : s.encrypted ? '#B388FF' : '';
     big.textContent = (s.talkgroup || 'TG ' + s.talkgroupId).toUpperCase();
@@ -387,7 +409,40 @@ function paint(s) {
   if (document.activeElement !== $('vol')) $('vol').value = String(s.volume == null ? 80 : s.volume);
   $('volLabel').textContent = (s.volume == null ? 80 : s.volume) + ' %';
   $('spkMute').textContent = s.speakerMuted ? 'Unmute' : 'Mute';
+  paintTouch(s);
   scanTick++;
+}
+
+function paintTouch(s) {
+  const all = $('muteAll');
+  all.classList.toggle('on', !!s.touchMuteAll);
+  all.textContent = s.touchMuteAll ? 'All muted' : 'Mute all';
+  const hold = $('touchHold');
+  hold.classList.toggle('hold', !!s.touchHold);
+  hold.textContent = s.touchHold ? 'Holding' : 'Hold';
+  const sel = $('mutedList');
+  if (document.activeElement === sel) return;
+  const items = s.touchMuted || [];
+  sel.replaceChildren();
+  if (!items.length) {
+    const o = document.createElement('option');
+    o.value = '';
+    o.textContent = 'No muted talkgroups';
+    sel.append(o);
+    sel.disabled = true;
+  } else {
+    sel.disabled = false;
+    const ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = 'Muted list';
+    sel.append(ph);
+    items.forEach((t) => {
+      const o = document.createElement('option');
+      o.value = String(t.id);
+      o.textContent = (t.name || 'Talkgroup') + '  ' + t.id;
+      sel.append(o);
+    });
+  }
 }
 
 function fillTgs(host, list, hot) {
@@ -541,6 +596,25 @@ $('vol').addEventListener('change', async () => {
 $('spkMute').addEventListener('click', async () => {
   const muted = !(state && state.speakerMuted);
   try { paint(await api('/api/speakermute', { method: 'POST', body: JSON.stringify({ muted }) })); err(''); }
+  catch (e) { if (e.message !== 'sign-in') err(e.message); }
+});
+$('muteAll').addEventListener('click', async () => {
+  const on = !(state && state.touchMuteAll);
+  try { paint(await api('/api/touch/muteall', { method: 'POST', body: JSON.stringify({ on }) })); err(''); }
+  catch (e) { if (e.message !== 'sign-in') err(e.message); }
+});
+$('muteTg').addEventListener('click', async () => {
+  try { paint(await api('/api/touch/mutetg', { method: 'POST', body: '{}' })); err(''); }
+  catch (e) { if (e.message !== 'sign-in') err(e.message); }
+});
+$('touchHold').addEventListener('click', async () => {
+  try { paint(await api('/api/touch/hold', { method: 'POST', body: '{}' })); err(''); }
+  catch (e) { if (e.message !== 'sign-in') err(e.message); }
+});
+$('mutedList').addEventListener('change', async () => {
+  const id = Number($('mutedList').value);
+  if (!id) return;
+  try { paint(await api('/api/touch/unmute', { method: 'POST', body: JSON.stringify({ id }) })); err(''); }
   catch (e) { if (e.message !== 'sign-in') err(e.message); }
 });
 fetch('/api/state', { credentials: 'same-origin' }).then((r) => {

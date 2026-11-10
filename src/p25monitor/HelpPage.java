@@ -174,7 +174,8 @@ public class HelpPage extends JPanel {
                 "For a <b>conventional</b> P25 system (fixed channels, no control channel), choose Conventional and type the channel frequencies. Add a NAC after a colon if one channel uses its own (<b>155.2500:2D5</b>). " +
                 "<span style='color:#FFB300'>(untested)</span> P25 conventional has not been tested on a real radio system yet. If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + "). " +
                 "<b>With a RadioReference Premium account:</b> Systems page (or Tools below) &rarr; <b>Set up from RadioReference</b> - sign in, pick your state, county, system, site and talkgroups, and TrunkDeck fills in the control channels and talkgroup names (builds with a RadioReference app key only). " +
-                "Add the alternate control channel after a comma: the site uses one at a time and TrunkDeck switches over by itself if the active one goes quiet.<br>" +
+                "Add the alternate control channel after a comma: the site uses one at a time and TrunkDeck switches over by itself if the active one goes quiet. " +
+                "Tick <b>Auto-start when TrunkDeck opens</b> on a system to start it after a short countdown the next time TrunkDeck opens (only one system; Cancel is on the Monitor page). The home-network page can show the countdown but cannot change this.<br>" +
                 "<h3 style='color:#00E5FF'>4. Add talkgroups (optional but recommended)</h3>" +
                 "Talkgroups page &rarr; <b>Import CSV</b>. Columns like Decimal, Hex, Alpha Tag, Mode, Description, Tag, Category are recognised automatically " +
                 "(RadioReference exports work as-is). Use <b>Save CSV template</b> to start your own. " +
@@ -214,7 +215,12 @@ public class HelpPage extends JPanel {
                 + "If the desktop has no tray (stock Fedora / GNOME: install the <i>AppIndicator and KStatusNotifierItem Support</i> extension) <i>System tray</i> is greyed out and X quits as before.</li>"
                 + "<li><b>Display only</b> (header button, or Ctrl+D): the window shrinks to just the big display - resize it and the display grows with it, drag it by the display. "
                 + "Double-click it (or Esc, Ctrl+D) for the full window; right-click it for <b>Full window</b>, <b>Always on top</b>, <b>Mute speaker</b>, <b>Minimize to tray</b> and <b>Quit</b>. "
-                + "Its size, place and Always on top are remembered. Monitoring, the speaker, recordings, feeds and uploads keep running the whole time.</li>" +
+                + "Its size, place and Always on top are remembered. Monitoring, the speaker, recordings, feeds and uploads keep running the whole time. "
+                + "Large buttons under the display: <b>Mute all</b> silences what you hear here and on Listen, while calls are still decoded, logged, recorded and streamed. "
+                + "<b>Mute talkgroup</b> mutes the talkgroup on the display (or the latest call if nothing is on the air) everywhere, and keeps it in the <b>Muted list</b>. "
+                + "Tap a name in that list to unmute it. Talkgroups muted from the main window are not listed there. "
+                + "<b>Hold</b> stays on the talkgroup that is on the air and ignores the others until you tap it again. It is not remembered the next time TrunkDeck opens. "
+                + "The same buttons are on the home-network page. The main Monitor window does not show them.</li>" +
                 "<li>Encrypted talkgroups (shown purple) cannot be heard by any scanner software.</li>" +
                 "<li>P25 Phase 2 (TDMA) calls are decoded too: one Phase 2 channel carries two talkgroups (TS1 / TS2) and both are decoded. Phase 2 audio needs JMBE 2.x (the version <b>Build from source</b> makes). Phase 2 has been confirmed on one live Phase 2 system so far; please report problems with Copy diagnostics.</li>" +
                 "<li>Calls on a frequency no dongle can reach at that moment are listed as <b>MISSED (out of tuner range)</b> on the Engine page.</li>" +

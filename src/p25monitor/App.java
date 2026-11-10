@@ -18,6 +18,10 @@ public class App {
     public RadioSystem current;
     /** This profile was new when loaded (1.6.0: TrunkDeck offers RadioReference setup). */
     public boolean firstRun;
+    /** Settings key: id of the one system that starts when TrunkDeck opens. */
+    public static final String AUTO_START_KEY = "autoStartSystem";
+    /** Seconds the Monitor page counts down before auto-start. */
+    public static final int AUTO_START_SECONDS = 10;
 
     public App(Path home) {
         this.home = home;
@@ -55,6 +59,7 @@ public class App {
         streams.addAll(StreamConfig.load(streamsFile()));
         LegacyMigration.run(this);
         bindRecordingFolders();
+        TouchControls.applySaved(this);
     }
 
     /** Saved folder for new recordings, or null when the usual home-folder location is in use. */
@@ -291,6 +296,10 @@ public class App {
             w.sorted(Comparator.reverseOrder()).forEach(p -> { try { Files.delete(p); } catch (IOException ignored) {} });
         }
         systems.remove(s);
+        if (s != null && s.id != null && s.id.equals(settings.getProperty(AUTO_START_KEY, ""))) {
+            settings.remove(AUTO_START_KEY);
+            saveSettings();
+        }
     }
 
     public void saveStreams() throws IOException { StreamConfig.save(streamsFile(), streams); }
@@ -307,5 +316,32 @@ public class App {
 
     public ListenMode listenMode() {
         try { return ListenMode.valueOf(settings.getProperty("listenMode", "ALL")); } catch (Exception e) { return ListenMode.ALL; }
+    }
+
+    /** The system marked to start when TrunkDeck opens, or null if none is marked or that system was deleted. */
+    public RadioSystem autoStartSystem() {
+        String id = settings.getProperty(AUTO_START_KEY, "");
+        if (id == null || id.isBlank()) return null;
+        return systems.stream().filter(s -> id.equals(s.id)).findFirst().orElse(null);
+    }
+
+    public boolean isAutoStart(RadioSystem s) {
+        return s != null && s.id != null && !s.id.isBlank() && s.id.equals(settings.getProperty(AUTO_START_KEY, ""));
+    }
+
+    /**
+     * Mark this system to start when TrunkDeck opens. {@code null} (or a system with no id) clears it.
+     * Only one system can be marked: this replaces any earlier choice and is saved at once.
+     */
+    public void setAutoStart(RadioSystem s) {
+        if (s == null || s.id == null || s.id.isBlank()) settings.remove(AUTO_START_KEY);
+        else settings.setProperty(AUTO_START_KEY, s.id);
+        saveSettings();
+    }
+
+    /** The line shown on the Monitor page (and the home-network page) during the launch countdown. */
+    public static String autoStartMessage(String name, int seconds) {
+        String n = name == null || name.isBlank() ? "the system" : name;
+        return "Starting " + n + " in " + seconds + " second" + (seconds == 1 ? "" : "s");
     }
 }

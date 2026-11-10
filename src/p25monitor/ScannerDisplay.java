@@ -54,6 +54,15 @@ public class ScannerDisplay extends JComponent {
     public volatile boolean reduceMotion;
     /** 1.5.0 Display only: the whole display drawn this much larger (or smaller); 1 = as in the main window. */
     public volatile double zoom = 1;
+
+    /** Talkgroup on the glass while a call is showing, or -1 while scanning or stopped. */
+    public int shownTalkgroup() {
+        if (!active && !hang) return -1;
+        String d = tgText == null ? "" : tgText.replaceAll("\\D", "");
+        if (d.isEmpty()) return -1;
+        try { int n = Integer.parseInt(d); return n > 0 ? n : -1; }
+        catch (NumberFormatException e) { return -1; }
+    }
     /** Backlight on calls (1.4.5, default on): dark glass while scanning, lit by a call (fade in ~200 ms, out ~800 ms). */
     public volatile boolean backlight = true;
     public static final double FADE_IN_MS = 200, FADE_OUT_MS = 800;

@@ -23,7 +23,10 @@ public class SystemsPage extends JPanel {
     final JComboBox<String> nativeMod = new JComboBox<>(new String[]{"Auto - try C4FM and LSM, use the better one", "C4FM only", "LSM / CQPSK only (simulcast)"});
     final JSpinner traffic = new JSpinner(new SpinnerNumberModel(20, 1, 32, 1));
     final JCheckBox ignoreData = new JCheckBox("Ignore data calls (recommended)"), recordAll = new JCheckBox("Record every call (MP3)"),
-            meter = new JCheckBox("Control-channel decode meter (writes a message log)");
+            meter = new JCheckBox("Control-channel decode meter (writes a message log)"),
+            autoStart = new JCheckBox("Auto-start when TrunkDeck opens");
+    /** True while the form is being filled, so ticking Auto-start is not saved twice. */
+    boolean loadingAuto;
     final JTextArea notes = new JTextArea(3, 20);
     RadioSystem editing;
     /** 1.6.0: only for a system set up from RadioReference. */
@@ -63,7 +66,8 @@ public class SystemsPage extends JPanel {
                 setBorder(new EmptyBorder(8, 10, 8, 10));
                 setText("<html><b style='color:#DCE6F0'>" + MonitorPage.esc(r.name) + "</b><br><span style='color:#7D8FA3'>"
                         + (r.conventional() ? "Conventional" : "Trunked") + " \u00b7 " + r.displayFreqs() + " MHz \u00b7 " +
-                        r.talkgroups.size() + " talkgroups</span></html>");
+                        r.talkgroups.size() + " talkgroups"
+                        + (f.app.isAutoStart(r) ? " \u00b7 Auto-start" : "") + "</span></html>");
                 return this;
             }
         });
@@ -105,8 +109,14 @@ public class SystemsPage extends JPanel {
         y = row(g, c, y, "Max simultaneous calls", traffic, "How many calls the engine decodes at the same time (each uses about 4% of one CPU core). Calls must also fall inside a dongle's window.");
         JPanel checks = new JPanel(new GridLayout(0, 1));
         checks.setOpaque(false);
-        for (JCheckBox b : new JCheckBox[]{recordAll}) { b.setOpaque(false); checks.add(b); }
-        y = row(g, c, y, "Options", checks, null);
+        autoStart.setToolTipText("The next time TrunkDeck opens, this system starts after a short countdown on the Monitor page. Only one system can be set. You can press Cancel during the countdown. The home-network page can show the countdown but cannot change this.");
+        autoStart.addActionListener(e -> {
+            if (loadingAuto || editing == null) return;
+            f.app.setAutoStart(autoStart.isSelected() ? editing : null);
+            refreshList();
+        });
+        for (JCheckBox b : new JCheckBox[]{recordAll, autoStart}) { b.setOpaque(false); checks.add(b); }
+        y = row(g, c, y, "Options", checks, "Auto-start starts this system after a short countdown the next time TrunkDeck opens. Only one system can be set.");
         notes.setLineWrap(true); notes.setWrapStyleWord(true);
         y = row(g, c, y, "Notes", new JScrollPane(notes), null);
         c.gridy = y; c.gridx = 0; c.weighty = 1; g.add(Box.createGlue(), c);
@@ -201,6 +211,9 @@ public class SystemsPage extends JPanel {
         traffic.setValue(Math.max(1, Math.min(32, s.trafficChannels)));
         tuner.setText(s.preferredTuner);
         ignoreData.setSelected(s.ignoreDataCalls); recordAll.setSelected(s.recordAll); meter.setSelected(s.decodeMeter);
+        loadingAuto = true;
+        autoStart.setSelected(f.app.isAutoStart(s));
+        loadingAuto = false;
         notes.setText(s.notes);
         notes.setCaretPosition(0);
         rrRefresh.setVisible(s.rrSid > 0);
@@ -292,7 +305,7 @@ public class SystemsPage extends JPanel {
         for (Talkgroup t : o.talkgroups) {
             Talkgroup n = new Talkgroup();
             n.decimal = t.decimal; n.alphaTag = t.alphaTag; n.mode = t.mode; n.description = t.description; n.tag = t.tag; n.category = t.category;
-            n.favorite = t.favorite; n.muted = t.muted; n.record = t.record; n.priority = t.priority; n.streams.addAll(t.streams);
+            n.favorite = t.favorite; n.muted = t.muted; n.touchMuted = t.touchMuted; n.record = t.record; n.priority = t.priority; n.streams.addAll(t.streams);
             s.talkgroups.add(n);
         }
         s.radios = o.radios.copy();
