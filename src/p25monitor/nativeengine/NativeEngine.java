@@ -57,8 +57,8 @@ public final class NativeEngine {
 
     /**
      * Per-Airspy settings ("native.tuner.airspy-SERIAL.*"): role (auto = control + every voice channel in its window),
-     * sample rate (10 or 2.5 MS/s), gain ("lin:N", "sens:N" N = 0-21, or "man:LNA,MIX,VGA"), bias-T (off by default),
-     * USB packing, and a fixed centre in MHz (blank = chosen automatically).
+     * sample rate (R2: 10 or 2.5 MS/s; Mini: 10, 6 or 3 MS/s — whatever that receiver offers), gain ("lin:N", "sens:N"
+     * N = 0-21, or "man:LNA,MIX,VGA"), bias-T (off by default), USB packing, and a fixed centre in MHz (blank = automatic).
      */
     public static final class AirspySettings {
         public String role = "auto", gain = "lin:16", center = "";
@@ -69,7 +69,7 @@ public final class NativeEngine {
             String k = "native.tuner." + key + ".";
             a.role = p.getProperty(k + "role", "auto");
             try { a.rate = Double.parseDouble(p.getProperty(k + "rate", "10000000")); } catch (Exception e) { a.rate = 10e6; }
-            if (a.rate != 2.5e6) a.rate = 10e6;
+            if (!(a.rate >= 1e6 && a.rate <= 20e6)) a.rate = 10e6;
             a.gain = AirspyR2.Gain.parse(p.getProperty(k + "gain", "lin:16")).toString();
             a.biasTee = Boolean.parseBoolean(p.getProperty(k + "bias", "false"));
             a.packing = Boolean.parseBoolean(p.getProperty(k + "packing", "false"));
@@ -489,7 +489,7 @@ public final class NativeEngine {
     }
 
     /**
-     * Real receivers: every Airspy R2 and RTL-SDR dongle found, plus (1.7.0, untested with real hardware) SDRplay,
+     * Real receivers: every Airspy R2 or Mini and RTL-SDR dongle found, plus (1.7.0, untested with real hardware) SDRplay,
      * HackRF, LimeSDR and USRP receivers through SoapySDR. The control tuner is the one set to "control", else an
      * Airspy set to "auto" (it covers the control channel and the voice channels around it at once), else a SoapySDR
      * receiver set to "auto" (wideband like the Airspy), else an RTL dongle set to "auto". Every other receiver roams for voice.
@@ -627,10 +627,12 @@ public final class NativeEngine {
         AirspyR2 a = new AirspyR2(i);
         a.open();
         airspys.add(a);
-        try { a.configure(s.rate, AirspyR2.Gain.parse(s.gain), s.biasTee, s.packing); }
+        double rate = AirspyR2.chooseRate(s.rate, a.offeredRates());
+        if (Math.abs(rate - s.rate) >= 1) log(i.label() + ": " + AirspyR2.rateLabel(s.rate) + " is not one of its rates; using " + AirspyR2.rateLabel(rate));
+        try { a.configure(rate, AirspyR2.Gain.parse(s.gain), s.biasTee, s.packing); }
         catch (RuntimeException e) { a.stop(); airspys.remove(a); throw e; }
-        log("Opened " + i.label() + ": firmware " + (a.firmware.isBlank() ? "?" : a.firmware) + ", " + String.format(Locale.ROOT, "%.1f MS/s", s.rate / 1e6)
-                + ", gain " + a.gain().describe() + (s.biasTee ? ", bias-T ON" : ", bias-T off") + (s.packing ? ", USB packing on" : ""));
+        log("Opened " + i.label() + ": firmware " + (a.firmware.isBlank() ? "?" : a.firmware) + ", " + AirspyR2.rateLabel(rate)
+                + " (" + AirspyR2.coverageText(rate) + "), gain " + a.gain().describe() + (s.biasTee ? ", bias-T ON" : ", bias-T off") + (s.packing ? ", USB packing on" : ""));
         return a;
     }
 

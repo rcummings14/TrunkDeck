@@ -81,13 +81,15 @@ public class HelpPage extends JPanel {
 
     void refresh() {
         int n = -1, a = 0;
+        java.util.List<p25monitor.sdr.AirspyR2.Info> spies = java.util.List.of();
         try { n = p25monitor.sdr.RtlSdr.list().size(); } catch (Throwable ignored) {}
-        try { a = p25monitor.sdr.AirspyR2.list().size(); } catch (Throwable ignored) {}
+        try { spies = p25monitor.sdr.AirspyR2.list(); a = spies.size(); } catch (Throwable ignored) {}
         int o = 0;   // SDRplay / HackRF / LimeSDR / USRP: the last background search (never blocks this page)
         if (p25monitor.nativeengine.NativeEngine.soapyEnabled(f.app.settings) && p25monitor.sdr.SoapySdr.available()) o = p25monitor.sdr.SoapySdr.lastFound().size();
-        String found = (a > 0 ? a + " Airspy R2" + (n > 0 ? " + " : "") : "") + (n > 0 ? n + " RTL-SDR dongle(s)" : "") + (o > 0 ? (a > 0 || n > 0 ? " + " : "") + o + " other receiver(s) (untested)" : "");
+        String air = a > 0 ? p25monitor.sdr.AirspyR2.describeFound(spies) : "";
+        String found = (a > 0 ? air + (n > 0 ? " + " : "") : "") + (n > 0 ? n + " RTL-SDR dongle(s)" : "") + (o > 0 ? (a > 0 || n > 0 ? " + " : "") + o + " other receiver(s) (untested)" : "");
         set(engineOk, n > 0 || a > 0 || o > 0, "TrunkDeck engine ready: " + found + " found",
-                n == 0 || a > 0 ? "No receiver found - plug in your Airspy R2 or RTL-SDR (Windows: WinUSB driver via Zadig; Linux: USB rules below)" : "RTL-SDR library could not be loaded - see the Engine page");
+                n == 0 || a > 0 ? "No receiver found - plug in your Airspy R2, Airspy Mini or RTL-SDR (Windows: WinUSB driver via Zadig; Linux: USB rules below)" : "RTL-SDR library could not be loaded - see the Engine page");
         boolean codec = p25monitor.nativeengine.EngineLibs.jmbeReady() || p25monitor.nativeengine.EngineLibs.findJmbe(f.app.profile, f.app.settings.getProperty("native.jmbe", "")) != null;
         set(codecOk, codec, "Voice codec (JMBE) installed", "Voice codec not installed yet - Engine page \u2192 Build voice codec (one time, about a minute)");
         RadioSystem s = f.app.current;
@@ -144,10 +146,12 @@ public class HelpPage extends JPanel {
 
     static String guideHtml() {
         return "<html><body style='color:#DCE6F0;font-family:sans-serif'>" +
-                "<h3 style='color:#00E5FF'>1. Plug in your Airspy R2 or RTL-SDR dongles (tested)</h3>" +
-                "<b>Airspy R2:</b> one Airspy at 10 MS/s covers about 8.8 MHz - the control channel and every voice channel in that window are decoded at the same time (on many UHF and 800 MHz sites: the whole site). " +
-                "Windows: install the <b>WinUSB</b> driver with Zadig (pick <b>AIRSPY</b>, USB ID 1D50 60A1). Linux/Fedora: run the USB setup (udev rules) and install <b>libusb1</b>. " +
-                "On the <b>Engine</b> page set its role, sample rate (10 or 2.5 MS/s), gain (Linearity presets recommended) and bias-T (off unless your antenna needs power). The centre frequency is chosen automatically. " +
+                "<h3 style='color:#00E5FF'>1. Plug in your Airspy R2, Airspy Mini or RTL-SDR dongles (tested)</h3>" +
+                "<b>Airspy R2 and Airspy Mini:</b> one Airspy at 10 MS/s covers about 8.8 MHz - the control channel and every voice channel in that window are decoded at the same time (on many UHF and 800 MHz sites: the whole site). " +
+                "The Mini also runs at 6 MS/s (about 5.3 MHz) and 3 MS/s (about 2.6 MHz). The R2 also runs at 2.5 MS/s (about 2.2 MHz). " +
+                "TrunkDeck asks the receiver which rates it supports and lists it as Airspy Mini or Airspy R2. " +
+                "Windows: install the <b>WinUSB</b> driver with Zadig (pick <b>AIRSPY</b>, USB ID 1D50 60A1; the R2 and the Mini use the same USB ID). Linux/Fedora: run the USB setup (udev rules) and install <b>libusb1</b>. " +
+                "On the <b>Engine</b> page set its role, sample rate, gain (Linearity presets recommended) and bias-T (off unless your antenna needs power). The centre frequency is chosen automatically. " +
                 "<br>" +
                 "<b>RTL-SDR:</b> " +
                 "One dongle decodes the control channel. Every voice call inside its window (about 2 MHz around its centre) is decoded too, all at the same time. " +
