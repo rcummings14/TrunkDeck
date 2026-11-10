@@ -3,7 +3,7 @@ package p25monitor;
 import java.util.*;
 
 /**
- * The large buttons on Display only and on the home-network page. The main Monitor window does not show them.
+ * The large buttons on Display only. The main Monitor window and the home-network page do not show them.
  * <p>
  * Mute all silences what you hear (this computer's speaker, a recording playing in TrunkDeck, and Listen on the
  * home-network page). Decoding, the call log, recordings and streams keep going. It is not remembered after a restart.

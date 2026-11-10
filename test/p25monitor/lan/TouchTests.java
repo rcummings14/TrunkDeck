@@ -105,15 +105,18 @@ public final class TouchTests {
     }
 
     static void pageAndServer() throws Exception {
-        System.out.println("3. the home-network page has the buttons, and cannot unmute a talkgroup that was not touch-muted");
+        System.out.println("3. the home-network page has no touch buttons, and those addresses are not there");
         String html = LanPage.HTML;
-        check(html.contains(">Mute all<") && html.contains(">Mute talkgroup<") && html.contains(">Hold<"), "page has the three buttons");
-        check(html.contains("No muted talkgroups") && html.contains("id=\"mutedList\""), "page has the muted list");
+        check(!html.contains(">Mute all<") && !html.contains(">Mute talkgroup<") && !html.contains("id=\"mutedList\"") && !html.contains(">Hold<"),
+                "page does not have the Display only buttons");
+        check(!html.contains("/api/touch/"), "page does not call the touch addresses");
+        check(html.contains(">Listen<") && html.contains(">Start<") && html.contains(">Stop<") && html.contains("liveText"),
+                "page still has Listen, Start, Stop and the live text colour");
+        check(html.contains("Hold one talkgroup"), "the speaker choice is still there");
         check(!html.contains("Choose folder"), "page still cannot change the recordings folder");
 
         Properties props = new Properties();
         check(LanSecret.set(props, "home-pin".toCharArray()), "password");
-        boolean[] unmuted = {false};
         LanServer server = new LanServer(new LanServer.Actions() {
             public boolean monitoring() { return false; }
             public void start() {}
@@ -123,13 +126,9 @@ public final class TouchTests {
             public void setVolume(int percent) {}
             public void setSpeakerMuted(boolean muted) {}
             public boolean setFavorite(int id, boolean favorite) { return false; }
-            public boolean touchUnmute(int id) { if (id == 101) { unmuted[0] = true; return true; } return false; }
             public LanServer.Snapshot now() {
                 LanServer.Snapshot s = new LanServer.Snapshot();
-                if (unmuted[0]) return s;
-                LanServer.TouchRow row = new LanServer.TouchRow();
-                row.id = 101; row.name = "Sample One";
-                s.touchMuted.add(row);
+                s.liveText = "#FF4E5C";
                 return s;
             }
         }, props);
@@ -137,21 +136,20 @@ public final class TouchTests {
         check(err == null, "page listens: " + err);
         int port = server.port();
         HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
-        HttpResponse<String> denied = http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/touch/unmute"))
-                .timeout(Duration.ofSeconds(5)).POST(HttpRequest.BodyPublishers.ofString("{\"id\":101}")).build(), HttpResponse.BodyHandlers.ofString());
-        check(denied.statusCode() == 401, "unsigned unmute is refused, got " + denied.statusCode());
         HttpResponse<String> login = http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/login"))
                 .timeout(Duration.ofSeconds(5)).POST(HttpRequest.BodyPublishers.ofString("{\"password\":\"home-pin\"}")).build(), HttpResponse.BodyHandlers.ofString());
         String cookie = login.headers().firstValue("set-cookie").orElse("");
         int semi = cookie.indexOf(';');
         if (semi > 0) cookie = cookie.substring(0, semi);
-        HttpResponse<String> bad = http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/touch/unmute"))
-                .timeout(Duration.ofSeconds(5)).header("Cookie", cookie).POST(HttpRequest.BodyPublishers.ofString("{\"id\":202}")).build(), HttpResponse.BodyHandlers.ofString());
-        check(bad.statusCode() == 404 && !unmuted[0], "a talkgroup muted another way cannot be unmuted from the list, got " + bad.statusCode());
-        HttpResponse<String> ok = http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/touch/unmute"))
-                .timeout(Duration.ofSeconds(5)).header("Cookie", cookie).POST(HttpRequest.BodyPublishers.ofString("{\"id\":101}")).build(), HttpResponse.BodyHandlers.ofString());
-        check(ok.statusCode() == 200 && unmuted[0] && ok.body().contains("\"touchMuted\":[]"), "a touch-muted talkgroup can be unmuted, body " + ok.body());
-        check(LanJson.intField("{\"id\":101}", "id") == 101, "json still reads an id");
+        for (String path : new String[]{"/api/touch/muteall", "/api/touch/mutetg", "/api/touch/hold", "/api/touch/unmute"}) {
+            HttpResponse<String> gone = http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path))
+                    .timeout(Duration.ofSeconds(5)).header("Cookie", cookie).POST(HttpRequest.BodyPublishers.ofString("{}")).build(), HttpResponse.BodyHandlers.ofString());
+            check(gone.statusCode() == 404, path + " is not there, got " + gone.statusCode());
+        }
+        HttpResponse<String> state = http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/state"))
+                .timeout(Duration.ofSeconds(5)).header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+        check(state.statusCode() == 200 && state.body().contains("\"liveText\":\"#FF4E5C\"") && !state.body().contains("touchMute"),
+                "state still carries the live text colour and not the buttons, body " + state.body());
         server.stop();
     }
 }

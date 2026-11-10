@@ -319,22 +319,6 @@ final class LanCard {
             public void setSpeakerMuted(boolean muted) {
                 onEdt(() -> { if (muted != f.nativeEngine.speakerMuted()) f.monitor.toggleSpeakerMute(); });
             }
-            public void setTouchMuteAll(boolean on) { onEdt(() -> f.touchMuteAll(on)); }
-            public String touchMuteTalkgroup() {
-                String[] why = {null};
-                onEdt(() -> why[0] = f.touchMuteTalkgroup());
-                return why[0];
-            }
-            public String touchHold() {
-                String[] why = {null};
-                onEdt(() -> why[0] = f.touchHoldToggle());
-                return why[0];
-            }
-            public boolean touchUnmute(int id) {
-                boolean[] ok = {false};
-                onEdt(() -> ok[0] = f.touchUnmute(id) == null);
-                return ok[0];
-            }
             public LanServer.Snapshot now() {
                 LanServer.Snapshot[] box = new LanServer.Snapshot[1];
                 onEdt(() -> box[0] = snapshot());
@@ -392,15 +376,9 @@ final class LanCard {
         s.holdTg = eng.holdTg();
         s.volume = eng.speakerVolume();
         s.speakerMuted = eng.speakerMuted();
+        boolean holding = f.touch.hold();
         f.touchReconcileHold();
-        s.touchMuteAll = f.touch.muteAll();
-        s.touchHold = f.touch.hold();
-        for (Talkgroup t : TouchControls.listed(sys)) {
-            LanServer.TouchRow row = new LanServer.TouchRow();
-            row.id = t.decimal;
-            row.name = t.displayName();
-            s.touchMuted.add(row);
-        }
+        if (holding && !f.touch.hold() && f.displayOnly != null) f.displayOnly.refreshTouch();
         if (onCall || s.hang) {
             int liveTg = cur != null ? cur.tg : last.tg;
             Talkgroup colored = sys == null || liveTg <= 0 ? null : sys.find(liveTg);

@@ -87,8 +87,8 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
   Under the display, large buttons: **Mute all** (silence what you hear; decoding, the log, recordings and streams
   keep going), **Mute talkgroup** (the talkgroup on the display, or the latest call if the display is idle; muted
   everywhere, and only those show in **Muted list** — tap one to unmute), and **Hold** (stay on the talkgroup that
-  is on the air until you tap again; forgotten when TrunkDeck closes). The home-network page has the same buttons.
-  The main Monitor window does not.
+  is on the air until you tap again; forgotten when TrunkDeck closes). These buttons are only on Display only.
+  The home-network page and the main Monitor window do not show them.
 * Monitor page → Listening: **Close (X)** and **Minimize** each offer *Quit (normal)* / *Taskbar (normal)*,
   *System tray* and *Display only*. Defaults are as before (X → System tray, Minimize → Taskbar); settings from
   1.4.7–1.4.9 carry over (`ui.trayClose` / `ui.trayMinimize` are still written for older versions). The tray icon's

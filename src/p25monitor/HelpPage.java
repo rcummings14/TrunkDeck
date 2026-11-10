@@ -221,7 +221,7 @@ public class HelpPage extends JPanel {
                 + "<b>Mute talkgroup</b> mutes the talkgroup on the display (or the latest call if nothing is on the air) everywhere, and keeps it in the <b>Muted list</b>. "
                 + "Tap a name in that list to unmute it. Talkgroups muted from the main window are not listed there. "
                 + "<b>Hold</b> stays on the talkgroup that is on the air and ignores the others until you tap it again. It is not remembered the next time TrunkDeck opens. "
-                + "The same buttons are on the home-network page. The main Monitor window does not show them.</li>" +
+                + "These buttons are only on Display only. The home-network page and the main Monitor window do not show them.</li>" +
                 "<li>Encrypted talkgroups (shown purple) cannot be heard by any scanner software.</li>" +
                 "<li>P25 Phase 2 (TDMA) calls are decoded too: one Phase 2 channel carries two talkgroups (TS1 / TS2) and both are decoded. Phase 2 audio needs JMBE 2.x (the version <b>Build from source</b> makes). Phase 2 has been confirmed on one live Phase 2 system so far; please report problems with Copy diagnostics.</li>" +
                 "<li>Calls on a frequency no dongle can reach at that moment are listed as <b>MISSED (out of tuner range)</b> on the Engine page.</li>" +

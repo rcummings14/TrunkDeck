@@ -45,14 +45,6 @@ public final class LanServer {
         void setSpeakerMuted(boolean muted);
         /** @return false when that talkgroup is not in the current list */
         boolean setFavorite(int id, boolean favorite);
-        /** Silence every audio output. Decoding, logging, recording and streaming keep going. */
-        default void setTouchMuteAll(boolean on) {}
-        /** @return a plain message when there is nothing to mute, or null */
-        default String touchMuteTalkgroup() { return "No talkgroup to mute."; }
-        /** @return a plain message when there is nothing to hold, or null */
-        default String touchHold() { return "No talkgroup is on the air."; }
-        /** @return false when that talkgroup was not muted from the touch button */
-        default boolean touchUnmute(int id) { return false; }
         Snapshot now();
     }
 
@@ -87,16 +79,8 @@ public final class LanServer {
         /** Seconds left on the launch auto-start countdown, or 0 if none. The page can show this; it cannot change the checkbox. */
         public int autoStartIn;
         public String autoStartName = "";
-        /** Touch buttons. muteAll and hold are not saved. touchMuted is only talkgroups muted from those buttons. */
-        public boolean touchMuteAll, touchHold;
-        public final java.util.List<TouchRow> touchMuted = new java.util.ArrayList<>();
         /** Colour of the live talkgroup name and number. Empty keeps the display theme. */
         public String liveText = "";
-    }
-
-    public static final class TouchRow {
-        public int id;
-        public String name = "";
     }
 
     /** Colours of the glass, so the page matches the display preset in use. Empty uses the cyan default. */
@@ -226,10 +210,6 @@ public final class LanServer {
                 case "POST /api/speaker" -> speaker(ex);
                 case "POST /api/volume" -> volume(ex);
                 case "POST /api/speakermute" -> speakerMute(ex);
-                case "POST /api/touch/muteall" -> touchMuteAll(ex);
-                case "POST /api/touch/mutetg" -> touchMuteTg(ex);
-                case "POST /api/touch/hold" -> touchHold(ex);
-                case "POST /api/touch/unmute" -> touchUnmute(ex);
                 case "GET /api/audio" -> audio(ex);
                 default -> send(ex, 404, "text/plain; charset=utf-8", "Not found\n");
             }
@@ -293,34 +273,6 @@ public final class LanServer {
         Boolean m = LanJson.boolField(readBody(ex), "muted");
         if (m == null) { sendJson(ex, 400, "{\"ok\":false,\"error\":\"Choose mute or unmute.\"}"); return; }
         actions.setSpeakerMuted(m);
-        sendJson(ex, 200, stateJson());
-    }
-
-    private void touchMuteAll(HttpExchange ex) throws IOException {
-        Boolean on = LanJson.boolField(readBody(ex), "on");
-        if (on == null) { sendJson(ex, 400, "{\"ok\":false,\"error\":\"Choose mute or unmute.\"}"); return; }
-        actions.setTouchMuteAll(on);
-        sendJson(ex, 200, stateJson());
-    }
-
-    private void touchMuteTg(HttpExchange ex) throws IOException {
-        readBody(ex);
-        String why = actions.touchMuteTalkgroup();
-        if (why != null) { sendJson(ex, 400, "{\"ok\":false,\"error\":" + LanJson.quote(why) + "}"); return; }
-        sendJson(ex, 200, stateJson());
-    }
-
-    private void touchHold(HttpExchange ex) throws IOException {
-        readBody(ex);
-        String why = actions.touchHold();
-        if (why != null) { sendJson(ex, 400, "{\"ok\":false,\"error\":" + LanJson.quote(why) + "}"); return; }
-        sendJson(ex, 200, stateJson());
-    }
-
-    private void touchUnmute(HttpExchange ex) throws IOException {
-        Integer id = LanJson.intField(readBody(ex), "id");
-        if (id == null) { sendJson(ex, 400, "{\"ok\":false,\"error\":\"Choose a talkgroup.\"}"); return; }
-        if (!actions.touchUnmute(id)) { sendJson(ex, 404, "{\"ok\":false,\"error\":\"That talkgroup is not in the muted list.\"}"); return; }
         sendJson(ex, 200, stateJson());
     }
 
@@ -449,15 +401,6 @@ public final class LanServer {
         }
         b.append("],\"autoStartIn\":").append(s.autoStartIn);
         b.append(",\"autoStartName\":").append(LanJson.quote(s.autoStartName));
-        b.append(",\"touchMuteAll\":").append(s.touchMuteAll);
-        b.append(",\"touchHold\":").append(s.touchHold);
-        b.append(",\"touchMuted\":[");
-        for (int i = 0; i < s.touchMuted.size(); i++) {
-            TouchRow t = s.touchMuted.get(i);
-            if (i > 0) b.append(',');
-            b.append("{\"id\":").append(t.id).append(",\"name\":").append(LanJson.quote(t.name)).append('}');
-        }
-        b.append(']');
         b.append(",\"liveText\":").append(LanJson.quote(s.liveText));
         return b.append("}").toString();
     }

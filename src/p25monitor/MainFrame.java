@@ -494,7 +494,7 @@ public class MainFrame extends JFrame {
         tgSaveTimer.restart();
     }
 
-    /** Touch buttons (Display only and the home-network page). Not shown on the main Monitor window. */
+    /** Touch buttons on Display only. Not shown on the main Monitor window or the home-network page. */
     final TouchControls touch = new TouchControls();
 
     String touchMuteAll(boolean on) {

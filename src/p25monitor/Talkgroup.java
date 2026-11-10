@@ -10,7 +10,7 @@ public class Talkgroup {
     public String category = "";    // group / agency
     public boolean favorite;
     public boolean muted;           // not followed, not played
-    /** Muted from the Display only or home-network touch button. Cleared if unmuted anywhere else. */
+    /** Muted from the Display only touch button. Cleared if unmuted anywhere else. */
     public boolean touchMuted;
     /** Live text colour as #RRGGBB, or blank to keep the display theme. Shared with the other sites of this system. */
     public String color = "";

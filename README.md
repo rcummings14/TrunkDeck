@@ -32,15 +32,14 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
 * **Control-channel signal meter** (1.7.2): the scanner display shows a signal meter on the control-channel row so you
   can compare sites and antennas.
 * **Display only** mode: the window shrinks to just the scanner display (resizable, draggable, always-on-top option);
-  double-click to get the full window back. Everything keeps running. A row of large buttons sits under the display:
-  **Mute all** (silence what you hear; decoding, the log, recordings and streams keep going), **Mute talkgroup**
-  (mute the talkgroup on the display, or the latest call if the display is idle), **Hold** (stay on the talkgroup
-  that is on the air until you tap again; not remembered after a restart), and a **Muted list** of talkgroups muted
-  from that button. Tap one to unmute it. Talkgroups muted from the main window are not in that list.
+  double-click to get the full window back. Everything keeps running. A row of large buttons sits under the display,
+  and only on this window: **Mute all** (silence what you hear; decoding, the log, recordings and streams keep going),
+  **Mute talkgroup** (mute the talkgroup on the display, or the latest call if the display is idle), **Hold** (stay on
+  the talkgroup that is on the air until you tap again; not remembered after a restart), and a **Muted list** of
+  talkgroups muted from that button. Tap one to unmute it. Talkgroups muted from the main window are not in that list.
 * **Home network page:** from another computer on the same home network, a password-protected page that looks like the
-  Monitor (scanner display, signal meter, active calls, talkgroups) plus the same large buttons as Display only.
-  Listen, start and stop, mute, and hold. Turn it
-  on from Setup & Help → Home network. For the home network only.
+  Monitor (scanner display, signal meter, active calls, talkgroups). Listen, start and stop, and mute. It does not
+  have the Display only buttons. Turn it on from Setup & Help → Home network. For the home network only.
 * **System tray:** close or minimize to the tray (or to Display only) - your choice.
 * **Streaming / uploads** (optional): **Broadcastify Calls**, **Broadcastify Feeds** / any Icecast server (MP3),
   **OpenMHz**, **Rdio Scanner**. Live talkgroup assignment, status and retry on the Streams page.

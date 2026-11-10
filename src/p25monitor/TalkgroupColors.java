@@ -12,12 +12,12 @@ public final class TalkgroupColors {
     /** Name, then #RRGGBB. The first entry is Default (no colour). Bright enough for text on the dark glass. */
     public static final String[][] PRESETS = {
             {"Default", ""},
-            {"Red", "#FF7A88"},
+            {"Red", "#FF4E5C"},
             {"Orange", "#FF9A3C"},
             {"Amber", "#FFC44D"},
             {"Green", "#3DDC84"},
             {"Cyan", "#4FE3EF"},
-            {"Blue", "#7EB6FF"},
+            {"Blue", "#4C8CFF"},
             {"Violet", "#C9A6FF"}
     };
 
