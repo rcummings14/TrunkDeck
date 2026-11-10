@@ -3,8 +3,8 @@ package p25monitor.dmr;
 /**
  * One DMR channel: 4FSK demod, sync, colour code, timeslot, link control and trunking CSBK.
  * Encrypted link control is reported and not turned into audio.
- * Voice frames use the DMR order in {@link DmrVoice} (clause 6.1). That is not the P25 order JMBE undoes,
- * so a call can be followed and still be silent. DMR is untested.
+ * Voice frames are the 72-bit AMBE+2 words from clause 6.1. {@link DmrAmbe} corrects them into the nine bytes
+ * JMBE decodes. Without that codec the call is followed but silent. DMR is untested on air.
  */
 public final class DmrReceiver {
     public interface Listener {

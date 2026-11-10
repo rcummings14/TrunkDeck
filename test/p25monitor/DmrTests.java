@@ -20,6 +20,7 @@ public class DmrTests {
         embedded();
         voiceOrder();
         demod();
+        ambe();
         ui();
         check(HelpPage.guideHtml().contains("DMR conventional and DMR trunking") && HelpPage.guideHtml().contains("(untested)")
                 && HelpPage.guideHtml().contains("https://github.com/rcummings14/TrunkDeck/issues"),
@@ -246,6 +247,28 @@ public class DmrTests {
             DmrLc lc = DmrLc.parse(got.get(0).info);
             check(lc.group() && lc.target == 240 && lc.source == 8, "demodulated link control is TG 240 from radio 8");
         } else check(false, "demodulated link control is TG 240 from radio 8");
+    }
+
+    static void ambe() {
+        int[][] samples = {{0, 0, 0, 0}, {0x800, 0x001, 0x400, 0x2001}, {0xA5A, 0x5A5, 0x2AA, 0x1555}, {0xFFF, 0xFFF, 0x7FF, 0x3FFF}};
+        for (int[] s : samples) {
+            byte[] frame = DmrAmbe.encode(s[0], s[1], s[2], s[3]);
+            DmrAmbe.Voice back = DmrAmbe.decode(frame);
+            check(back.ok() && back.errors == 0 && back.c0 == s[0] && back.c1 == s[1] && back.c2 == s[2] && back.c3 == s[3],
+                    "AMBE encode then decode is the identity for C0 " + Integer.toHexString(s[0]));
+            check(java.util.Arrays.equals(frame, DmrAmbe.forCodec(frame)), "a clean AMBE frame is already the 9 bytes JMBE reads");
+        }
+        byte[] clean = DmrAmbe.encode(0x123, 0x456, 0x0AB, 0x0CDE);
+        byte[] dirty = clean.clone();
+        dirty[0] = (byte) (dirty[0] ^ 0x88); // frame bits 0 and 4, both in C0
+        dirty[1] = (byte) (dirty[1] ^ 0x80); // frame bit 8, also in C0
+        check(java.util.Arrays.equals(clean, DmrAmbe.forCodec(dirty)), "three flipped AMBE bits are corrected before the codec");
+        byte[] silence = java.util.HexFormat.of().parseHex("a478e4520114c02767");
+        DmrAmbe.Voice quiet = DmrAmbe.decode(silence);
+        check(quiet.ok() && quiet.errors == 0 && java.util.Arrays.equals(silence, DmrAmbe.forCodec(silence)),
+                "the Phase 2 silence frame JMBE accepts has no Golay errors and round-trips");
+        byte[] msb = DmrAmbe.encode(0x800, 0, 0, 0);
+        check((msb[0] & 0x80) != 0, "C0's most significant bit is frame bit 0, the first bit JMBE's C0 vector reads");
     }
 
     static void ui() throws Exception {

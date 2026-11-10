@@ -11,9 +11,9 @@ package p25monitor.dmr;
  * frame 3 is VS(0). Frame 2 straddles the centre: its first 36 bits are the end of the left half, and its last 36
  * bits are the start of the right half.
  *
- * <p>This is not the P25 Phase 2 bit order. JMBE's "AMBE 3600 x 2450" codec undoes the P25 interleave itself
- * ({@code EngineLibs.Ambe}). Feeding it these DMR frames will not produce the right audio. DMR voice is untested,
- * and without that codec the call is followed but silent.
+ * <p>Each 72-bit frame is the AMBE+2 word JMBE reads: bit 0 of the frame is the most significant bit of byte 0.
+ * {@link DmrAmbe} deinterleaves it, corrects the Golay words, descrambles C1 and writes the nine bytes
+ * {@code getAudio(byte[])} accepts. DMR voice is untested on a real radio. Without JMBE the call is followed but silent.
  */
 public final class DmrVoice {
     private DmrVoice() {}

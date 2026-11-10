@@ -348,7 +348,14 @@ final class VoiceCallDecoder {
                 e.log("DMR (untested) TG " + tg + " slot " + slot + " colour code " + color + " on " + NativeEngine.mhz(f) + " MHz");
             }
         }
-        if (ambe != null && ambe.length > 0) onVoice(c, ambe, null, null);
+        if (ambe != null && ambe.length > 0) onVoice(c, codecFrames(ambe), null, null);
+    }
+
+    /** Each DMR frame is rewritten as the 9-byte AMBE word JMBE's getAudio(byte[]) decodes. */
+    private static byte[][] codecFrames(byte[][] ambe) {
+        byte[][] out = new byte[ambe.length][];
+        for (int i = 0; i < ambe.length; i++) out[i] = p25monitor.dmr.DmrAmbe.forCodec(ambe[i]);
+        return out;
     }
 
     void onDmrEncrypted(long f, int slot, int color) {
