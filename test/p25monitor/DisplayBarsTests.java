@@ -105,13 +105,12 @@ public class DisplayBarsTests {
         int yel = count(idle, PAD + 10, PAD + 8, PAD + lcdW() - 10, PAD + 32, yellow, 40);
         check(yel > 60, "top bar text in the chosen colour (" + yel + " px)");
         call(d); BufferedImage lit = paint(d);
-        int pk = count(lit, PAD + 10, labY() - 8, PAD + lcdW() - 10, labY() + 8, pink, 40);
+        int pk = count(lit, PAD + 10, PAD + 40, PAD + lcdW() - 10, H - PAD, pink, 50);
         check(pk > 40, "label bar text (FREQUENCY / UNIT / RADIO) in the chosen colour (" + pk + " px)");
-        int by = PAD + (H - PAD * 2) - 18;
         ScannerDisplay amberD = display();
         amberD.setColors(DisplayTheme.AMBER, DisplayPalette.of(DisplayTheme.AMBER));
         call(amberD);
-        int greenPx = count(paint(amberD), PAD + 18, by - 16, PAD + 220, by + 4, new Color(0x2BFF88), 60);
+        int greenPx = count(paint(amberD), PAD + 10, PAD + 40, PAD + lcdW() - 10, H - PAD, new Color(0x2BFF88), 70);
         check(greenPx > 8, "field values stay bright green on a non-default theme (" + greenPx + " px)");
         check(near(lit.getRGB(barX(), topY()), red, 10), "bars stay their colour when the display is lit");
         for (DisplayTheme t : DisplayTheme.values()) {

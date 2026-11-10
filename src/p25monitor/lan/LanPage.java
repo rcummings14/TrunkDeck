@@ -42,9 +42,8 @@ final class LanPage {
     background: linear-gradient(#0C1622, #05080E); color: #EAF7FF; padding: 18px 18px 14px;
     font-family: "TrunkDeck UI", "Segoe UI", sans-serif; }
   .glass.call { border-color: var(--accent, #00E5FF); }
-  .glass::after { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 16px;
-    background: repeating-linear-gradient(to bottom, rgba(255,255,255,.04) 0 1px, transparent 1px 4px); }
-  .grow-top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-end; position: relative; z-index: 1; }
+  .grow-top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-end; position: relative; z-index: 1;
+    padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid color-mix(in srgb, var(--accent, #00E5FF) 55%, transparent); }
   .sys { color: var(--system, #7D8FA3); font-weight: 700; font-size: 12px; letter-spacing: .04em; }
   .cc { color: var(--system, #7D8FA3); font-weight: 700; font-size: 12px; white-space: nowrap; }
   .sig { display: inline-flex; align-items: flex-end; gap: 6px; margin-left: 12px; }
@@ -59,16 +58,17 @@ final class LanPage {
   .big.idle { color: var(--idle, #2F5A66); }
   .big .run { display: inline-block; padding-left: 8px; animation: tick 7s linear infinite; }
   @keyframes tick { from { transform: translateX(8%); } to { transform: translateX(-55%); } }
-  .line2 { position: relative; z-index: 1; min-height: 1.4em; font-weight: 700; font-size: 16px; color: #3D96FF; }
+  .line2 { position: relative; z-index: 1; min-height: 1.4em; font-weight: 700; font-size: 16px; color: #3D96FF; margin: 8px 0 0; }
   .line2.dim { color: var(--label, #7D8FA3); }
-  .badges { position: relative; z-index: 1; display: flex; gap: 8px; min-height: 8px; margin: 6px 0 14px; }
+  .badges { position: relative; z-index: 1; display: flex; gap: 8px; min-height: 8px; margin: 10px 0 16px; }
   .badge { font-size: 11px; font-weight: 700; letter-spacing: .04em; border-radius: 9px; padding: 1px 7px; border: 1px solid; }
   .badge.hot { color: #FF4D5E; border-color: #FF4D5E; }
   .badge.enc { color: #B388FF; border-color: #B388FF; }
   .badge.fav { color: #FFB300; border-color: #FFB300; }
   .badge.mute { color: #7D8FA3; border-color: #7D8FA3; }
-  .fields { position: relative; z-index: 1; display: grid; grid-template-columns: 1.3fr 1.6fr .8fr 1.2fr; gap: 0; }
-  .fields > div { border-left: 1px solid color-mix(in srgb, var(--accent, #00E5FF) 35%, transparent); padding: 0 12px; }
+  .fields { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0;
+    margin-top: 4px; padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--accent, #00E5FF) 55%, transparent); }
+  .fields > div { border-left: 1px solid color-mix(in srgb, var(--accent, #00E5FF) 45%, transparent); padding: 2px 16px; min-width: 0; }
   .fields > div:first-child { border-left: 0; padding-left: 0; }
   .fields label { display: block; color: var(--label, #7D8FA3); font-size: 10px; letter-spacing: .06em; }
   .fields b { display: block; font-size: 15px; font-weight: 700; color: var(--value, #8FA3B5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -58,6 +58,8 @@ public class ScannerDisplay extends JComponent {
     Color liveTint;
     /** Display only: the touch buttons sit inside this panel, so the text stops above them. */
     public boolean embedTouch;
+    /** Logical y of the button row, set while painting so the buttons sit under the fields. */
+    int buttonTopLogical;
 
     /** Talkgroup on the glass while a call is showing, or -1 while scanning or stopped. */
     public int shownTalkgroup() {
@@ -239,7 +241,6 @@ public class ScannerDisplay extends JComponent {
 
         int pad = 14, meterW = simple ? 0 : Math.min(300, w / 3);
         int lcdW = w - pad * (simple ? 2 : 3) - meterW, lcdH = h - pad * 2;
-        int foot = embedTouch ? (int) Math.ceil(72.0 / Math.max(z, 0.5)) : 0;
         Color accent = emergency ? Theme.RED : encrypted ? Theme.VIOLET : th.accent;
         Color live = (active || hang) ? liveTint : null;
         Color nameGlow = (live != null && !emergency && !encrypted) ? live : accent;
@@ -268,32 +269,32 @@ public class ScannerDisplay extends JComponent {
         g.draw(new RoundRectangle2D.Double(pad + 1, pad + 1, lcdW - 2, lcdH - 2, 16, 16));
         g.setStroke(rimStroke);
 
-        int x0 = pad + 18, y = pad + 22;
+        int x0 = pad + 18, y = pad + 18;
         paintTop(g, x0, y, pad + lcdW - 18, z, th);
+        // Every rule keeps 10 px of open panel on both sides, so it cannot meet the lettering.
+        final int gap = 8;
+        int rule1 = y + 8 + gap;
         g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 120));
-        g.drawLine(pad + 14, y + 8, pad + lcdW - 14, y + 8);
+        g.drawLine(pad + 14, rule1, pad + lcdW - 14, rule1);
 
-        // big text: the talkgroup while a call is playing (lit until its audio has finished), otherwise SCANNING (dimmed).
-        // 1.3.2: this replaces the separate small "Scanning..." status line; its height went to the big text.
-        int by = pad + lcdH - 18 - foot;                 // bottom fields baseline (above the in-panel buttons)
-        int areaTop = y + 10, areaBottom = by - 34;      // between the top row and the bottom field labels
-        int avail = Math.max(40, areaBottom - areaTop);
-        int big = Math.max(26, Math.min(64, (int) ((avail - 26) * 0.95)));
+        int inset = pad + 18;
+        int btnH = 36, btnGap = 14;
+        int bottom = embedTouch ? inset + btnH + btnGap : inset;
         String main;
         if (active) main = alpha.isEmpty() ? (tgText.isEmpty() ? "RECEIVING" : tgText) : alpha.toUpperCase();
         else main = idleText();
-        int size = Math.max(big, Math.min(78, (int) (avail * 0.72)));
+        int cursor = rule1 + gap;
+        int belowName = 8 + 18 + 8 + gap + gap + 40 + (embedTouch ? 14 + 34 + (pad + 18) : pad + 12);
+        int size = 46;
         g.setFont(DisplayFont.name(size));
-        while (!active && size > 20 && g.getFontMetrics().stringWidth(main) > lcdW - 40) g.setFont(DisplayFont.name(--size));   // idle text shrinks instead of "..."
-        main = fit(g, main, lcdW - 40);
-        int asc = g.getFontMetrics().getAscent() * 4 / 5;   // cap height, roughly
-        int block = asc + 8 + 18;                           // big line + gap + second line
-        int my = areaTop + Math.max(0, (avail - block) / 2) + asc;
+        while (size > 18 && (cursor + g.getFontMetrics().getAscent() + belowName > h || g.getFontMetrics().stringWidth(main) > lcdW - 48))
+            g.setFont(DisplayFont.name(--size));
+        main = fit(g, main, lcdW - 48);
+        int my = cursor + g.getFontMetrics().getAscent();
         if (active) halo(g, main, x0, my, nameGlow, nameInk);
-        else if (anim) marquee(g, main, pad + 6, pad + lcdW - 6, x0, my, lcdW, th, glassBg, lt < 0 ? 1 : ScannerDisplay.DIM_SCAN + (1 - ScannerDisplay.DIM_SCAN) * lt, now);   // scrolls like a scanner's ticker
-        else { g.setColor(th.idleText); g.drawString(main, x0, my); }   // (Reduce motion: still text)   // idle: dim, like an unlit LCD segment
+        else if (anim) marquee(g, main, pad + 6, pad + lcdW - 6, x0, my, lcdW, th, glassBg, lt < 0 ? 1 : ScannerDisplay.DIM_SCAN + (1 - ScannerDisplay.DIM_SCAN) * lt, now);
+        else { g.setColor(th.idleText); g.drawString(main, x0, my); }
 
-        // second line: TG number, category and tag, in blue on every theme
         g.setFont(DisplayFont.ui(16f));
         String line2;
         String meta = "";
@@ -302,18 +303,17 @@ public class ScannerDisplay extends JComponent {
             meta = (category.isBlank() ? "" : "   " + category) + (tag.isBlank() ? "" : "  \u00b7  " + tag);
         } else if (!engineLive) line2 = "";
         else line2 = tgText.isEmpty() ? "" : (hang ? "HOLDING " : "LAST  ") + tgText + (alpha.isEmpty() ? "" : "  " + alpha.toUpperCase());
-        int l2y = my + 10 + 16;
+        int l2y = my + 8 + g.getFontMetrics().getAscent();
         g.setColor(active || hang ? LINE_BLUE : th.get(DisplayPalette.Field.LABELS));
-        int lineRoom = lcdW - 40 - (active ? 160 : 0);
-        line2 = fit(g, line2, Math.max(20, lineRoom));
+        int textRoom = lcdW - 48;
+        line2 = fit(g, line2, Math.max(20, textRoom));
         g.drawString(line2, x0, l2y);
         int afterId = x0 + g.getFontMetrics().stringWidth(line2);
         if (active && !meta.isEmpty()) {
-            meta = fit(g, meta, Math.max(20, lineRoom - g.getFontMetrics().stringWidth(line2)));
+            meta = fit(g, meta, Math.max(20, textRoom - g.getFontMetrics().stringWidth(line2)));
             g.drawString(meta, afterId, l2y);
             afterId += g.getFontMetrics().stringWidth(meta);
         }
-        // badges after the second line
         int bx = afterId + ((line2.isEmpty() && meta.isEmpty()) ? 0 : 14);
         if (active && emergency) bx = badge(g, "EMERGENCY", Theme.RED, bx, l2y - 13);
         if (active && encrypted) bx = badge(g, "ENC", Theme.VIOLET, bx, l2y - 13);
@@ -323,24 +323,32 @@ public class ScannerDisplay extends JComponent {
         String dl = active && db != null ? db.get() : null;
         if (dl != null && !dl.isEmpty()) bx = badge(g, dl, Theme.CYAN, bx, l2y - 13);
 
-        // bottom fields: four equal columns, a line above them, thin dividers between them
-        g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 110));
-        int fieldLine = by - 36;
-        g.drawLine(pad + 14, fieldLine, pad + lcdW - 14, fieldLine);
+        // Badge bottoms are about 4 px under the second-line baseline. The rule starts after that, plus the gap.
+        int rule2 = l2y + 8 + gap;
+        g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 120));
+        g.drawLine(pad + 14, rule2, pad + lcdW - 14, rule2);
+        int by = rule2 + gap + 22 + 18;
+        buttonTopLogical = by + 10;
         int fw = lcdW - 36, col = fw / 4;
         java.util.List<double[]> sl = anim ? scanList() : java.util.List.of();
         if (!sl.isEmpty()) {   // classic scanner: the frequency readout steps through the system's real channels
             double[] fq = sl.get((int) ((now / STEP_MS) % sl.size()));
-            field(g, fq[1] > 0 ? (conventional ? "SCAN \u00b7 CHANNEL" : "SCAN \u00b7 CONTROL CH") : "SCAN \u00b7 VOICE CH", String.format(Locale.ROOT, "%.5f MHz", fq[0]), x0, by, false, col - 16, th.get(DisplayPalette.Field.SCAN));
-        } else field(g, "FREQUENCY", freq.isEmpty() ? "-" : freq + " MHz", x0, by, active, col - 16, DisplayPalette.Field.FREQ);
+            field(g, fq[1] > 0 ? (conventional ? "SCAN \u00b7 CHANNEL" : "SCAN \u00b7 CONTROL CH") : "SCAN \u00b7 VOICE CH", String.format(Locale.ROOT, "%.5f MHz", fq[0]), x0, by, false, col - 28, th.get(DisplayPalette.Field.SCAN));
+        } else field(g, "FREQUENCY", freq.isEmpty() ? "-" : freq + " MHz", x0, by, active, col - 28, DisplayPalette.Field.FREQ);
         var rl = radioLabel;
         String rtext = radioId > 0 && rl != null ? rl.apply(radioId) : radio;
-        radioField(g, rtext.isEmpty() ? "-" : rtext, x0 + col, by, active, col - 16);
+        radioField(g, rtext.isEmpty() ? "-" : rtext, x0 + col, by, active, col - 28);
         long secs = active ? (System.currentTimeMillis() - callStart) / 1000 : (lastActivity == 0 ? -1 : (System.currentTimeMillis() - lastActivity) / 1000);
-        field(g, active ? "CALL TIME" : "LAST CALL", secs < 0 ? "-" : active ? String.format("%d:%02d", secs / 60, secs % 60) : ago(secs), x0 + col * 2, by, active, col - 16, DisplayPalette.Field.CALLTIME);
-        field(g, "EVENT", eventText.isEmpty() ? "-" : eventText, x0 + col * 3, by, active, col - 12, DisplayPalette.Field.EVENT);
+        field(g, active ? "CALL TIME" : "LAST CALL", secs < 0 ? "-" : active ? String.format("%d:%02d", secs / 60, secs % 60) : ago(secs), x0 + col * 2, by, active, col - 28, DisplayPalette.Field.CALLTIME);
+        field(g, "EVENT", eventText.isEmpty() ? "-" : eventText, x0 + col * 3, by, active, col - 28, DisplayPalette.Field.EVENT);
+        // Vertical rules stay in the gutter: text is fitted to stop 14 px short of each rule.
         g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 90));
-        for (int i = 1; i < 4; i++) g.drawLine(x0 + col * i - 8, fieldLine + 6, x0 + col * i - 8, by + 4);
+        int vTop = rule2 + gap, vBot = by + 4;
+        for (int i = 1; i < 4; i++) g.drawLine(x0 + col * i - 14, vTop, x0 + col * i - 14, vBot);
+        if (embedTouch && by + 14 != buttonTopLogical) {
+            buttonTopLogical = by + 14;
+            javax.swing.SwingUtilities.invokeLater(this::revalidate);
+        }
 
         // ---------- right-side meters (Advanced view only) ----------
         if (simple) { g.dispose(); return; }
@@ -362,8 +370,13 @@ public class ScannerDisplay extends JComponent {
     /** The Display only buttons, laid into the bottom of this panel. */
     @Override public void doLayout() {
         if (getComponentCount() == 0) return;
-        int margin = 22, bh = Math.min(40, Math.max(30, getHeight() / 7));
-        int y = Math.max(8, getHeight() - 14 - bh);
+        double zs = zoom < 0.5 ? 1 : zoom;
+        int margin = (int) Math.round(32 * zs);
+        int bh = (int) Math.round(34 * zs);
+        int y = buttonTopLogical > 0 ? (int) Math.round(buttonTopLogical * zs) : getHeight() - margin - bh;
+        int maxY = getHeight() - margin - bh;
+        if (y > maxY) y = maxY;
+        if (y < margin) y = margin;
         for (Component c : getComponents()) c.setBounds(margin, y, Math.max(0, getWidth() - margin * 2), bh);
     }
 
@@ -494,7 +507,7 @@ public class ScannerDisplay extends JComponent {
         DisplayPalette th = palette;
         g.setFont(DisplayFont.ui(11f));
         g.setColor(th.get(DisplayPalette.Field.LABELBAR_TEXT));
-        g.drawString("UNIT / RADIO", x, y - 16);
+        g.drawString(fit(g, "UNIT / RADIO", Math.max(12, w)), x, y - 16);
         float pt = 16f;
         g.setFont(DisplayFont.ui(pt));
         while (pt > 12f && g.getFontMetrics().stringWidth(value) > w) g.setFont(DisplayFont.ui(pt -= 0.5f));
@@ -516,7 +529,7 @@ public class ScannerDisplay extends JComponent {
         DisplayPalette th = palette;
         g.setFont(DisplayFont.ui(11f));
         g.setColor(th.get(DisplayPalette.Field.LABELBAR_TEXT));
-        g.drawString(label, x, y - 16);
+        g.drawString(fit(g, label, Math.max(12, w)), x, y - 16);
         g.setFont(DisplayFont.ui(16f));
         g.setColor(valueColor);
         g.drawString(fit(g, value, Math.min(200, w)), x, y);
@@ -555,9 +568,7 @@ public class ScannerDisplay extends JComponent {
         // soft-key style bars behind the top line and the field labels (Full color preset, or the user's own colours, 1.4.9)
         Color top = th.get(DisplayPalette.Field.TOPBAR), lab = th.get(DisplayPalette.Field.LABELBAR);
         if (top != null) { g.setColor(top); g.fill(new RoundRectangle2D.Double(pad + 8, pad + 8, lcdW - 16, 24, 10, 10)); }
-        if (lab != null) { g.setColor(lab); int by = pad + lcdH - 18; g.fill(new RoundRectangle2D.Double(pad + 8, by - 30, lcdW - 16, 15, 8, 8)); }
-        g.setColor(new Color(255, 255, 255, 6));
-        for (int y = pad + 2; y < pad + lcdH; y += 3) g.drawLine(pad + 4, y, pad + lcdW - 4, y);
+        if (lab != null) { g.setColor(lab); g.fill(new RoundRectangle2D.Double(pad + 8, pad + lcdH - 52, lcdW - 16, 14, 8, 8)); }
         g.dispose();
         glassImg = img; glassKey = key;
         return img;

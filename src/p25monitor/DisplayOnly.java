@@ -252,6 +252,10 @@ final class DisplayOnly {
             g2.setFont(c.getFont() == null ? DisplayFont.ui(15f) : c.getFont());
             g2.setColor(on ? Color.WHITE : new Color(0x9AA6B2));
             FontMetrics fm = g2.getFontMetrics();
+            int max = Math.max(8, w - 36);
+            while (text.length() > 1 && fm.stringWidth(text) > max) text = text.substring(0, text.length() - 1);
+            if (comboBox != null && comboBox.getSelectedItem() != null && !text.equals(comboBox.getSelectedItem().toString()) && text.length() > 1)
+                text = text.substring(0, text.length() - 1) + "\u2026";
             int ty = (h + fm.getAscent() - fm.getDescent()) / 2;
             g2.drawString(text, 12, ty);
             int ax = w - 16, ay = h / 2;
