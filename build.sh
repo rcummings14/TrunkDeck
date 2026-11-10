@@ -31,6 +31,7 @@ if [ "${1:-}" = "test" ]; then
   "$JAVA" --enable-native-access=ALL-UNNAMED -Dtrunkdeck.lib=lib -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.RdioScannerTests   # Rdio Scanner uploads (1.4.8); -Djmbe=<jmbe jar> adds the real-engine upload checks
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.DisplayBarsTests   # bar colours (1.4.9)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.DisplayColorTests   # every custom colour and preset reaches the panel
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.DmrTests   # synthetic DMR bursts (untested on air)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.SignalMeterTests   # control-channel signal meter: scale, text, glass
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.ControlSignalTests   # control-tuner level only; no invented reading
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.DisplayOnlyTests   # Display only logic (1.5.0; the window part needs a display)

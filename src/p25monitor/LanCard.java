@@ -347,6 +347,7 @@ final class LanCard {
         boolean onCall = s.monitoring && lit == 2 && (cur != null || last.any);
         s.hang = s.monitoring && lit == 1;
         s.activity = !s.monitoring ? "stopped" : onCall ? "call" : "scanning";
+        s.reduceMotion = f.display.reduceMotion;
         s.engine = s.monitoring ? eng.state() : "STOPPED";
         s.system = sys == null ? "NO SYSTEM" : sys.name;
         s.site = sys == null ? "" : sys.site;

@@ -234,6 +234,14 @@ public final class LanTests {
         check(r.body.contains("col.freq") && r.body.contains("col.radio") && r.body.contains("col.event") && r.body.contains("col.calltime")
                 && r.body.contains("col.glow") && r.body.contains("col.scan") && r.body.contains("col.labels") && r.body.contains("col.talkgroup"),
                 "the glass uses each custom colour");
+        int keep = r.body.indexOf("function keepScan");
+        int paintAt = r.body.indexOf("function paint");
+        String scanFn = keep >= 0 && paintAt > keep ? r.body.substring(keep, paintAt) : "";
+        check(scanFn.contains("querySelector('.run')") && scanFn.contains("dataset.mode === 'scan'") && scanFn.contains("run.dataset.text === want")
+                && scanFn.contains("if (same) return"),
+                "scanning text is kept across polls (the scrolling node is not rebuilt)");
+        check(r.body.contains("translateX(-50%)") && r.body.contains("s.reduceMotion") && r.body.contains("big.reduce .run"),
+                "the scan moves one way and stops when Reduce motion is on");
         check(r.body.contains("SCAN · CHANNEL") && r.body.contains("SCAN · CONTROL CH"), "conventional systems label the channel, trunked systems the control channel");
         check(r.body.toLowerCase().contains("home network"), "page says it is for the home network");
         check(!r.body.contains("Choose folder") && !r.body.contains("recordings.dir"), "home-network page has no recordings-folder control");

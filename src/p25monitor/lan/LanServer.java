@@ -52,6 +52,8 @@ public final class LanServer {
         public boolean monitoring;
         /** {@code stopped}, {@code scanning}, or {@code call}. {@code hang} is the tail of a call (big text still scans). */
         public String activity = "stopped";
+        /** Desktop "Reduce motion": the home-network page keeps SCANNING still. */
+        public boolean reduceMotion;
         public boolean hang;
         public String system = "", site = "", control = "";
         /** Conventional system: the glass shows a channel, not a control channel. */
@@ -322,6 +324,7 @@ public final class LanServer {
         b.append("{\"ok\":true");
         b.append(",\"monitoring\":").append(s.monitoring);
         b.append(",\"activity\":").append(LanJson.quote(s.activity));
+        b.append(",\"reduceMotion\":").append(s.reduceMotion);
         b.append(",\"hang\":").append(s.hang);
         b.append(",\"system\":").append(LanJson.quote(s.system));
         b.append(",\"site\":").append(LanJson.quote(s.site));

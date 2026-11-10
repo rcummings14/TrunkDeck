@@ -57,8 +57,10 @@ final class LanPage {
     text-shadow: 0 0 12px var(--glow, transparent), 0 0 24px var(--glow, transparent); }
   .big.scan { color: var(--scan, #00E5FF); }
   .big.idle { color: var(--idle, #2F5A66); }
-  .big .run { display: inline-block; padding-left: 8px; animation: tick 7s linear infinite; }
-  @keyframes tick { from { transform: translateX(8%); } to { transform: translateX(-55%); } }
+  .big .run { display: inline-block; white-space: nowrap; will-change: transform; animation: tick 14s linear infinite; }
+  .big.reduce .run { animation: none; }
+  @keyframes tick { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) { .big .run { animation: none; } }
   .line2 { position: relative; z-index: 1; min-height: 1.4em; font-weight: 700; font-size: 16px; color: var(--tgid, #FFB300); margin: 8px 0 0; }
   .line2.dim { color: var(--labels, #7D8FA3); }
   .badges { position: relative; z-index: 1; display: flex; gap: 8px; min-height: 8px; margin: 10px 0 16px; }
@@ -271,6 +273,36 @@ function clock(ms) {
   return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 }
 
+function showStill(big, extra, text) {
+  if (big.dataset.mode === 'still' && big.dataset.text === text && big.dataset.extra === extra) return;
+  big.dataset.mode = 'still';
+  big.dataset.text = text;
+  big.dataset.extra = extra;
+  big.className = 'big' + (extra ? ' ' + extra : '');
+  big.textContent = text;
+}
+/** One scrolling copy, drawn twice so a move of exactly half the width loops with no jump. The node stays across polls. */
+function keepScan(big, text, reduce, color, glow) {
+  const unit = text + '          ';
+  const want = unit + unit;
+  const run = big.querySelector('.run');
+  const same = big.dataset.mode === 'scan' && run && run.dataset.text === want && big.classList.contains('reduce') === reduce;
+  big.classList.add('scan');
+  big.classList.toggle('reduce', reduce);
+  big.style.color = color || '';
+  big.style.textShadow = (!reduce && glow) ? ('0 0 12px ' + glow + ', 0 0 24px ' + glow) : 'none';
+  if (same) return;
+  big.dataset.mode = 'scan';
+  big.dataset.text = want;
+  big.className = 'big scan' + (reduce ? ' reduce' : '');
+  big.style.color = color || '';
+  big.style.textShadow = (!reduce && glow) ? ('0 0 12px ' + glow + ', 0 0 24px ' + glow) : 'none';
+  const span = document.createElement('span');
+  span.className = 'run';
+  span.dataset.text = want;
+  span.textContent = reduce ? text : want;
+  big.replaceChildren(span);
+}
 function paint(s) {
   state = s;
   cssColors(s.colors);
@@ -305,24 +337,14 @@ function paint(s) {
   const conv = !!s.conventional;
   bars(s.signalBars, s.signalText, on);
   const big = $('big');
-  big.className = 'big';
-  if (!on && left > 0) { big.classList.add('idle'); big.textContent = 'STARTING IN ' + left; }
-  else if (!on) { big.classList.add('idle'); big.textContent = (s.engine || 'STOPPED').toUpperCase(); }
+  if (!on && left > 0) showStill(big, 'idle', 'STARTING IN ' + left);
+  else if (!on) showStill(big, 'idle', (s.engine || 'STOPPED').toUpperCase());
   else if (call) {
     const tint = s.emergency ? '#FF4D5E' : s.encrypted ? '#B388FF' : (s.liveText || col.talkgroup || '');
+    showStill(big, '', (s.talkgroup || 'TG ' + s.talkgroupId).toUpperCase());
     big.style.color = tint;
     big.style.textShadow = (!s.emergency && !s.encrypted && glow) ? ('0 0 12px ' + glow + ', 0 0 24px ' + glow) : 'none';
-    big.textContent = (s.talkgroup || 'TG ' + s.talkgroupId).toUpperCase();
-  } else {
-    big.classList.add('scan');
-    big.style.color = col.scan || '';
-    big.style.textShadow = glow ? ('0 0 12px ' + glow + ', 0 0 24px ' + glow) : 'none';
-    big.replaceChildren();
-    const run = document.createElement('span');
-    run.className = 'run';
-    run.textContent = 'SCANNING ...          SCANNING ...          SCANNING ...';
-    big.append(run);
-  }
+  } else keepScan(big, 'SCANNING ...', !!s.reduceMotion, col.scan || '', glow);
   const line = $('line2');
   line.className = 'line2' + (call ? '' : ' dim');
   line.style.color = (s.liveText && !s.emergency && !s.encrypted && (call || s.hang)) ? s.liveText

@@ -202,6 +202,8 @@ final class ChannelDecoder {
 
     /** Tests: run at the start of every block (fault injection). */
     volatile Runnable faultHook;
+    /** DMR demod on this same 48 kHz channel. Null on a P25 channel. */
+    p25monitor.dmr.DmrReceiver dmr;
 
     void process(float[] i, float[] q, int n) {
         if (!enabled) return;
@@ -247,6 +249,7 @@ final class ChannelDecoder {
             jumpSamples += m;
         } else if (m > 0) { jpi = oi[m - 1]; jpq = oq[m - 1]; }
         for (Demod pa : paths) pa.demod.process(oi, oq, m);
+        if (dmr != null && m > 0) dmr.baseband(oi, oq, m);
         samples += m;
         fll();
         if (samples - windowAt >= WINDOW) { windowAt = samples; compare(); }

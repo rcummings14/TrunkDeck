@@ -27,6 +27,11 @@ final class ControlChannel {
         if (e.ccCenter <= 0) fs.addAll(e.ccGroups.get(e.ccGroup));
         else for (long f : e.ccFreqs) if (e.ccTuner.covers(f) || Math.abs(f - e.ccCenter) < e.ccSource.sampleRate() * 0.45 && Math.abs(f - e.ccCenter) >= e.ccTuner.dcGuard) fs.add(f);
         if (fs.isEmpty()) fs.addAll(e.ccGroups.get(e.ccGroup));
+        if (e.sys != null && e.sys.dmrTrunk()) {
+            e.ccDecoders.clear();
+            for (long f : fs) e.ccDecoders.add(e.dmrDecoder(e.ccTuner, f));
+            return;
+        }
         for (long f : fs) {
             ChannelDecoder d = new ChannelDecoder(e.ccTuner.decoderRate(), e.ccTuner.decoderCenter(f), f, new P25Framer.Listener() {
                 public void tsbk(Tsbk t) { onTsbk(t, f); }

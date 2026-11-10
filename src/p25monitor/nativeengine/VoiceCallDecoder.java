@@ -323,4 +323,49 @@ final class VoiceCallDecoder {
     }
 
     void onConventionalEnd(long f) { synchronized (e) { ActiveCall c = e.callMap.get("C" + f); if (c != null) e.calls.endCall(c, "end of transmission"); } }
+
+    /** A DMR group or private call. Encrypted calls are not started. Audio uses the Phase 2 AMBE+2 codec when it is installed. */
+    void onDmr(long f, int slot, int color, int tg, int src, boolean group, byte[][] ambe) {
+        ActiveCall c;
+        synchronized (e) {
+            c = e.callMap.get("D" + f + "/" + slot);
+            if (c == null) {
+                c = new ActiveCall();
+                c.conventional = true; c.phase2 = true; c.freq = f; c.slot = slot - 1;
+                c.start = System.currentTimeMillis(); c.lastSeen = c.start; c.followStart = c.start; c.lastVoice = c.start;
+                c.tg = tg; c.src = src; c.t = e.tg(tg); c.followed = true; c.eligible = true; c.tuner = e.tunerFor(f);
+                c.imbe = EngineLibs.newAmbe();
+                if (c.imbe == null && e.ambeMissingLogged.compareAndSet(false, true))
+                    e.log("DMR call TG " + tg + ": the AMBE+2 voice codec is not available (it needs JMBE 2.x) - the call is followed but silent. DMR is untested.");
+                CallEvent ev = new CallEvent();
+                ev.timestamp = e.ts.format(new Date()); ev.protocol = "DMR"; ev.event = group ? "Group Call" : "Private Call";
+                ev.to = String.valueOf(tg); ev.talkgroup = tg; ev.from = src > 0 ? String.valueOf(src) : ""; ev.radioId = src;
+                ev.frequencyMHz = f / 1e6; ev.timeslot = "TS" + slot + (color >= 0 ? "  CC " + color : "");
+                ev.details = "DMR (untested) " + ev.timeslot;
+                c.ev = ev;
+                e.callMap.put("D" + f + "/" + slot, c);
+                e.listener.callStarted(ev);
+                e.log("DMR (untested) TG " + tg + " slot " + slot + " colour code " + color + " on " + NativeEngine.mhz(f) + " MHz");
+            }
+        }
+        if (ambe != null && ambe.length > 0) onVoice(c, ambe, null, null);
+    }
+
+    void onDmrEncrypted(long f, int slot, int color) {
+        e.log("DMR encrypted call on " + NativeEngine.mhz(f) + " MHz slot " + slot + " colour code " + color + " - skipped");
+    }
+
+    void onDmrEnd(long f) {
+        synchronized (e) {
+            java.util.List<ActiveCall> end = new java.util.ArrayList<>();
+            for (var en : e.callMap.entrySet()) if (en.getKey().startsWith("D" + f + "/")) end.add(en.getValue());
+            for (ActiveCall c : end) e.calls.endCall(c, "end of transmission");
+        }
+    }
+
+    void onDmrGrant(p25monitor.dmr.DmrTrunk.Grant g) {
+        if (g == null) return;
+        e.log("DMR grant (untested) TG " + g.talkgroup + " -> " + NativeEngine.mhz(g.hz) + " MHz slot " + g.slot);
+        onDmr(g.hz, g.slot, -1, g.talkgroup, g.source, true, new byte[0][]);
+    }
 }

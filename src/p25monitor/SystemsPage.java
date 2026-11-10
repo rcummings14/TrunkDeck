@@ -10,10 +10,11 @@ public class SystemsPage extends JPanel {
     final MainFrame f;
     final DefaultListModel<RadioSystem> listModel = new DefaultListModel<>();
     final JList<RadioSystem> list = new JList<>(listModel);
-    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)"});
+    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)", "DMR (conventional, untested)", "DMR trunked (untested)"});
+    final JComboBox<String> dmrFlavor = new JComboBox<>(new String[]{"Tier III", "Capacity Plus", "Connect Plus", "XPT"});
+    final JComboBox<String> dmrSlot = new JComboBox<>(new String[]{"Both timeslots", "Timeslot 1", "Timeslot 2"});
     /** Shown under Kind, the same way an untested receiver is marked on the Engine page. */
-    final JLabel untestedNote = new JLabel("<html><span style='color:#FFB300;font-size:11px'>P25 conventional has not been tested on a real radio system yet. If something doesn't work, please report it on GitHub Issues ("
-            + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").</span></html>");
+    final JLabel untestedNote = new JLabel();
     final JTextField name = new JTextField(), site = new JTextField(), cc = new JTextField(), nac = new JTextField(), wacn = new JTextField(),
             sysId = new JTextField(), rfss = new JTextField(), siteNo = new JTextField(), tuner = new JTextField();
     final JLabel freqLabel = new JLabel("Control channel(s) MHz");
@@ -65,7 +66,7 @@ public class SystemsPage extends JPanel {
                 RadioSystem r = (RadioSystem) v;
                 setBorder(new EmptyBorder(8, 10, 8, 10));
                 setText("<html><b style='color:#DCE6F0'>" + MonitorPage.esc(r.name) + "</b><br><span style='color:#7D8FA3'>"
-                        + (r.conventional() ? "Conventional" : "Trunked") + " \u00b7 " + r.displayFreqs() + " MHz \u00b7 " +
+                        + r.kindLabel() + " \u00b7 " + r.displayFreqs() + " MHz \u00b7 " +
                         r.talkgroups.size() + " talkgroups"
                         + (f.app.isAutoStart(r) ? " \u00b7 Auto-start" : "") + "</span></html>");
                 return this;
@@ -87,7 +88,7 @@ public class SystemsPage extends JPanel {
         int y = 0;
         cc.setFont(Theme.mono(Font.BOLD, 15f));
         tuner.putClientProperty("JTextField.placeholderText", "optional - e.g. Airspy 0x26A464DC2B5A7C9F (see Setup & Help \u2192 Tuners)");
-        kindBox.addActionListener(e -> showKind(kindBox.getSelectedIndex() == 1));
+        kindBox.addActionListener(e -> showKind(kindBox.getSelectedIndex()));
         y = row(g, c, y, "Kind", kindBox, "Trunked follows a control channel. Conventional stays on the frequencies you type. There is no control channel.");
         c.gridy = y; c.gridx = 1; c.weightx = 1; c.gridwidth = 1;
         c.insets = new Insets(0, 4, 8, 8);
@@ -105,7 +106,11 @@ public class SystemsPage extends JPanel {
         ids.setOpaque(false);
         ids.add(nacOnly, BorderLayout.WEST);
         ids.add(trunkIds, BorderLayout.CENTER);
-        y = row(g, c, y, "IDs (optional)", ids, "On a trunked system, sites with the same WACN and System ID share one talkgroup list. A conventional system keeps its own list. NAC makes the receiver ignore other traffic on the same frequency.");
+        y = row(g, c, y, "IDs (optional)", ids, "On a trunked system, sites with the same WACN and System ID share one talkgroup list. A conventional system keeps its own list. NAC makes the receiver ignore other traffic on the same frequency. On DMR, the NAC box is the colour code (0-15).");
+        JPanel dmrOpts = new JPanel(new GridLayout(1, 2, 8, 0));
+        dmrOpts.setOpaque(false);
+        dmrOpts.add(dmrFlavor); dmrOpts.add(dmrSlot);
+        y = row(g, c, y, "DMR", dmrOpts, "Trunked DMR: Tier III follows a control-channel grant. Capacity Plus and XPT follow the rest channel. Connect Plus follows a voice grant. (untested)");
         y = row(g, c, y, "Max simultaneous calls", traffic, "How many calls the engine decodes at the same time (each uses about 4% of one CPU core). Calls must also fall inside a dongle's window.");
         JPanel checks = new JPanel(new GridLayout(0, 1));
         checks.setOpaque(false);
@@ -176,19 +181,31 @@ public class SystemsPage extends JPanel {
         c.insets = new Insets(0, 4, 6, 8);
         g.add(freqHelp, c);
         c.insets = new Insets(5, 4, 5, 8);
-        showKind(false);
+        showKind(0);
         return y + 1;
     }
 
-    void showKind(boolean conventional) {
-        freqLabel.setText(conventional ? "Channels MHz" : "Control channel(s) MHz");
-        Jargon.explain(freqLabel, conventional ? "Channels MHz" : "Control channel(s) MHz");
+    void showKind(int kind) {
+        boolean fixed = kind == 1 || kind == 2;
+        boolean dmr = kind == 2 || kind == 3;
+        freqLabel.setText(fixed ? "Channels MHz" : "Control channel(s) MHz");
+        Jargon.explain(freqLabel, fixed ? "Channels MHz" : "Control channel(s) MHz");
         cc.setToolTipText(freqLabel.getToolTipText());
-        cc.putClientProperty("JTextField.placeholderText", conventional ? "e.g. 155.2500, 155.3700:2D5" : "e.g. 851.0125, 851.5125");
-        freqHelp.setText("<html><span style='color:#7D8FA3;font-size:10px'>" + (conventional
+        cc.putClientProperty("JTextField.placeholderText", kind == 2 ? "e.g. 450.0000:1/1 Sample" : fixed ? "e.g. 155.2500, 155.3700:2D5" : "e.g. 851.0125, 851.5125");
+        freqHelp.setText("<html><span style='color:#7D8FA3;font-size:10px'>" + (kind == 2
+                ? "DMR channels, separated by commas. Colour code and timeslot after a colon: 450.0000:1/2. The colour code below applies when a channel does not set its own. (untested)"
+                : fixed
                 ? "The frequencies to listen on, separated by commas. Add a NAC after a colon when one channel uses its own, for example 155.2500:2D5. The NAC below applies to every channel without its own."
                 : "Primary first; add alternate control channels separated by commas. TrunkDeck rotates through them until one locks.") + "</span></html>");
-        trunkIds.setVisible(!conventional);
+        trunkIds.setVisible(kind == 0);
+        dmrFlavor.setVisible(kind == 3);
+        dmrSlot.setVisible(dmr);
+        String note = kind == 1 ? "P25 conventional has not been tested on a real radio system yet."
+                : kind == 2 ? "DMR conventional has not been tested on a real radio system yet."
+                : kind == 3 ? "DMR trunking (Tier III, Capacity Plus, Connect Plus and XPT) has not been tested on a real radio system yet."
+                : "";
+        untestedNote.setText(note.isEmpty() ? " " : "<html><span style='color:#FFB300;font-size:11px'>" + note + " If something doesn't work, please report it on GitHub Issues ("
+                + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").</span></html>");
     }
 
     void refreshList() {
@@ -202,10 +219,15 @@ public class SystemsPage extends JPanel {
     void edit(RadioSystem s) {
         editing = s;
         name.setText(s.name); site.setText(s.site);
-        kindBox.setSelectedIndex(s.conventional() ? 1 : 0);
-        showKind(s.conventional());
-        cc.setText(s.conventional() ? s.channelText() : s.freqText());
-        nac.setText(s.nac); wacn.setText(s.wacn); sysId.setText(s.sysId); rfss.setText(s.rfss); siteNo.setText(s.siteNumber);
+        int kind = s.dmrTrunk() ? 3 : s.dmrConventional() ? 2 : s.conventional() ? 1 : 0;
+        kindBox.setSelectedIndex(kind);
+        showKind(kind);
+        cc.setText(s.fixedChannels() ? s.channelText() : s.freqText());
+        dmrFlavor.setSelectedIndex(switch (s.dmrFlavor == null ? "" : s.dmrFlavor) {
+            case "capplus" -> 1; case "conplus" -> 2; case "xpt" -> 3; default -> 0; });
+        dmrSlot.setSelectedIndex(s.timeslot == 1 ? 1 : s.timeslot == 2 ? 2 : 0);
+        nac.setText(s.dmr() && s.colorCode >= 0 ? String.valueOf(s.colorCode) : s.nac);
+        wacn.setText(s.wacn); sysId.setText(s.sysId); rfss.setText(s.rfss); siteNo.setText(s.siteNumber);
         modulation.setSelectedIndex("CQPSK".equals(s.modulation) ? 1 : 0);
         nativeMod.setSelectedIndex(s.nativeModulation.startsWith("c4") ? 1 : s.nativeModulation.startsWith("lsm") ? 2 : 0);
         traffic.setValue(Math.max(1, Math.min(32, s.trafficChannels)));
@@ -220,9 +242,10 @@ public class SystemsPage extends JPanel {
     }
 
     boolean readForm(RadioSystem s) {
-        boolean conventional = kindBox.getSelectedIndex() == 1;
+        int kind = kindBox.getSelectedIndex();
+        boolean fixed = kind == 1 || kind == 2;
         try {
-            if (conventional) {
+            if (fixed) {
                 java.util.List<RadioSystem.Channel> ch = RadioSystem.parseChannelText(cc.getText());
                 if (ch.isEmpty()) throw new NumberFormatException("enter at least one channel");
                 s.channels = ch;
@@ -234,14 +257,19 @@ public class SystemsPage extends JPanel {
                 s.channels = new ArrayList<>();
             }
         } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(f, (conventional ? "Channel: " : "Control channel: ") + ex.getMessage()
-                    + (conventional ? "\nExample: 155.2500, 155.3700:2D5" : "\nExample: 851.0125, 851.5125"), "Check the frequency", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(f, (fixed ? "Channel: " : "Control channel: ") + ex.getMessage()
+                    + (kind == 2 ? "\nExample: 450.0000:1/2" : fixed ? "\nExample: 155.2500, 155.3700:2D5" : "\nExample: 851.0125, 851.5125"), "Check the frequency", JOptionPane.WARNING_MESSAGE);
             return false;
         }
         if (name.getText().isBlank()) { JOptionPane.showMessageDialog(f, "Give the system a name."); return false; }
-        s.kind = conventional ? RadioSystem.CONVENTIONAL : RadioSystem.TRUNKED;
+        s.kind = switch (kind) { case 1 -> RadioSystem.CONVENTIONAL; case 2 -> RadioSystem.DMR; case 3 -> RadioSystem.DMR_TRUNK; default -> RadioSystem.TRUNKED; };
+        s.dmrFlavor = switch (dmrFlavor.getSelectedIndex()) { case 1 -> "capplus"; case 2 -> "conplus"; case 3 -> "xpt"; default -> "tier3"; };
+        s.timeslot = dmrSlot.getSelectedIndex();
         s.name = name.getText().trim(); s.site = site.getText().trim();
-        s.nac = nac.getText().trim(); s.wacn = wacn.getText().trim(); s.sysId = sysId.getText().trim(); s.rfss = rfss.getText().trim(); s.siteNumber = siteNo.getText().trim();
+        s.nac = nac.getText().trim();
+        s.colorCode = -1;
+        if (s.dmr()) try { if (!s.nac.isBlank()) s.colorCode = Integer.parseInt(s.nac.trim()); } catch (NumberFormatException ignored) {}
+        s.wacn = wacn.getText().trim(); s.sysId = sysId.getText().trim(); s.rfss = rfss.getText().trim(); s.siteNumber = siteNo.getText().trim();
         s.modulation = modulation.getSelectedIndex() == 1 ? "CQPSK" : "C4FM";
         s.nativeModulation = switch (nativeMod.getSelectedIndex()) { case 1 -> "c4fm"; case 2 -> "lsm"; default -> "auto"; };
         s.trafficChannels = (Integer) traffic.getValue();
@@ -301,6 +329,7 @@ public class SystemsPage extends JPanel {
         s.nac = o.nac; s.wacn = o.wacn; s.sysId = o.sysId;
         s.rfss = o.rfss; s.siteNumber = o.siteNumber; s.modulation = o.modulation; s.nativeModulation = o.nativeModulation; s.trafficChannels = o.trafficChannels; s.ignoreDataCalls = o.ignoreDataCalls;
         s.preferredTuner = o.preferredTuner; s.recordAll = o.recordAll; s.decodeMeter = o.decodeMeter; s.notes = o.notes;
+        s.dmrFlavor = o.dmrFlavor; s.colorCode = o.colorCode; s.timeslot = o.timeslot;
         s.rrSid = o.rrSid; s.rrSites = o.rrSites; s.rrUpdated = o.rrUpdated; s.rrSeen = o.rrSeen;
         for (Talkgroup t : o.talkgroups) {
             Talkgroup n = new Talkgroup();

@@ -37,7 +37,7 @@ public final class TalkgroupLists {
      */
     public static boolean sameSystem(RadioSystem a, RadioSystem b) {
         if (a == null || b == null || a == b) return false;
-        if (a.conventional() || b.conventional()) return false;
+        if (a.conventional() || b.conventional() || a.dmr() || b.dmr()) return false;
         String pa = p25Key(a), pb = p25Key(b);
         if (!pa.isEmpty() && pa.equals(pb)) return true;
         return a.rrSid > 0 && a.rrSid == b.rrSid;

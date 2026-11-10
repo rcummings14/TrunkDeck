@@ -257,7 +257,8 @@ public final class NativeEngine {
         undecodable.clear(); tdma.clear(); ambeMissingLogged.set(false); voiceOnCcLogged.clear(); retunes = 0; follows = 0; phase2Calls = 0; lastDiag = null; iqRecorded = 0;
         lsmPreferred = "lsm".equalsIgnoreCase(s.nativeModulation); ccDemodLogged = "";
         usage.clear(); missed.clear(); missedRecent.clear(); peakConcurrent = 0; tuners.clear(); huntCount = 0; fixedWideCenter = 0; widePlanned = false;
-        conventional = s.conventional(); parkedDecoders.clear(); scanTuner = null; scanGroups = List.of(); scanIndex = 0; lastScanAt = 0;
+        conventional = s.fixedChannels(); parkedDecoders.clear(); scanTuner = null; scanGroups = List.of(); scanIndex = 0; lastScanAt = 0;
+        if (s.dmr()) log("DMR " + (s.dmrTrunk() ? "trunked (" + s.dmrFlavor + ")" : "conventional") + " (untested). If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         SpeakerMode sm;
         try { sm = SpeakerMode.valueOf(app.settings.getProperty("native.speaker", "PRIORITY")); } catch (Exception e) { sm = SpeakerMode.PRIORITY; }
         int hold;
@@ -733,6 +734,7 @@ public final class NativeEngine {
     }
 
     ChannelDecoder voiceDecoder(Tuner t, long f) {
+        if (sys != null && sys.dmr()) return dmrDecoder(t, f);
         int nac = sys == null ? -1 : sys.nacFor(f);
         ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {
             public void ldu(int n, int duid, byte[][] imbe, P25Framer.LinkControl lc, P25Framer.EncryptionSync ess) { voice.onConventional(f, n, imbe, lc, ess); }
@@ -740,6 +742,29 @@ public final class NativeEngine {
         }, 0, modulation(), lsmPreferred, nac);
         if (nac >= 0) for (ChannelDecoder.Demod p : d.paths) p.framer.enforceNac = true;
         d.anchor = () -> tunerAnchor(t, d, f);
+        return d;
+    }
+
+    /** A channel decoder whose P25 framer is idle and whose samples feed the DMR receiver. */
+    ChannelDecoder dmrDecoder(Tuner t, long f) {
+        ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {}, 0);
+        int cc = sys == null ? -1 : sys.colorCodeFor(f);
+        int slot = sys == null ? 0 : sys.slotFor(f);
+        java.util.List<Long> chans = new java.util.ArrayList<>();
+        if (sys != null) for (double mhz : sys.frequencies()) chans.add(Math.round(mhz * 1e6));
+        long base = chans.isEmpty() ? f : chans.get(0);
+        p25monitor.dmr.DmrTrunk trunk = sys != null && sys.dmrTrunk() ? new p25monitor.dmr.DmrTrunk(p25monitor.dmr.DmrTrunk.flavor(sys.dmrFlavor)) : null;
+        final long freq = f;
+        d.dmr = new p25monitor.dmr.DmrReceiver(f, cc, slot, trunk, base, chans, new p25monitor.dmr.DmrReceiver.Listener() {
+            public void group(long hz, int sl, int color, int tg, int src, byte[][] ambe) { voice.onDmr(hz, sl, color, tg, src, true, ambe); d.lastFrameAt = System.currentTimeMillis(); }
+            public void unit(long hz, int sl, int color, int target, int src) { voice.onDmr(hz, sl, color, target, src, false, new byte[0][]); d.lastFrameAt = System.currentTimeMillis(); }
+            public void encrypted(long hz, int sl, int color) { voice.onDmrEncrypted(hz, sl, color); }
+            public void end(long hz, int sl) { voice.onDmrEnd(hz); }
+            public void grant(p25monitor.dmr.DmrTrunk.Grant g) { voice.onDmrGrant(g); d.lastFrameAt = System.currentTimeMillis(); }
+            public void rest(int repeater, int sl, long hz, boolean moved) { if (moved) log("DMR rest channel (untested) -> repeater " + repeater + " slot " + sl + (hz > 0 ? " " + mhz(hz) + " MHz" : "")); d.lastFrameAt = System.currentTimeMillis(); }
+            public void alias(int src, String text) { log("DMR talker alias " + src + " " + text); }
+        });
+        d.anchor = () -> tunerAnchor(t, d, freq);
         return d;
     }
 
