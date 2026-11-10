@@ -232,15 +232,10 @@ public class ScannerDisplay extends JComponent {
         int lcdW = w - pad * (simple ? 2 : 3) - meterW, lcdH = h - pad * 2;
         Color accent = emergency ? Theme.RED : encrypted ? Theme.VIOLET : active ? th.accent : th.accentIdle;
         Color tgColor = emergency ? Theme.RED : encrypted ? Theme.VIOLET : th.get(DisplayPalette.Field.TALKGROUP);
-        Color litBg = th.get(DisplayPalette.Field.BACKGROUND);
         Color live = (active || hang) ? liveTint : null;
-        if (live != null && !emergency && !encrypted) {
-            accent = live;
-            litBg = TalkgroupColors.background(live);
-            tgColor = TalkgroupColors.ink(litBg);
-        }
+        if (live != null && !emergency && !encrypted) tgColor = live;   // the name and number only; the glass stays the theme
         double lt = backlight ? Math.round(light * 32) / 32.0 : -1;   // quantized: the glass cache holds a few fade steps
-        Color glassBg = lt < 0 ? th.lcd : mix(th.get(DisplayPalette.Field.DARK), litBg, lt);
+        Color glassBg = lt < 0 ? th.lcd : mix(th.get(DisplayPalette.Field.DARK), th.get(DisplayPalette.Field.BACKGROUND), lt);
         // bezel, LCD glass, its glow and the scanline texture: drawn once per size / colours, then reused every frame
         g.drawImage(glass(w, h, pad, lcdW, lcdH, th, accent, glassBg, lt, g.getTransform()), 0, 0, w, h, null);
         Color frame = th.get(DisplayPalette.Field.BORDER);
@@ -287,7 +282,8 @@ public class ScannerDisplay extends JComponent {
         else if (!engineLive) line2 = "";
         else line2 = tgText.isEmpty() ? "" : (hang ? "HOLDING " : "LAST  ") + tgText + (alpha.isEmpty() ? "" : "  " + alpha.toUpperCase());
         int l2y = my + 12 + 17;
-        g.setColor(active ? (live != null && !emergency && !encrypted ? tgColor : th.get(DisplayPalette.Field.TGID)) : th.get(DisplayPalette.Field.LABELS));
+        boolean coloredText = live != null && !emergency && !encrypted && (active || hang);
+        g.setColor(coloredText ? live : (active ? th.get(DisplayPalette.Field.TGID) : th.get(DisplayPalette.Field.LABELS)));
         line2 = fit(g, line2, lcdW - 40 - (active ? 220 : 0));
         g.drawString(line2, x0, l2y);
         // badges after the second line

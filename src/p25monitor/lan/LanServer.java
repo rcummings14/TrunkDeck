@@ -90,8 +90,8 @@ public final class LanServer {
         /** Touch buttons. muteAll and hold are not saved. touchMuted is only talkgroups muted from those buttons. */
         public boolean touchMuteAll, touchHold;
         public final java.util.List<TouchRow> touchMuted = new java.util.ArrayList<>();
-        /** Live highlight for the talkgroup on the air. Empty keeps the display theme. */
-        public String liveBg = "", liveInk = "";
+        /** Colour of the live talkgroup name and number. Empty keeps the display theme. */
+        public String liveText = "";
     }
 
     public static final class TouchRow {
@@ -458,8 +458,7 @@ public final class LanServer {
             b.append("{\"id\":").append(t.id).append(",\"name\":").append(LanJson.quote(t.name)).append('}');
         }
         b.append(']');
-        b.append(",\"liveBg\":").append(LanJson.quote(s.liveBg));
-        b.append(",\"liveInk\":").append(LanJson.quote(s.liveInk));
+        b.append(",\"liveText\":").append(LanJson.quote(s.liveText));
         return b.append("}").toString();
     }
 

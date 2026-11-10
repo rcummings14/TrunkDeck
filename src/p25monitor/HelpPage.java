@@ -184,7 +184,7 @@ public class HelpPage extends JPanel {
                 + "A name, favorite, mute, record, priority, colour or stream assignment is kept once: change it on any of those sites and the others follow. "
                 + "A site with none of those IDs keeps its own list, so two sites with blank IDs stay separate. A conventional system keeps its own list too. "
                 + "Adding another site of a system you already have starts from the list you already keep, and a RadioReference import merges names into it and leaves favorites, mutes, record, priority and streams as they are. "
-                + "The <b>Color</b> column sets an optional live colour (or Default). While that talkgroup is on the air, the Monitor, Display only, and the home-network page highlight it in that colour. Default keeps the display theme. The writing stays readable on the colour.<br>" +
+                + "The <b>Color</b> column picks a colour for that talkgroup's name and number while it is on the air (or Default, which keeps the display theme). The list itself stays the usual colours. The same text colour is used on the Monitor, Display only, and the home-network page. Sites of the same system share it.<br>" +
                 "<h3 style='color:#00E5FF'>5. Press START MONITORING</h3>" +
                 "The scanner display shows the call you are hearing. While TrunkDeck is scanning, the control channel on that display has a signal meter (bars and a level in dB). " +
                 "On a conventional system the same meter shows the channel being listened to. " +

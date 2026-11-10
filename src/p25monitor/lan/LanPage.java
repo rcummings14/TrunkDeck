@@ -268,12 +268,6 @@ function clock(ms) {
 function paint(s) {
   state = s;
   cssColors(s.colors);
-  if (s.liveBg) {
-    const g = $('bezel');
-    g.style.setProperty('--lit', s.liveBg);
-    g.style.setProperty('--tg', s.liveInk || '#F5F8FC');
-    g.style.setProperty('--tgid', s.liveInk || '#F5F8FC');
-  }
   const on = !!s.monitoring;
   const call = s.activity === 'call';
   const cd = $('countdown');
@@ -296,7 +290,7 @@ function paint(s) {
   if (!on && left > 0) { big.classList.add('idle'); big.textContent = 'STARTING IN ' + left; }
   else if (!on) { big.classList.add('idle'); big.textContent = (s.engine || 'STOPPED').toUpperCase(); }
   else if (call) {
-    big.style.color = s.emergency ? '#FF4D5E' : s.encrypted ? '#B388FF' : '';
+    big.style.color = s.emergency ? '#FF4D5E' : s.encrypted ? '#B388FF' : (s.liveText || '');
     big.textContent = (s.talkgroup || 'TG ' + s.talkgroupId).toUpperCase();
   } else {
     big.classList.add('scan');
@@ -309,6 +303,7 @@ function paint(s) {
   }
   const line = $('line2');
   line.className = 'line2' + (call ? '' : ' dim');
+  line.style.color = (s.liveText && !s.emergency && !s.encrypted && (call || s.hang)) ? s.liveText : '';
   if (call) line.textContent = (s.talkgroupId > 0 ? 'TG ' + s.talkgroupId : '') + (s.category ? '   ' + s.category : '') + (s.tag ? '  ·  ' + s.tag : '');
   else if (on && s.hang && s.talkgroupId > 0) line.textContent = 'HOLDING TG ' + s.talkgroupId + (s.talkgroup ? '  ' + s.talkgroup.toUpperCase() : '');
   else if (on && s.lastAgo >= 0 && s.talkgroupId > 0) line.textContent = 'LAST  TG ' + s.talkgroupId + (s.talkgroup ? '  ' + s.talkgroup.toUpperCase() : '');
@@ -353,10 +348,6 @@ function paint(s) {
   (s.active || []).forEach((c) => {
     const tr = document.createElement('tr');
     if (c.audible) tr.classList.add('aud');
-    if (s.liveBg && c.audible && c.tg === s.talkgroupId) {
-      tr.style.background = s.liveBg;
-      tr.style.color = s.liveInk || '#F5F8FC';
-    }
     if (c.tg === sel) tr.classList.add('pick');
     tr.addEventListener('click', () => { sel = c.tg; paint(state); });
     const color = c.emergency ? '#FF4D5E' : c.encrypted ? '#B388FF' : c.audible ? '#00E5FF' : (c.state || '').startsWith('WAITING') ? '#FFB300' : '#DCE6F0';

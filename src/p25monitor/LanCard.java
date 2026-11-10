@@ -405,11 +405,7 @@ final class LanCard {
             int liveTg = cur != null ? cur.tg : last.tg;
             Talkgroup colored = sys == null || liveTg <= 0 ? null : sys.find(liveTg);
             java.awt.Color col = TalkgroupColors.parse(colored == null ? null : colored.color);
-            if (col != null && !s.emergency && !s.encrypted) {
-                java.awt.Color bg = TalkgroupColors.background(col);
-                s.liveBg = TalkgroupColors.hex(bg);
-                s.liveInk = TalkgroupColors.hex(TalkgroupColors.ink(bg));
-            }
+            if (col != null && !s.emergency && !s.encrypted) s.liveText = TalkgroupColors.hex(col);
         }
         int decoding = 0;
         for (CallView c : s.monitoring ? eng.activeCalls() : java.util.List.<CallView>of()) {

@@ -407,20 +407,17 @@ public class TalkgroupPage extends JPanel {
     }
 
     class Renderer extends DefaultTableCellRenderer {
+        Color swatch;
         public Component getTableCellRendererComponent(JTable tb, Object v, boolean sel, boolean foc, int r, int c) {
+            swatch = null;
             super.getTableCellRendererComponent(tb, v, sel, false, r, c);
-            setBorder(new EmptyBorder(0, 8, 0, 8));
             int mr = tb.convertRowIndexToModel(r), mc = tb.convertColumnIndexToModel(c);
             Talkgroup t = model.rows().get(mr);
+            if (mc == 14) swatch = TalkgroupColors.parse(t.color);
+            setBorder(new EmptyBorder(0, swatch == null ? 8 : 24, 0, 8));
             setHorizontalAlignment(mc == 3 || mc == 10 || mc == 12 ? RIGHT : LEFT);
             setFont(mc == 5 ? Theme.ui(Font.BOLD, 13f) : (mc == 3 || mc == 4 || mc == 12) ? Theme.mono(Font.PLAIN, 12f) : Theme.ui(Font.PLAIN, 12f));
-            if (!sel && mc == 14) {
-                Color swatch = TalkgroupColors.parse(t.color);
-                if (swatch != null) {
-                    setBackground(swatch);
-                    setForeground(TalkgroupColors.ink(swatch));
-                }
-            } else if (!sel) {
+            if (!sel) {
                 Color fg = Theme.TEXT;
                 if (t.muted) fg = Theme.DIM;
                 else if (mc == 5) fg = t.favorite ? Theme.AMBER : Theme.CYAN;
@@ -429,8 +426,19 @@ public class TalkgroupPage extends JPanel {
                 setForeground(fg);
             }
             if (mc == 6 && t.isEncrypted()) setToolTipText("Encrypted - scanner software cannot play encrypted audio");
+            else if (mc == 14) setToolTipText("Colour of this talkgroup's name and number while it is on the air. Default keeps the display theme.");
             else setToolTipText(null);
             return this;
+        }
+        @Override protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            if (swatch == null) return;
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(swatch);
+            int s = 10, y = Math.max(0, (getHeight() - s) / 2);
+            g2.fillRoundRect(8, y, s, s, 3, 3);
+            g2.dispose();
         }
     }
 }

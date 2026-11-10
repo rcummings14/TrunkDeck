@@ -12,7 +12,7 @@ public class Talkgroup {
     public boolean muted;           // not followed, not played
     /** Muted from the Display only or home-network touch button. Cleared if unmuted anywhere else. */
     public boolean touchMuted;
-    /** Live highlight colour as #RRGGBB, or blank to keep the display theme. Shared with the other sites of this system. */
+    /** Live text colour as #RRGGBB, or blank to keep the display theme. Shared with the other sites of this system. */
     public String color = "";
     public boolean record;
     public int priority = 100;

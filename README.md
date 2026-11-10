@@ -56,9 +56,10 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   *Send test tag* button. A separate short request: the audio connection is never touched.
 * Recordings of every call, played back in the app (a live call pauses playback), call log, Active-calls table, control-channel decode meter, activity graph, per-call
   diagnostics, talkgroup CSV import (RadioReference format), Simple and Advanced views.
-* **Talkgroup colours:** the Talkgroups page has a **Color** column. Pick a colour, or Default. While that talkgroup is
-  on the air, the Monitor, Display only, and the home-network page highlight it in that colour. Default leaves the
-  display theme unchanged. Sites of the same system share the colour.
+* **Talkgroup colours:** the Talkgroups page has a **Color** column. Pick a colour, or Default. The list itself keeps its
+  usual colours (the cell shows the colour's name and a small sample). While that talkgroup is on the air, its name and
+  number are drawn in that colour on the Monitor, Display only, and the home-network page. Default keeps the theme's
+  text colour. Sites of the same system share the colour.
 * **Recordings folder:** on the Recordings page, *Choose folder...* picks where new recordings are saved. The change is used
   right away, without restarting. *Use default* goes back to the usual folder in your home directory (`TrunkDeck/recordings`,
   which on Windows is under your user profile). Recordings already saved stay where they are and can still be played from

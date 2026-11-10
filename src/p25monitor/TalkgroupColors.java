@@ -4,21 +4,21 @@ import java.awt.Color;
 import java.util.Locale;
 
 /**
- * Optional colour for a talkgroup. Empty means "use the display theme". A set colour is the live highlight
- * (the lit display, and the live row) on the Monitor, Display only, and the home-network page.
- * Text on that background stays light or dark so it can still be read.
+ * Optional colour for a talkgroup name and number. Empty means "use the display theme".
+ * A set colour is only the text of that talkgroup while it is on the air (Monitor, Display only, and the
+ * home-network page). The shades are bright enough to read on the dark display.
  */
 public final class TalkgroupColors {
-    /** Name, then #RRGGBB. The first entry is Default (no colour). */
+    /** Name, then #RRGGBB. The first entry is Default (no colour). Bright enough for text on the dark glass. */
     public static final String[][] PRESETS = {
             {"Default", ""},
-            {"Red", "#E23B4A"},
-            {"Orange", "#E07020"},
-            {"Amber", "#C89010"},
-            {"Green", "#1E9E55"},
-            {"Cyan", "#0E8A9A"},
-            {"Blue", "#2E6BDE"},
-            {"Violet", "#7A5CC4"}
+            {"Red", "#FF7A88"},
+            {"Orange", "#FF9A3C"},
+            {"Amber", "#FFC44D"},
+            {"Green", "#3DDC84"},
+            {"Cyan", "#4FE3EF"},
+            {"Blue", "#7EB6FF"},
+            {"Violet", "#C9A6FF"}
     };
 
     private TalkgroupColors() {}
@@ -60,24 +60,5 @@ public final class TalkgroupColors {
 
     public static String hex(Color c) {
         return String.format(Locale.ROOT, "#%02X%02X%02X", c.getRed(), c.getGreen(), c.getBlue());
-    }
-
-    /** A dark panel in this colour, used as the live background. */
-    public static Color background(Color c) {
-        return ScannerDisplay.mix(new Color(0x061015), c, 0.62);
-    }
-
-    /** Light or dark text that stays readable on {@code bg}. */
-    public static Color ink(Color bg) {
-        return luminance(bg) > 0.36 ? new Color(0x101418) : new Color(0xF5F8FC);
-    }
-
-    static double luminance(Color c) {
-        return 0.2126 * lin(c.getRed()) + 0.7152 * lin(c.getGreen()) + 0.0722 * lin(c.getBlue());
-    }
-
-    static double lin(int ch) {
-        double x = ch / 255.0;
-        return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
     }
 }
