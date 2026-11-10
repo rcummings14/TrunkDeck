@@ -60,6 +60,8 @@ public class ScannerDisplay extends JComponent {
     public boolean embedTouch;
     /** Logical y of the button row, set while painting so the buttons sit under the fields. */
     int buttonTopLogical;
+    /** Touch-button height, and the gap from the button bottom to the component edge (the glass rim sits 14px in). */
+    static final int TOUCH_BTN_H = 28, TOUCH_RIM = 30, VALUE_GAP = 20;
 
     /** Talkgroup on the glass while a call is showing, or -1 while scanning or stopped. */
     public int shownTalkgroup() {
@@ -269,28 +271,41 @@ public class ScannerDisplay extends JComponent {
         g.draw(new RoundRectangle2D.Double(pad + 1, pad + 1, lcdW - 2, lcdH - 2, 16, 16));
         g.setStroke(rimStroke);
 
-        int x0 = pad + 18, y = pad + 18;
-        paintTop(g, x0, y, pad + lcdW - 18, z, th);
-        // Every rule keeps 10 px of open panel on both sides, so it cannot meet the lettering.
-        final int gap = 8;
-        int rule1 = y + 8 + gap;
+        int x0 = pad + 18;
+        int headerY = pad + 17;
+        paintTop(g, x0, headerY, pad + lcdW - 18, z, th);
+        // The header rule sits below the top-line ink, with open panel on both sides of the letters.
+        int rule1 = headerY + 9;
         g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 120));
         g.drawLine(pad + 14, rule1, pad + lcdW - 14, rule1);
 
-        int inset = pad + 18;
-        int btnH = 36, btnGap = 14;
-        int bottom = embedTouch ? inset + btnH + btnGap : inset;
+        // Buttons stay off the rim. Values sit a fixed gap above the buttons. The name fills the room above that.
+        int buttonTop = embedTouch ? h - TOUCH_RIM - TOUCH_BTN_H : h - 22;
+        int by = buttonTop - (embedTouch ? VALUE_GAP : 8);
+        buttonTopLogical = embedTouch ? buttonTop : 0;
+        // Label ink is 8px and is drawn 14px above the value baseline. The rule stays clear of that ink
+        // and of the optional label-bar fill, which sits higher on the glass.
+        int rule2 = by - 42;
+
         String main;
         if (active) main = alpha.isEmpty() ? (tgText.isEmpty() ? "RECEIVING" : tgText) : alpha.toUpperCase();
         else main = idleText();
-        int cursor = rule1 + gap;
-        int belowName = 8 + 18 + 8 + gap + gap + 40 + (embedTouch ? 14 + 34 + (pad + 18) : pad + 12);
-        int size = 46;
+        int regionTop = rule1 + 10;
+        int tgInk = 10, minNameGap = 8, minTgGap = 8;
+        int maxNameInk = Math.max(16, rule2 - regionTop - (minNameGap + tgInk + minTgGap));
+        int widthLimit = Math.max(40, lcdW - 36);
+        int size = 84;
         g.setFont(DisplayFont.name(size));
-        while (size > 18 && (cursor + g.getFontMetrics().getAscent() + belowName > h || g.getFontMetrics().stringWidth(main) > lcdW - 48))
+        int nameInkH = nameInk(g, main);
+        while (size > 18 && (g.getFontMetrics().stringWidth(main) > widthLimit || nameInkH > maxNameInk)) {
             g.setFont(DisplayFont.name(--size));
-        main = fit(g, main, lcdW - 48);
-        int my = cursor + g.getFontMetrics().getAscent();
+            nameInkH = nameInk(g, main);
+        }
+        main = fit(g, main, widthLimit);
+        nameInkH = Math.max(8, nameInk(g, main));
+        int slack = Math.max(0, rule2 - regionTop - nameInkH - minNameGap - tgInk - minTgGap);
+        int above = slack * 2 / 3;
+        int my = regionTop + above + nameInkH;
         if (active) halo(g, main, x0, my, nameGlow, nameInk);
         else if (anim) marquee(g, main, pad + 6, pad + lcdW - 6, x0, my, lcdW, th, glassBg, lt < 0 ? 1 : ScannerDisplay.DIM_SCAN + (1 - ScannerDisplay.DIM_SCAN) * lt, now);
         else { g.setColor(th.idleText); g.drawString(main, x0, my); }
@@ -303,7 +318,8 @@ public class ScannerDisplay extends JComponent {
             meta = (category.isBlank() ? "" : "   " + category) + (tag.isBlank() ? "" : "  \u00b7  " + tag);
         } else if (!engineLive) line2 = "";
         else line2 = tgText.isEmpty() ? "" : (hang ? "HOLDING " : "LAST  ") + tgText + (alpha.isEmpty() ? "" : "  " + alpha.toUpperCase());
-        int l2y = my + 8 + g.getFontMetrics().getAscent();
+        int between = slack - above;
+        int l2y = my + minNameGap + between + tgInk;
         g.setColor(active || hang ? LINE_BLUE : th.get(DisplayPalette.Field.LABELS));
         int textRoom = lcdW - 48;
         line2 = fit(g, line2, Math.max(20, textRoom));
@@ -323,12 +339,8 @@ public class ScannerDisplay extends JComponent {
         String dl = active && db != null ? db.get() : null;
         if (dl != null && !dl.isEmpty()) bx = badge(g, dl, Theme.CYAN, bx, l2y - 13);
 
-        // Badge bottoms are about 4 px under the second-line baseline. The rule starts after that, plus the gap.
-        int rule2 = l2y + 8 + gap;
         g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 120));
         g.drawLine(pad + 14, rule2, pad + lcdW - 14, rule2);
-        int by = rule2 + gap + 22 + 18;
-        buttonTopLogical = by + 10;
         int fw = lcdW - 36, col = fw / 4;
         java.util.List<double[]> sl = anim ? scanList() : java.util.List.of();
         if (!sl.isEmpty()) {   // classic scanner: the frequency readout steps through the system's real channels
@@ -341,14 +353,10 @@ public class ScannerDisplay extends JComponent {
         long secs = active ? (System.currentTimeMillis() - callStart) / 1000 : (lastActivity == 0 ? -1 : (System.currentTimeMillis() - lastActivity) / 1000);
         field(g, active ? "CALL TIME" : "LAST CALL", secs < 0 ? "-" : active ? String.format("%d:%02d", secs / 60, secs % 60) : ago(secs), x0 + col * 2, by, active, col - 28, DisplayPalette.Field.CALLTIME);
         field(g, "EVENT", eventText.isEmpty() ? "-" : eventText, x0 + col * 3, by, active, col - 28, DisplayPalette.Field.EVENT);
-        // Vertical rules stay in the gutter: text is fitted to stop 14 px short of each rule.
+        // Vertical rules stay in the gutter and stop at the bottom of the values, short of the button gap.
         g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 90));
-        int vTop = rule2 + gap, vBot = by + 4;
-        for (int i = 1; i < 4; i++) g.drawLine(x0 + col * i - 14, vTop, x0 + col * i - 14, vBot);
-        if (embedTouch && by + 14 != buttonTopLogical) {
-            buttonTopLogical = by + 14;
-            javax.swing.SwingUtilities.invokeLater(this::revalidate);
-        }
+        int vTop = rule2 + 10, vBot = by + 1;
+        if (vBot > vTop) for (int i = 1; i < 4; i++) g.drawLine(x0 + col * i - 14, vTop, x0 + col * i - 14, vBot);
 
         // ---------- right-side meters (Advanced view only) ----------
         if (simple) { g.dispose(); return; }
@@ -367,17 +375,25 @@ public class ScannerDisplay extends JComponent {
         g.dispose();
     }
 
-    /** The Display only buttons, laid into the bottom of this panel. */
+    /** The Display only buttons, laid into the bottom of this panel. Same gap the paint uses. */
     @Override public void doLayout() {
         if (getComponentCount() == 0) return;
         double zs = zoom < 0.5 ? 1 : zoom;
-        int margin = (int) Math.round(32 * zs);
-        int bh = (int) Math.round(34 * zs);
-        int y = buttonTopLogical > 0 ? (int) Math.round(buttonTopLogical * zs) : getHeight() - margin - bh;
-        int maxY = getHeight() - margin - bh;
+        int logicalH = Math.max(1, (int) Math.round(getHeight() / zs));
+        int top = buttonRowTop(logicalH);
+        int margin = (int) Math.round(18 * zs);
+        int bh = (int) Math.round(TOUCH_BTN_H * zs);
+        int y = top > 0 ? (int) Math.round(top * zs) : getHeight() - margin - bh;
+        int maxY = Math.max(0, getHeight() - margin - bh);
         if (y > maxY) y = maxY;
-        if (y < margin) y = margin;
+        if (y < 0) y = 0;
         for (Component c : getComponents()) c.setBounds(margin, y, Math.max(0, getWidth() - margin * 2), bh);
+    }
+
+    /** Logical y of the touch-button row. 0 when the buttons are not inside the panel. */
+    int buttonRowTop(int logicalH) {
+        if (!embedTouch) return 0;
+        return logicalH - TOUCH_RIM - TOUCH_BTN_H;
     }
 
     static String ago(long s) { return s < 60 ? s + "s ago" : s < 3600 ? (s / 60) + "m ago" : (s / 3600) + "h ago"; }
@@ -466,19 +482,112 @@ public class ScannerDisplay extends JComponent {
         }
     }
 
-    /** A halo around the letters. The letters themselves stay the ink colour, drawn last. */
+    java.awt.image.BufferedImage haloImg;
+    String haloKey = "";
+
+    /** How far the capital letters rise above the baseline. The font's em-box is taller than the ink. */
+    private static int nameInk(Graphics2D g, String s) {
+        if (s == null || s.isEmpty()) return 8;
+        var tl = new java.awt.font.TextLayout(s, g.getFont(), new java.awt.font.FontRenderContext(null, true, true));
+        return Math.max(8, (int) Math.ceil(-tl.getBounds().getY()));
+    }
+
+    /**
+     * A soft glow that follows the letter shapes, painted at device resolution so a zoomed panel does not
+     * turn it into a block, then the sharp letters on top.
+     */
     private void halo(Graphics2D g, String text, int x, int y, Color glow, Color ink) {
-        g.setColor(new Color(glow.getRed(), glow.getGreen(), glow.getBlue(), 40));
-        for (int[] d : new int[][]{{-6, 0}, {6, 0}, {0, -4}, {0, 4}, {-4, -3}, {4, -3}, {-4, 3}, {4, 3}})
-            g.drawString(text, x + d[0], y + d[1]);
-        g.setColor(new Color(glow.getRed(), glow.getGreen(), glow.getBlue(), 70));
-        g.drawString(text, x - 2, y);
-        g.drawString(text, x + 2, y);
-        g.drawString(text, x, y - 1);
-        g.drawString(text, x, y + 1);
+        if (text == null || text.isEmpty()) return;
+        FontMetrics fm = g.getFontMetrics();
+        double s = Math.max(1, g.getTransform().getScaleX());
+        int radius = Math.max(2, Math.min(18, (int) Math.round(g.getFont().getSize2D() * 0.09 * s)));
+        int padB = radius * 3;
+        String key = text + "|" + g.getFont().getSize2D() + "|" + Math.round(s * 100) + "|" + glow.getRGB() + "|" + radius;
+        if (haloImg == null || !key.equals(haloKey)) {
+            int tw = Math.max(1, (int) Math.ceil(fm.stringWidth(text) * s) + padB * 2);
+            int th = Math.max(1, (int) Math.ceil((fm.getAscent() + fm.getDescent() + 4) * s) + padB * 2);
+            java.awt.image.BufferedImage src = new java.awt.image.BufferedImage(tw, th, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            Graphics2D sg = src.createGraphics();
+            sg.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            sg.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            sg.scale(s, s);
+            sg.setFont(g.getFont());
+            sg.setColor(Color.WHITE);
+            sg.drawString(text, (float) (padB / s), (float) (padB / s + fm.getAscent()));
+            sg.dispose();
+            java.awt.image.BufferedImage soft = blur(src, radius);
+            tint(soft, glow, 0.62f);
+            haloImg = soft;
+            haloKey = key;
+        }
+        Graphics2D gg = (Graphics2D) g.create();
+        gg.setComposite(java.awt.AlphaComposite.SrcOver);
+        gg.scale(1 / s, 1 / s);
+        gg.drawImage(haloImg, (int) Math.round(x * s) - padB, (int) Math.round((y - fm.getAscent()) * s) - padB, null);
+        gg.dispose();
         g.setColor(ink);
         g.drawString(text, x, y);
-        g.drawString(text, x, y);
+    }
+
+    /** Three box passes, which read as a smooth falloff around the strokes. */
+    private static java.awt.image.BufferedImage blur(java.awt.image.BufferedImage src, int radius) {
+        int w = src.getWidth(), h = src.getHeight();
+        int[] pix = src.getRGB(0, 0, w, h, null, 0, w);
+        int[] tmp = new int[pix.length];
+        box(pix, tmp, w, h, radius);
+        box(tmp, pix, w, h, radius);
+        box(pix, tmp, w, h, radius);
+        java.awt.image.BufferedImage out = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        out.setRGB(0, 0, w, h, tmp, 0, w);
+        return out;
+    }
+
+    private static void box(int[] in, int[] out, int w, int h, int r) {
+        int diam = r * 2 + 1;
+        for (int y = 0; y < h; y++) {
+            int a = 0, rr = 0, gg = 0, bb = 0;
+            for (int k = -r; k <= r; k++) {
+                int p = in[y * w + Math.max(0, Math.min(w - 1, k))];
+                a += (p >>> 24); rr += (p >> 16) & 255; gg += (p >> 8) & 255; bb += p & 255;
+            }
+            for (int x = 0; x < w; x++) {
+                out[y * w + x] = ((a / diam) << 24) | ((rr / diam) << 16) | ((gg / diam) << 8) | (bb / diam);
+                int x0 = Math.max(0, Math.min(w - 1, x - r)), x1 = Math.max(0, Math.min(w - 1, x + r + 1));
+                int p0 = in[y * w + x0], p1 = in[y * w + x1];
+                a += ((p1 >>> 24) - (p0 >>> 24));
+                rr += ((p1 >> 16) & 255) - ((p0 >> 16) & 255);
+                gg += ((p1 >> 8) & 255) - ((p0 >> 8) & 255);
+                bb += (p1 & 255) - (p0 & 255);
+            }
+        }
+        System.arraycopy(out, 0, in, 0, in.length);
+        for (int x = 0; x < w; x++) {
+            int a = 0, rr = 0, gg = 0, bb = 0;
+            for (int k = -r; k <= r; k++) {
+                int p = in[Math.max(0, Math.min(h - 1, k)) * w + x];
+                a += (p >>> 24); rr += (p >> 16) & 255; gg += (p >> 8) & 255; bb += p & 255;
+            }
+            for (int y = 0; y < h; y++) {
+                out[y * w + x] = ((a / diam) << 24) | ((rr / diam) << 16) | ((gg / diam) << 8) | (bb / diam);
+                int y0 = Math.max(0, Math.min(h - 1, y - r)), y1 = Math.max(0, Math.min(h - 1, y + r + 1));
+                int p0 = in[y0 * w + x], p1 = in[y1 * w + x];
+                a += ((p1 >>> 24) - (p0 >>> 24));
+                rr += ((p1 >> 16) & 255) - ((p0 >> 16) & 255);
+                gg += ((p1 >> 8) & 255) - ((p0 >> 8) & 255);
+                bb += (p1 & 255) - (p0 & 255);
+            }
+        }
+    }
+
+    private static void tint(java.awt.image.BufferedImage img, Color c, float gain) {
+        int w = img.getWidth(), h = img.getHeight();
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+            int p = img.getRGB(x, y);
+            int a = (p >>> 24);
+            if (a == 0) continue;
+            int aa = Math.min(255, Math.round(a * gain));
+            img.setRGB(x, y, (aa << 24) | (c.getRed() << 16) | (c.getGreen() << 8) | c.getBlue());
+        }
     }
 
     /** Yellow outline only, the way the favourite mark is drawn on the reference panel. */
@@ -507,7 +616,7 @@ public class ScannerDisplay extends JComponent {
         DisplayPalette th = palette;
         g.setFont(DisplayFont.ui(11f));
         g.setColor(th.get(DisplayPalette.Field.LABELBAR_TEXT));
-        g.drawString(fit(g, "UNIT / RADIO", Math.max(12, w)), x, y - 16);
+        g.drawString(fit(g, "UNIT / RADIO", Math.max(12, w)), x, y - 14);
         float pt = 16f;
         g.setFont(DisplayFont.ui(pt));
         while (pt > 12f && g.getFontMetrics().stringWidth(value) > w) g.setFont(DisplayFont.ui(pt -= 0.5f));
@@ -529,7 +638,7 @@ public class ScannerDisplay extends JComponent {
         DisplayPalette th = palette;
         g.setFont(DisplayFont.ui(11f));
         g.setColor(th.get(DisplayPalette.Field.LABELBAR_TEXT));
-        g.drawString(fit(g, label, Math.max(12, w)), x, y - 16);
+        g.drawString(fit(g, label, Math.max(12, w)), x, y - 14);
         g.setFont(DisplayFont.ui(16f));
         g.setColor(valueColor);
         g.drawString(fit(g, value, Math.min(200, w)), x, y);

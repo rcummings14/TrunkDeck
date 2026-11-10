@@ -202,6 +202,13 @@ final class DisplayOnly {
         if (w <= 0 || h <= 0) { w = root.getWidth(); h = root.getHeight(); }
         if (w <= 0 || h <= 0) return;
         f.display.zoom = zoomFor(w, h);
+        float pt = (float) Math.max(12f, 14.5f * f.display.zoom);
+        Font font = DisplayFont.ui(pt);
+        muteAllBtn.setFont(font);
+        muteTgBtn.setFont(font);
+        holdBtn.setFont(font);
+        mutedList.setFont(font);
+        f.display.revalidate();
         f.display.repaint();
     }
 
@@ -226,14 +233,21 @@ final class DisplayOnly {
     /** Muted-list control drawn as the same pill as the other buttons, clipped to its box. */
     static final class PillComboUI extends javax.swing.plaf.basic.BasicComboBoxUI {
         @Override protected JButton createArrowButton() {
-            JButton b = new JButton("\u25BE");
-            b.setFont(DisplayFont.ui(11f));
-            b.setForeground(Color.WHITE);
-            b.setContentAreaFilled(false);
-            b.setBorderPainted(false);
-            b.setFocusPainted(false);
-            b.setOpaque(false);
+            JButton b = new JButton() {
+                @Override protected void paintComponent(Graphics g) { /* the pill paints its own triangle */ }
+                @Override public void setText(String t) { super.setText(""); }
+            };
+            b.setText("");
+            b.setVisible(false);
+            b.setFocusable(false);
+            b.setPreferredSize(new Dimension(0, 0));
+            b.setMinimumSize(new Dimension(0, 0));
+            b.setMaximumSize(new Dimension(0, 0));
             return b;
+        }
+        @Override public void configureArrowButton() {
+            super.configureArrowButton();
+            if (arrowButton != null) { arrowButton.setText(""); arrowButton.setVisible(false); }
         }
         @Override public void paint(Graphics g, JComponent c) {
             Graphics2D g2 = (Graphics2D) g.create();
@@ -255,7 +269,7 @@ final class DisplayOnly {
             int max = Math.max(8, w - 36);
             while (text.length() > 1 && fm.stringWidth(text) > max) text = text.substring(0, text.length() - 1);
             if (comboBox != null && comboBox.getSelectedItem() != null && !text.equals(comboBox.getSelectedItem().toString()) && text.length() > 1)
-                text = text.substring(0, text.length() - 1) + "\u2026";
+                text = text.substring(0, text.length() - 1) + "...";
             int ty = (h + fm.getAscent() - fm.getDescent()) / 2;
             g2.drawString(text, 12, ty);
             int ax = w - 16, ay = h / 2;
