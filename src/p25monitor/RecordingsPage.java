@@ -19,6 +19,8 @@ public class RecordingsPage extends JPanel {
     final JTextField search = new JTextField();
     final JLabel nowPlaying = new JLabel("Stopped");
     final JButton playBtn = MainFrame.button("Play", Theme.Glyph.PLAY, Theme.GREEN);
+    final Layouts.PathLabel folderPath = new Layouts.PathLabel(Theme.TEXT, Theme.ui(Font.PLAIN, 12f));
+    final JLabel folderNote = new JLabel(" ");
 
     RecordingsPage(MainFrame f) {
         super(new BorderLayout(0, 10));
@@ -41,12 +43,48 @@ public class RecordingsPage extends JPanel {
         playBtn.addActionListener(e -> onPlayPause());
         stop.setToolTipText("Stop the recording");
         stop.addActionListener(e -> AudioPlayer.stop());
+        folder.setToolTipText("Open the folder new recordings are saved in");
         folder.addActionListener(e -> { try { Files.createDirectories(App.recordingDir()); Desktop.getDesktop().open(App.recordingDir().toFile()); } catch (Exception ex) { f.toast(ex.getMessage()); } });
         refresh.addActionListener(e -> refresh());
         nowPlaying.setToolTipText("Which saved call is playing");
         tools.add(nowPlaying); tools.add(new JLabel("Volume")); tools.add(vol); tools.add(playBtn); tools.add(stop); tools.add(folder); tools.add(refresh);
         head.add(tools, BorderLayout.CENTER);
-        add(head, BorderLayout.NORTH);
+
+        JButton choose = MainFrame.button("Choose folder...", Theme.Glyph.FOLDER, Theme.CYAN);
+        JButton useDefault = MainFrame.button("Use default", Theme.Glyph.FOLDER, Theme.DIM);
+        choose.setToolTipText("Pick a folder for new recordings. Recordings already saved stay where they are.");
+        useDefault.setToolTipText("Save new recordings in the usual folder in your home directory. Recordings already saved stay where they are.");
+        choose.addActionListener(e -> chooseFolder());
+        useDefault.addActionListener(e -> {
+            f.app.useDefaultRecordingFolder();
+            f.toast("New recordings will be saved in " + App.recordingDir() + ". Older recordings were left where they are.");
+            showFolder();
+            refresh();
+        });
+        JPanel folderLine = new JPanel(new BorderLayout(8, 0));
+        folderLine.setOpaque(false);
+        JLabel folderCap = new JLabel("New recordings:");
+        folderCap.setForeground(Theme.DIM);
+        folderLine.add(folderCap, BorderLayout.WEST);
+        folderLine.add(folderPath, BorderLayout.CENTER);
+        JPanel folderBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        folderBtns.setOpaque(false);
+        folderBtns.add(choose);
+        folderBtns.add(useDefault);
+        folderLine.add(folderBtns, BorderLayout.EAST);
+        folderNote.setForeground(Theme.AMBER);
+        folderNote.setFont(Theme.ui(Font.PLAIN, 12f));
+        folderNote.setVisible(false);
+        JPanel folderBlock = new JPanel(new BorderLayout(0, 4));
+        folderBlock.setOpaque(false);
+        folderBlock.add(folderLine, BorderLayout.NORTH);
+        folderBlock.add(folderNote, BorderLayout.SOUTH);
+        JPanel north = new JPanel(new BorderLayout(0, 8));
+        north.setOpaque(false);
+        north.add(head, BorderLayout.NORTH);
+        north.add(folderBlock, BorderLayout.SOUTH);
+        add(north, BorderLayout.NORTH);
+        showFolder();
 
         model = new AbstractTableModel() {
             final String[] cols = {"Time", "TG", "Alpha tag", "Radio", "Size", "File"};
@@ -79,6 +117,7 @@ public class RecordingsPage extends JPanel {
                 boolean playing = r >= 0 && r < files.size() && AudioPlayer.same(files.get(r).toFile());
                 if (!sel && playing) { setBackground(new Color(0x0F2A33)); setForeground(Theme.CYAN); }
                 if (playing) setFont(getFont().deriveFont(Font.BOLD));
+                setToolTipText(c == 5 && r >= 0 && r < files.size() ? files.get(r).toString() : "Double-click a recording to play or pause it");
                 return this;
             }
         });
@@ -101,7 +140,7 @@ public class RecordingsPage extends JPanel {
         JPanel top = new JPanel(new BorderLayout(8, 4));
         top.setOpaque(false);
         top.add(search, BorderLayout.CENTER);
-        JTextArea how = Layouts.wrapText("Calls are recorded for talkgroups with Rec ticked, or every call if \"Record every call\" is on for the system. Double-click a recording to play it here. A live call pauses it.", Theme.DIM, null);
+        JTextArea how = Layouts.wrapText("Calls are recorded for talkgroups with Rec ticked, or every call if \"Record every call\" is on for the system. Double-click a recording to play it here. A live call pauses it. Choose folder... sets where new recordings are saved. Older recordings stay where they are and can still be played.", Theme.DIM, null);
         how.setForeground(Theme.DIM);
         top.add(how, BorderLayout.SOUTH);
         card.add(top, BorderLayout.NORTH);
@@ -112,16 +151,46 @@ public class RecordingsPage extends JPanel {
         AudioPlayer.addListener(this::syncPlayback);
     }
 
+    void showFolder() {
+        folderPath.setText(App.recordingDir().toString());
+        String note = App.recordingFolderNote();
+        boolean problem = note != null && !note.isBlank();
+        if (problem) {
+            folderNote.setText("<html><body style='width:720px'>" + note.replace("&", "&amp;").replace("<", "&lt;") + "</body></html>");
+            folderNote.setToolTipText(note);
+        } else {
+            folderNote.setText(" ");
+            folderNote.setToolTipText(null);
+        }
+        folderNote.setVisible(problem);
+        revalidate();
+    }
+
+    /** Desktop only. The home-network page has no control for this. */
+    void chooseFolder() {
+        Path current = App.recordingDir();
+        File start = Files.isDirectory(current) ? current.toFile() : new File(System.getProperty("user.home"));
+        JFileChooser fc = new JFileChooser(start.getParentFile() == null ? start : start.getParentFile());
+        fc.setDialogTitle("Choose a folder for new recordings");
+        fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        fc.setAcceptAllFileFilterUsed(false);
+        fc.setApproveButtonText("Choose folder");
+        if (Files.isDirectory(current)) fc.setSelectedFile(start);
+        if (fc.showOpenDialog(f) != JFileChooser.APPROVE_OPTION) return;
+        File picked = fc.getSelectedFile();
+        if (picked == null) return;
+        String problem = f.app.chooseRecordingFolder(picked.toPath());
+        if (problem != null) f.toast(problem);
+        else f.toast("New recordings will be saved in " + App.recordingDir() + ". Older recordings were left where they are.");
+        showFolder();
+        refresh();
+    }
+
     void refresh() {
         files.clear();
-        Path dir = App.recordingDir();
-        String q = search.getText().trim().toLowerCase();
-        if (Files.isDirectory(dir)) try (var s = Files.list(dir)) {
-            s.filter(p -> { String n = p.getFileName().toString().toLowerCase(); return (n.endsWith(".mp3") || n.endsWith(".wav")) && (q.isEmpty() || n.contains(q)); })
-             .sorted(Comparator.comparingLong((Path p) -> p.toFile().lastModified()).reversed())
-             .limit(2000).forEach(files::add);
-        } catch (Exception ignored) {}
+        files.addAll(RecordingFiles.list(App.recordingSearchDirs(), search.getText(), 2000));
         model.fireTableDataChanged();
+        showFolder();
     }
 
     void onPlayPause() {
@@ -156,7 +225,7 @@ public class RecordingsPage extends JPanel {
     }
 
     void playLatest(int tg) {
-        Path p = RecordingFiles.latest(App.recordingDir(), tg);
+        Path p = RecordingFiles.latest(App.recordingSearchDirs(), tg);
         if (p == null) {
             String name = RecordingFiles.title(f.app.current, tg);
             f.toast("No recording for " + name + " yet. Tick Rec on the Talkgroups page (it starts with the next call).");

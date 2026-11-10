@@ -199,7 +199,11 @@ public class HelpPage extends JPanel {
                 "<h3 style='color:#FFB300'>Good to know</h3>" +
                 "<ul><li><b>Play a saved call</b>: on the Recordings page, double-click it (or Play / Pause). The live call log does the same: double-click a call, or Play, or <b>Replay last</b> on the selected talkgroup. "
                 + "The talkgroup name and time stay on screen. A live call on the speaker pauses the recording and it continues when that call is over. "
-                + "Scanning, uploads and feeds keep going. Encrypted calls are not saved as audio.</li>"
+                + "Scanning, uploads and feeds keep going. Encrypted calls are not saved as audio. "
+                + "<b>Choose folder...</b> on the Recordings page picks where new recordings are saved, and it takes effect right away. "
+                + "<b>Use default</b> puts new recordings back in the usual folder (your home folder, then TrunkDeck, then recordings). "
+                + "Recordings already saved stay where they are and can still be played. If the folder is missing or TrunkDeck can't save files there, new recordings go to the usual folder and the page says why. "
+                + "The home-network page cannot change this folder.</li>"
                 + "<li><b>System tray</b>: the window's X sends TrunkDeck to the system tray (notification area) - monitoring, the speaker, feeds and uploads keep running. "
                 + "Click the tray icon to open it again; right-click it for <b>Open TrunkDeck</b>, <b>Display only</b>, <b>Mute speaker</b> (this PC only) and <b>Quit</b> (stops everything cleanly). "
                 + "Monitor page \u2192 Listening: <b>Close (X)</b> = Quit (normal) / System tray (default) / Display only, and <b>Minimize</b> = Taskbar (normal, default) / System tray / Display only. "

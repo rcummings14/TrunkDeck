@@ -51,6 +51,11 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   *Send test tag* button. A separate short request: the audio connection is never touched.
 * Recordings of every call, played back in the app (a live call pauses playback), call log, Active-calls table, control-channel decode meter, activity graph, per-call
   diagnostics, talkgroup CSV import (RadioReference format), Simple and Advanced views.
+* **Recordings folder:** on the Recordings page, *Choose folder...* picks where new recordings are saved. The change is used
+  right away, without restarting. *Use default* goes back to the usual folder in your home directory (`TrunkDeck/recordings`,
+  which on Windows is under your user profile). Recordings already saved stay where they are and can still be played from
+  the Recordings page and the call log. If that folder is missing or TrunkDeck can't save files there, a message explains
+  it and new recordings go to the usual folder. The home-network page cannot change this folder.
 
 | Display only | Streams | Colours |
 |---|---|---|

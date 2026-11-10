@@ -586,7 +586,7 @@ public class MonitorPage extends JPanel {
     void playCall(Row row) {
         String why = RecordingFiles.unavailable(row.e);
         if (why != null) { f.toast(why); return; }
-        Path p = RecordingFiles.find(App.recordingDir(), row.e.timestamp, row.e.talkgroup, row.e.radioId);
+        Path p = RecordingFiles.find(App.recordingSearchDirs(), row.e.timestamp, row.e.talkgroup, row.e.radioId);
         if (p == null) { f.toast(RecordingFiles.missing(row.e)); return; }
         if (AudioPlayer.same(p.toFile())) AudioPlayer.togglePause();
         else {
@@ -609,7 +609,7 @@ public class MonitorPage extends JPanel {
         logPlay.setIcon(Theme.icon(showPause ? Theme.Glyph.PAUSE : Theme.Glyph.PLAY, 16, Theme.GREEN));
         boolean replayThis = false;
         if (on && currentTg != null) {
-            Path latest = RecordingFiles.latest(App.recordingDir(), currentTg.decimal);
+            Path latest = RecordingFiles.latest(App.recordingSearchDirs(), currentTg.decimal);
             replayThis = latest != null && AudioPlayer.same(latest.toFile());
         }
         if (replayThis && !AudioPlayer.paused()) {

@@ -194,6 +194,7 @@ public final class LanServer {
             }
             if ("POST".equals(method) && "/api/login".equals(path)) { login(ex); return; }
             if (!signedIn(ex)) { sendJson(ex, 401, "{\"ok\":false,\"error\":\"Sign in first.\"}"); return; }
+            // The recordings folder is chosen on the desktop Recordings page only. This page cannot change it.
             switch (method + " " + path) {
                 case "POST /api/logout" -> { sessions.remove(token(ex)); sendJson(ex, 200, "{\"ok\":true}"); }
                 case "GET /api/state" -> sendJson(ex, 200, stateJson());

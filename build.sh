@@ -42,6 +42,7 @@ if [ "${1:-}" = "test" ]; then
   "$JAVA" ${TEST_OPTS:-} -cp build/classes:build/test p25monitor.p25.CodeTablesTests   # coding tables built from the TIA-102 standards = the earlier tables (1.4.6)
   "$JAVA" -Dtrunkdeck.lib=lib ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.ViewModeTests   # Simple / Advanced view, colours, scan animation (1.4.5; needs a display, skipped when headless)
   "$JAVA" -Dtrunkdeck.lib=lib -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.PlaybackTests   # in-app playback of saved MP3/WAV calls (the window part needs a display)
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.RecordingFolderTests   # chosen recordings folder, fallback, and playback of older folders
   "$JAVA" -Dtrunkdeck.lib=lib ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.TrayTests   # system tray (1.4.7): logic always; window and real tray parts need a display / a tray
   "$JAVA" --enable-native-access=ALL-UNNAMED -Dtrunkdeck.librtlsdr=../app/native/linux-x64/librtlsdr.so ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.sdr.RtlHealTests   # (1.4.3; skipped if librtlsdr is not loadable)
   "$JAVA" ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.AirspyFuzz 30   # Airspy DSP chain fuzz / stress (1.4.3)

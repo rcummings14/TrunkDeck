@@ -122,8 +122,10 @@ public final class LanTests {
             String err = server.start(0);
             check(err == null && server.running() && server.port() > 0, "switch on: listening (" + err + ")");
             int port = server.port();
+            props.setProperty("recordings.dir", "/tmp/trunkdeck-keep");
             page(port);
             auth(server, ui, port);
+            check("/tmp/trunkdeck-keep".equals(props.getProperty("recordings.dir")), "home-network page did not change the recordings folder");
             for (String line : server.notes()) check(!line.contains("home-pin") && !line.contains("nope-99"), "log line does not contain a password");
             server.stop();
             check(!server.running(), "switch off: not listening");
@@ -231,6 +233,7 @@ public final class LanTests {
                 "page is laid out like the Monitor");
         check(r.body.contains("SCAN · CHANNEL") && r.body.contains("SCAN · CONTROL CH"), "conventional systems label the channel, trunked systems the control channel");
         check(r.body.toLowerCase().contains("home network"), "page says it is for the home network");
+        check(!r.body.contains("Choose folder") && !r.body.contains("recordings.dir"), "home-network page has no recordings-folder control");
         check(!r.body.contains("home-pin") && !r.body.toLowerCase().contains("password123"), "page does not contain a password");
         check(!r.body.contains("RadioReference"), "page does not mention RadioReference");
     }
@@ -250,6 +253,9 @@ public final class LanTests {
         check(again.body.contains("\"system\":\"Example System\"") && again.body.contains("\"control\":\"CC 450.0000\"")
                 && again.body.contains("\"signalBars\"") && again.body.contains("North Dispatch") && again.body.contains("\"active\":["),
                 "state carries the monitor: system, control channel, signal, active call");
+        check(!again.body.contains("recordings.dir"), "monitor state does not include the recordings folder");
+        Resp recFolder = call(port, "POST", "/api/recordings", "{\"dir\":\"/tmp/other\"}", c);
+        check(recFolder.code == 404, "home-network page cannot set the recordings folder, got " + recFolder.code);
         Resp start = call(port, "POST", "/api/start", "{}", c);
         check(start.code == 200 && ui.starts == 1 && ui.running, "Start calls start");
         Resp startAgain = call(port, "POST", "/api/start", "{}", c);
