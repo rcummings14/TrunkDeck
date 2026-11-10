@@ -9,7 +9,8 @@ import java.util.*;
  * no libairspy, airspy_rx or SDRTrunk is needed. The device's USB vendor requests (receiver mode, sample rate,
  * frequency, LNA / mixer / VGA gain, AGC, GPIO for the bias-T, packing) and the bulk IN sample endpoint are used as
  * documented by the public airspyone_host sources (BSD-3-Clause), which served as the protocol reference only.
- * <p>The receiver streams real 12-bit ADC samples at twice the complex rate (20 MS/s for 10 MS/s I/Q, 5 MS/s for 2.5);
+ * <p>The receiver streams real 12-bit ADC samples at twice the complex rate (20 MS/s for 10 MS/s I/Q, 12 for 6, 6 for 3,
+ * 5 for 2.5). Sample rates come from the same vendor request as libairspy's {@code airspy_get_samplerates};
  * {@link AirspyStream} turns them into I/Q. 16 bulk transfers of 256 KB stay queued (about 105 ms at 10 MS/s);
  * the libusb event loop runs on its own thread and only copies data.
  * <p>Gain: "linearity" and "sensitivity" presets 0-21 (the receiver's own LNA/mixer/VGA combinations, from the
@@ -22,7 +23,97 @@ public final class AirspyR2 implements IqSource {
             GET_SAMPLERATES = 25, SET_PACKING = 26;
     static final int EP_IN = 0x81, CTRL_TIMEOUT = 500, TRANSFERS = 16;
     public static final long MIN_HZ = 24_000_000L, MAX_HZ = 1_800_000_000L;
+    /** Fallback when the firmware does not answer, matching libairspy: an R2's 10 and 2.5 MS/s. */
     public static final double[] RATES = {10e6, 2.5e6};
+
+    /** R2 reports 10 and 2.5 MS/s. Mini reports 6 and 3 MS/s. Anything else stays unnamed. */
+    public enum Model { R2, MINI, UNKNOWN }
+
+    static boolean near(double a, double b) { return Math.abs(a - b) < 1; }
+
+    /** Which receiver a firmware sample-rate table belongs to. */
+    public static Model modelOf(double[] deviceRates) {
+        boolean mini = false, r2 = false;
+        if (deviceRates != null) for (double r : deviceRates) {
+            if (near(r, 2.5e6)) r2 = true;
+            if (near(r, 3e6) || near(r, 6e6)) mini = true;
+        }
+        if (mini && !r2) return Model.MINI;
+        if (r2) return Model.R2;
+        return Model.UNKNOWN;
+    }
+
+    /**
+     * Rates the user can pick, widest first. {@code airspy_get_samplerates} (the firmware GET_SAMPLERATES table) lists
+     * the Mini's 6 and 3 MS/s only; 10 MS/s is the Mini's alternate configuration and is selected by value, the same
+     * way libairspy's {@code airspy_set_samplerate} does. An R2's table is already 10 and 2.5, so nothing is added.
+     */
+    public static double[] offerRates(double[] deviceRates) {
+        if (deviceRates == null || deviceRates.length == 0) return RATES.clone();
+        double[] v = deviceRates.clone();
+        if (modelOf(deviceRates) == Model.MINI && !hasRate(v, 10e6)) {
+            v = Arrays.copyOf(v, v.length + 1);
+            v[v.length - 1] = 10e6;
+        }
+        Arrays.sort(v);
+        for (int i = 0, j = v.length - 1; i < j; i++, j--) { double t = v[i]; v[i] = v[j]; v[j] = t; }
+        return v;
+    }
+
+    static boolean hasRate(double[] v, double r) { for (double x : v) if (near(x, r)) return true; return false; }
+
+    /** The saved rate when this receiver offers it, otherwise 10 MS/s if that is offered, otherwise the widest. */
+    public static double chooseRate(double saved, double[] offered) {
+        double[] o = offered == null || offered.length == 0 ? RATES : offered;
+        for (double r : o) if (near(r, saved)) return r;
+        for (double r : o) if (near(r, 10e6)) return 10e6;
+        double best = o[0];
+        for (double r : o) if (r > best) best = r;
+        return best;
+    }
+
+    /**
+     * wIndex for SET_SAMPLERATE. A rate in the firmware table is its index (libairspy {@code airspy_set_samplerate}).
+     * The Mini's 10 MS/s is not in that table; it is sent by value as IQ rate × 2 / 1000, which is what
+     * {@code airspy_set_samplerate} sends for an IQ rate the table does not list. -1 if the receiver cannot use it.
+     */
+    public static int sampleRateCommand(double complexRate, double[] deviceRates) {
+        double[] dev = deviceRates == null || deviceRates.length == 0 ? RATES : deviceRates;
+        for (int k = 0; k < dev.length; k++) if (near(dev[k], complexRate)) return k;
+        if (modelOf(dev) == Model.MINI && near(complexRate, 10e6)) return (int) Math.round(complexRate * 2 / 1000.0);
+        return -1;
+    }
+
+    /** Usable span, both sides, from the half-band converter (flat to 0.44 × the complex rate, minus one channel). */
+    public static double coverageHz(double rate) { return 2 * (rate * 0.44 - 6_250); }
+
+    public static String rateLabel(double rate) {
+        double m = rate / 1e6;
+        return Math.abs(m - Math.rint(m)) < 1e-6 ? String.format(Locale.ROOT, "%.0f MS/s", m) : String.format(Locale.ROOT, "%.1f MS/s", m);
+    }
+
+    public static String coverageText(double rate) { return String.format(Locale.ROOT, "about %.1f MHz", coverageHz(rate) / 1e6); }
+
+    public static String rateTip(double[] offered) {
+        double[] o = offered == null || offered.length == 0 ? RATES : offered;
+        StringJoiner j = new StringJoiner("; ");
+        for (double r : o) j.add(rateLabel(r) + " covers " + coverageText(r) + (near(r, 10e6) ? " (needs USB 2.0 at 40 MB/s)" : " and uses less CPU"));
+        return j.toString();
+    }
+
+    public static String describeFound(List<Info> list) {
+        int mini = 0, r2 = 0, other = 0;
+        if (list != null) for (Info i : list) {
+            if (i.model == Model.MINI) mini++;
+            else if (i.model == Model.R2) r2++;
+            else other++;
+        }
+        List<String> p = new ArrayList<>();
+        if (r2 > 0) p.add(r2 + " Airspy R2");
+        if (mini > 0) p.add(mini + " Airspy Mini");
+        if (other > 0) p.add(other + " Airspy");
+        return String.join(" + ", p);
+    }
 
     // Gain presets (index 0 = least gain), airspyone_host libairspy/src/airspy.c, BSD-3-Clause (see licenses/THIRD-PARTY.txt)
     static final int[] LIN_VGA = {13, 12, 11, 11, 11, 11, 11, 10, 10, 10, 10, 10, 10, 10, 10, 10, 9, 8, 7, 6, 5, 4};
@@ -66,13 +157,50 @@ public final class AirspyR2 implements IqSource {
         public int index, bus, address;
         public String serial = "", note = "";
         public boolean openable;
+        /** R2 until the firmware answers. A device we could not ask stays labelled R2, as before. */
+        public Model model = Model.R2;
+        /** Firmware order (SET_SAMPLERATE indexes). Empty until the device, or an earlier look, answered. */
+        public double[] deviceRates = {};
+        /** Rates the user can pick, widest first. Empty until known. */
+        public double[] rates = {};
         public String key() { return serial.isBlank() ? "airspy-idx" + index : "airspy-" + serial; }
-        public String label() { return "Airspy R2" + (serial.isBlank() ? " #" + index : "  SN " + serial) + (note.isBlank() ? "" : "  (" + note + ")"); }
+        public String product() {
+            if (model == Model.MINI) return "Airspy Mini";
+            if (model == Model.UNKNOWN) return "Airspy";
+            return "Airspy R2";
+        }
+        /** Known rates, or the R2 pair when this receiver has not answered yet. */
+        public double[] rateChoices() { return rates.length > 0 ? rates.clone() : RATES.clone(); }
+        public String label() { return product() + (serial.isBlank() ? " #" + index : "  SN " + serial) + (note.isBlank() ? "" : "  (" + note + ")"); }
         public String toString() { return label(); }
     }
 
     /** Last serial seen per USB bus/address: the device's serial can only be read while nobody else has it open. */
     static final Map<String, String> knownSerial = new HashMap<>();
+    /** Sample-rate table last read for a serial or a bus:address, so a busy receiver keeps its name. */
+    static final Map<String, double[]> knownRates = new HashMap<>();
+
+    static void applyDeviceRates(Info info, double[] deviceRates) {
+        info.deviceRates = deviceRates.clone();
+        info.rates = offerRates(deviceRates);
+        info.model = modelOf(deviceRates);
+    }
+
+    static void rememberRates(Info info) {
+        if (info.deviceRates.length == 0) return;
+        synchronized (knownSerial) {
+            if (!info.serial.isBlank()) knownRates.put("sn:" + info.serial, info.deviceRates.clone());
+            knownRates.put(info.bus + ":" + info.address, info.deviceRates.clone());
+        }
+    }
+
+    static double[] cachedRates(Info info) {
+        synchronized (knownSerial) {
+            double[] r = knownRates.get(info.bus + ":" + info.address);
+            if (r == null && !info.serial.isBlank()) r = knownRates.get("sn:" + info.serial);
+            return r == null ? null : r.clone();
+        }
+    }
 
     public static List<Info> list() {
         LibUsb u = LibUsb.get();
@@ -109,10 +237,24 @@ public final class AirspyR2 implements IqSource {
                             int len = u.call(u.getStringDescriptorAscii, h, (byte) iSerial, s, 128);
                             if (len > 0) info.serial = serialFrom(s.getString(0));
                         }
+                        try {
+                            double[] rates = readSampleRates(u, h);
+                            if (rates == null) {
+                                if (!LibUsb.win() && u.call(u.kernelDriverActive, h, 0) == 1) u.call(u.detachKernelDriver, h, 0);
+                                int c = u.call(u.setConfiguration, h, 1);
+                                if (c == 0 || c == LibUsb.ERROR_BUSY) {
+                                    int cl = u.call(u.claimInterface, h, 0);
+                                    if (cl == 0) { rates = readSampleRates(u, h); u.call(u.releaseInterface, h, 0); }
+                                }
+                            }
+                            if (rates != null) { applyDeviceRates(info, rates); rememberRates(info); }
+                        } catch (RuntimeException ignored) {}
                         u.callV(u.close, h);
                         synchronized (knownSerial) { if (!info.serial.isBlank()) knownSerial.put(where, info.serial); }
                     } else {
                         synchronized (knownSerial) { info.serial = knownSerial.getOrDefault(where, ""); }
+                        double[] cached = cachedRates(info);
+                        if (cached != null) applyDeviceRates(info, cached);
                         info.note = o == LibUsb.ERROR_ACCESS ? "no permission - udev rules" : o == LibUsb.ERROR_NOT_SUPPORTED || o == LibUsb.ERROR_NOT_FOUND
                                 ? (LibUsb.win() ? "needs the WinUSB driver - Zadig" : "no driver") : o == LibUsb.ERROR_BUSY ? "in use" : "cannot open: " + u.error(o);
                     }
@@ -143,7 +285,8 @@ public final class AirspyR2 implements IqSource {
     boolean biasTee, packing;
     public volatile String firmware = "", boardId = "", partSerial = "", usbMode = "-";
     public volatile long transfersDone;
-    double[] supportedRates = RATES;
+    /** Firmware order. R2's 10 then 2.5 until {@link #readSampleRates} replaces it. */
+    double[] deviceRates = RATES.clone();
     AirspyStream stream;
     final MemorySegment[] transfers = new MemorySegment[TRANSFERS];
     volatile int outstanding;
@@ -152,7 +295,10 @@ public final class AirspyR2 implements IqSource {
     Thread usbThread;
     MemorySegment callbackStub;
 
-    public AirspyR2(Info info) { this.info = info; this.u = LibUsb.get(); }
+    public AirspyR2(Info info) {
+        this.info = info; this.u = LibUsb.get();
+        if (info != null && info.deviceRates.length > 0) this.deviceRates = info.deviceRates.clone();
+    }
 
     public Info info() { return info; }
     public AirspyStream stream() { return stream; }
@@ -217,18 +363,41 @@ public final class AirspyR2 implements IqSource {
                 long s2 = b.get(ValueLayout.JAVA_INT_UNALIGNED, 16) & 0xffffffffL, s3 = b.get(ValueLayout.JAVA_INT_UNALIGNED, 20) & 0xffffffffL;
                 partSerial = String.format("%08X%08X", s2, s3);
             }
-            if (u.control(handle, true, GET_SAMPLERATES, 0, 0, b, 4, CTRL_TIMEOUT) >= 4) {
-                int cnt = b.get(ValueLayout.JAVA_INT_UNALIGNED, 0);
-                if (cnt > 0 && cnt <= 16 && u.control(handle, true, GET_SAMPLERATES, 0, cnt, b, cnt * 4, CTRL_TIMEOUT) >= cnt * 4) {
-                    double[] r = new double[cnt];
-                    for (int k = 0; k < cnt; k++) r[k] = b.get(ValueLayout.JAVA_INT_UNALIGNED, 4L * k) & 0xffffffffL;
-                    supportedRates = r;
-                }
-            }
+            double[] dev = readSampleRates(u, handle);
+            if (dev != null) { deviceRates = dev; applyDeviceRates(info, dev); rememberRates(info); }
         }
     }
 
-    public double[] supportedRates() { return supportedRates.clone(); }
+    /**
+     * The firmware half of libairspy {@code airspy_get_samplerates}: index 0 returns one little-endian count, then
+     * index = count returns that many uint32 complex rates. A short or nonsense answer is ignored (the caller keeps
+     * the previous table, which starts as the R2 pair).
+     */
+    static double[] readSampleRates(LibUsb u, MemorySegment handle) {
+        try (Arena a = Arena.ofConfined()) {
+            MemorySegment b = a.allocate(16 * 4L);
+            int n = u.control(handle, true, GET_SAMPLERATES, 0, 0, b, 4, CTRL_TIMEOUT);
+            if (n < 1) return null;
+            int cnt = b.get(ValueLayout.JAVA_INT_UNALIGNED, 0);
+            if (cnt <= 0 || cnt > 16) return null;
+            b.fill((byte) 0);
+            int got = u.control(handle, true, GET_SAMPLERATES, 0, cnt, b, cnt * 4, CTRL_TIMEOUT);
+            if (got < cnt * 4) return null;
+            double[] r = new double[cnt];
+            for (int k = 0; k < cnt; k++) {
+                long hz = b.get(ValueLayout.JAVA_INT_UNALIGNED, 4L * k) & 0xffffffffL;
+                if (hz < 1_000_000L || hz > 40_000_000L) return null;
+                r[k] = hz;
+            }
+            return r;
+        } catch (RuntimeException e) { return null; }
+    }
+
+    /** Rates the firmware listed, in firmware order (not the extra Mini 10 MS/s). */
+    public double[] supportedRates() { return deviceRates.clone(); }
+
+    /** Rates this open receiver can actually be set to, widest first. */
+    public double[] offeredRates() { return offerRates(deviceRates); }
 
     int ctrlIn1(int req, int value, int index) {
         try (Arena a = Arena.ofConfined()) {
@@ -246,21 +415,20 @@ public final class AirspyR2 implements IqSource {
 
     void receiverMode(int m) { ctrlOut(RECEIVER_MODE, m, 0); }
 
-    /** Sample rate (complex, 10e6 or 2.5e6), gain, bias-T and USB packing. Call before {@link #start}. */
+    /** Sample rate (complex Hz), gain, bias-T and USB packing. Call before {@link #start}. */
     public synchronized void configure(double complexRate, Gain g, boolean bias, boolean pack) {
-        int idx = -1;
-        for (int k = 0; k < supportedRates.length; k++) if (Math.abs(supportedRates[k] - complexRate) < 1) idx = k;
-        if (idx < 0) throw new IllegalStateException(String.format(Locale.ROOT, "This Airspy does not offer %.1f MS/s (it has %s)", complexRate / 1e6, rateList()));
+        int cmd = sampleRateCommand(complexRate, deviceRates);
+        if (cmd < 0) throw new IllegalStateException(String.format(Locale.ROOT, "This Airspy does not offer %s (it has %s)", rateLabel(complexRate), rateList()));
         rate = complexRate;
         u.call(u.clearHalt, handle, (byte) EP_IN);
-        ctrlIn1(SET_SAMPLERATE, 0, idx);
+        ctrlIn1(SET_SAMPLERATE, 0, cmd);
         ctrlIn1(SET_PACKING, 0, pack ? 1 : 0);
         packing = pack;
         setGain(g);
         setBiasTee(bias);
     }
 
-    String rateList() { StringJoiner j = new StringJoiner(", "); for (double r : supportedRates) j.add(String.format(Locale.ROOT, "%.1f MS/s", r / 1e6)); return j.toString(); }
+    String rateList() { StringJoiner j = new StringJoiner(", "); for (double r : offeredRates()) j.add(rateLabel(r)); return j.toString(); }
 
     public synchronized void setGain(Gain g) {
         gain = g;
