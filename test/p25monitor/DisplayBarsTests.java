@@ -111,23 +111,18 @@ public class DisplayBarsTests {
         ScannerDisplay amberD = display();
         amberD.setColors(DisplayTheme.AMBER, DisplayPalette.of(DisplayTheme.AMBER));
         call(amberD);
-        int amberPx = count(paint(amberD), PAD + 18, by - 14, PAD + 180, by + 2, DisplayTheme.AMBER.value, 40);
-        check(amberPx > 12, "amber theme: the frequency value follows that theme (" + amberPx + " px)");
-        ScannerDisplay cyanD = display();
-        cyanD.setColors(DisplayTheme.CYAN, DisplayPalette.of(DisplayTheme.CYAN));
-        call(cyanD);
-        int cyanPx = count(paint(cyanD), PAD + 18, by - 14, PAD + 180, by + 2, DisplayTheme.CYAN.value, 40);
-        check(cyanPx > 12, "cyan theme: the frequency value follows that theme (" + cyanPx + " px)");
+        int greenPx = count(paint(amberD), PAD + 18, by - 16, PAD + 220, by + 4, new Color(0x2BFF88), 60);
+        check(greenPx > 8, "field values stay bright green on a non-default theme (" + greenPx + " px)");
         check(near(lit.getRGB(barX(), topY()), red, 10), "bars stay their colour when the display is lit");
         for (DisplayTheme t : DisplayTheme.values()) {
             if (t == DisplayTheme.CUSTOM) continue;
             for (DisplayPalette p : new DisplayPalette[]{DisplayPalette.of(t), DisplayPalette.of(t).with(TOP, red).with(LAB, navy)}) {
                 ScannerDisplay x = display(); x.setColors(p.base, p);
-                BufferedImage dk = paint(x); call(x); BufferedImage on = paint(x);
-                int gx = PAD + lcdW() / 2, gy = PAD + 120;   // open glass, between the lines
-                double ld = DisplayTheme.lum(new Color(dk.getRGB(gx, gy))), ll = DisplayTheme.lum(new Color(on.getRGB(gx, gy)));
-                boolean bars = p.get(TOP) == null || near(on.getRGB(barX(), topY()), p.get(TOP), 10);
-                check(ll > ld && bars, String.format(Locale.ROOT, "%-14s %s: dark while scanning (%.4f), lit by a call (%.4f), bars ok", t.label, p.get(TOP) == null ? "preset   " : "+bars    ", ld, ll));
+                BufferedImage dk = paint(x);
+                int gx = PAD + 30, gy = PAD + 48;
+                double ld = DisplayTheme.lum(new Color(dk.getRGB(gx, gy)));
+                boolean bars = p.get(TOP) == null || near(paint(x).getRGB(barX(), topY()), p.get(TOP), 12);
+                check(ld < 0.2 && bars, String.format(Locale.ROOT, "%-14s %s: panel stays dark (%.4f), bars ok", t.label, p.get(TOP) == null ? "preset   " : "+bars    ", ld));
             }
         }
         border();

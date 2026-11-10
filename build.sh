@@ -18,6 +18,8 @@ if [ -n "${RR_APP_KEY:-}" ]; then
   printf '%s' "$R" | base64 | tr -d '\r\n' > build/classes/p25monitor/rr/appkey.dat; unset K R
   echo "RadioReference app key from RR_APP_KEY built into build/trunkdeck.jar (not written to the source tree)"
 fi
+mkdir -p build/classes/p25monitor/fonts
+cp fonts/Orbitron-Bold.ttf fonts/Rajdhani-Bold.ttf build/classes/p25monitor/fonts/
 "$JAR" cfm build/trunkdeck.jar build/manifest.txt -C build/classes .
 echo "Built build/trunkdeck.jar  (copy it to app/ next to flatlaf-3.5.4.jar; the other lib/*.jar files go to app/lib/)"
 if [ "${1:-}" = "test" ]; then

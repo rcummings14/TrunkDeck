@@ -99,6 +99,13 @@ public class ScannerDisplay extends JComponent {
 
     /** Signal-meter geometry (logical pixels). The whole meter, including the number, is {@link #signalW} wide. */
     static final int SIG_BW = 5, SIG_GAP = 2, SIG_BH = 11;
+    /** The meter's lit segments stay this amber, on every display theme. */
+    public static final Color METER_ON = new Color(0xFF8C1A);
+    static final Color METER_OFF = new Color(0xC48A3A);
+    /** Field values on a call. The mockup's green, on every theme. */
+    static final Color VALUE_GREEN = new Color(0x2BFF88);
+    /** Second line (TG number, category, tag) on every theme. */
+    static final Color LINE_BLUE = new Color(0x3D96FF);
     /** Where the meter was drawn, in logical pixels. {@code signalX < 0} means it is not on screen. */
     int signalX = -1, signalY, signalW, signalH;
     /** Same rectangle in component pixels (display-only zoom included), for the tooltip. */
@@ -232,13 +239,14 @@ public class ScannerDisplay extends JComponent {
 
         int pad = 14, meterW = simple ? 0 : Math.min(300, w / 3);
         int lcdW = w - pad * (simple ? 2 : 3) - meterW, lcdH = h - pad * 2;
-        int foot = embedTouch ? (int) Math.ceil(64.0 / Math.max(z, 0.5)) : 0;
-        Color accent = emergency ? Theme.RED : encrypted ? Theme.VIOLET : active ? th.accent : th.accentIdle;
-        Color tgColor = emergency ? Theme.RED : encrypted ? Theme.VIOLET : th.get(DisplayPalette.Field.TALKGROUP);
+        int foot = embedTouch ? (int) Math.ceil(72.0 / Math.max(z, 0.5)) : 0;
+        Color accent = emergency ? Theme.RED : encrypted ? Theme.VIOLET : th.accent;
         Color live = (active || hang) ? liveTint : null;
-        if (live != null && !emergency && !encrypted) tgColor = live;   // the name and number only; the glass stays the theme
+        Color nameGlow = (live != null && !emergency && !encrypted) ? live : accent;
+        Color nameInk = emergency ? Theme.RED : encrypted ? Theme.VIOLET
+                : (live != null ? live : mix(Color.WHITE, accent, 0.08f));
         double lt = backlight ? Math.round(light * 32) / 32.0 : -1;   // quantized: the glass cache holds a few fade steps
-        Color glassBg = lt < 0 ? th.lcd : mix(th.get(DisplayPalette.Field.DARK), th.get(DisplayPalette.Field.BACKGROUND), lt);
+        Color glassBg = new Color(0x071018);
         // bezel, LCD glass, its glow and the scanline texture: drawn once per size / colours, then reused every frame
         g.drawImage(glass(w, h, pad, lcdW, lcdH, th, accent, glassBg, lt, g.getTransform()), 0, 0, w, h, null);
         Color frame = th.get(DisplayPalette.Field.BORDER);
@@ -260,8 +268,10 @@ public class ScannerDisplay extends JComponent {
         g.draw(new RoundRectangle2D.Double(pad + 1, pad + 1, lcdW - 2, lcdH - 2, 16, 16));
         g.setStroke(rimStroke);
 
-        int x0 = pad + 18, y = pad + 26;
+        int x0 = pad + 18, y = pad + 22;
         paintTop(g, x0, y, pad + lcdW - 18, z, th);
+        g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 120));
+        g.drawLine(pad + 14, y + 8, pad + lcdW - 14, y + 8);
 
         // big text: the talkgroup while a call is playing (lit until its audio has finished), otherwise SCANNING (dimmed).
         // 1.3.2: this replaces the separate small "Scanning..." status line; its height went to the big text.
@@ -272,26 +282,19 @@ public class ScannerDisplay extends JComponent {
         String main;
         if (active) main = alpha.isEmpty() ? (tgText.isEmpty() ? "RECEIVING" : tgText) : alpha.toUpperCase();
         else main = idleText();
-        int size = big;
-        g.setFont(Theme.mono(Font.BOLD, size));
-        while (!active && size > 20 && g.getFontMetrics().stringWidth(main) > lcdW - 40) g.setFont(Theme.mono(Font.BOLD, --size));   // idle text shrinks instead of "..."
+        int size = Math.max(big, Math.min(78, (int) (avail * 0.72)));
+        g.setFont(DisplayFont.name(size));
+        while (!active && size > 20 && g.getFontMetrics().stringWidth(main) > lcdW - 40) g.setFont(DisplayFont.name(--size));   // idle text shrinks instead of "..."
         main = fit(g, main, lcdW - 40);
-        int asc = g.getFontMetrics().getAscent() * 4 / 5;   // cap height of the mono font, roughly
-        int block = asc + 12 + 17;                          // big line + gap + second line
+        int asc = g.getFontMetrics().getAscent() * 4 / 5;   // cap height, roughly
+        int block = asc + 8 + 18;                           // big line + gap + second line
         int my = areaTop + Math.max(0, (avail - block) / 2) + asc;
-        if (active) { // glow around the name
-            Color ink = live != null && !emergency && !encrypted ? tgColor : (th.brighten || emergency || encrypted ? tgColor.brighter() : tgColor);
-            g.setColor(new Color(ink.getRed(), ink.getGreen(), ink.getBlue(), 70));
-            g.drawString(main, x0 + 2, my + 2);
-            g.setColor(new Color(ink.getRed(), ink.getGreen(), ink.getBlue(), 110));
-            g.drawString(main, x0 + 1, my + 1);
-            g.setColor(ink);
-            g.drawString(main, x0, my);
-        } else if (anim) marquee(g, main, pad + 6, pad + lcdW - 6, x0, my, lcdW, th, glassBg, lt < 0 ? 1 : ScannerDisplay.DIM_SCAN + (1 - ScannerDisplay.DIM_SCAN) * lt, now);   // scrolls like a scanner's ticker
+        if (active) halo(g, main, x0, my, nameGlow, nameInk);
+        else if (anim) marquee(g, main, pad + 6, pad + lcdW - 6, x0, my, lcdW, th, glassBg, lt < 0 ? 1 : ScannerDisplay.DIM_SCAN + (1 - ScannerDisplay.DIM_SCAN) * lt, now);   // scrolls like a scanner's ticker
         else { g.setColor(th.idleText); g.drawString(main, x0, my); }   // (Reduce motion: still text)   // idle: dim, like an unlit LCD segment
 
-        // second line: TG number in the live colour, then category and tag; when idle, what was heard last
-        g.setFont(Theme.mono(Font.BOLD, 17f));
+        // second line: TG number, category and tag, in blue on every theme
+        g.setFont(DisplayFont.ui(16f));
         String line2;
         String meta = "";
         if (active) {
@@ -299,15 +302,13 @@ public class ScannerDisplay extends JComponent {
             meta = (category.isBlank() ? "" : "   " + category) + (tag.isBlank() ? "" : "  \u00b7  " + tag);
         } else if (!engineLive) line2 = "";
         else line2 = tgText.isEmpty() ? "" : (hang ? "HOLDING " : "LAST  ") + tgText + (alpha.isEmpty() ? "" : "  " + alpha.toUpperCase());
-        int l2y = my + 12 + 17;
-        boolean coloredText = live != null && !emergency && !encrypted && (active || hang);
-        g.setColor(coloredText ? live : (active ? th.get(DisplayPalette.Field.TGID) : th.get(DisplayPalette.Field.LABELS)));
-        int lineRoom = lcdW - 40 - (active ? 220 : 0);
+        int l2y = my + 10 + 16;
+        g.setColor(active || hang ? LINE_BLUE : th.get(DisplayPalette.Field.LABELS));
+        int lineRoom = lcdW - 40 - (active ? 160 : 0);
         line2 = fit(g, line2, Math.max(20, lineRoom));
         g.drawString(line2, x0, l2y);
         int afterId = x0 + g.getFontMetrics().stringWidth(line2);
         if (active && !meta.isEmpty()) {
-            g.setColor(th.get(DisplayPalette.Field.LABELS));
             meta = fit(g, meta, Math.max(20, lineRoom - g.getFontMetrics().stringWidth(line2)));
             g.drawString(meta, afterId, l2y);
             afterId += g.getFontMetrics().stringWidth(meta);
@@ -316,30 +317,30 @@ public class ScannerDisplay extends JComponent {
         int bx = afterId + ((line2.isEmpty() && meta.isEmpty()) ? 0 : 14);
         if (active && emergency) bx = badge(g, "EMERGENCY", Theme.RED, bx, l2y - 13);
         if (active && encrypted) bx = badge(g, "ENC", Theme.VIOLET, bx, l2y - 13);
-        if (active && favorite) bx = badge(g, "\u2605 FAV", Theme.AMBER, bx, l2y - 13);
+        if (active && favorite) bx = badgeOutline(g, "FAV", new Color(0xF5C400), bx, l2y - 13);
         if (active && muted) bx = badge(g, "MUTED", Theme.DIM, bx, l2y - 13);
         var db = delayBadge;
         String dl = active && db != null ? db.get() : null;
         if (dl != null && !dl.isEmpty()) bx = badge(g, dl, Theme.CYAN, bx, l2y - 13);
 
-        // bottom fields
-        g.setFont(Theme.mono(Font.PLAIN, 11f));
-        // 1.4.1: the radio column is wider (it shows "NAME (ID)"); frequency 24 %, radio 36 %, time 15 %, event 25 %
-        int fw = lcdW - 36, cF = fw * 24 / 100, cR = fw * 36 / 100, cT = fw * 15 / 100, cE = fw - cF - cR - cT;
+        // bottom fields: four equal columns, a line above them, thin dividers between them
+        g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 110));
+        int fieldLine = by - 36;
+        g.drawLine(pad + 14, fieldLine, pad + lcdW - 14, fieldLine);
+        int fw = lcdW - 36, col = fw / 4;
         java.util.List<double[]> sl = anim ? scanList() : java.util.List.of();
         if (!sl.isEmpty()) {   // classic scanner: the frequency readout steps through the system's real channels
             double[] fq = sl.get((int) ((now / STEP_MS) % sl.size()));
-            field(g, fq[1] > 0 ? (conventional ? "SCAN \u00b7 CHANNEL" : "SCAN \u00b7 CONTROL CH") : "SCAN \u00b7 VOICE CH", String.format(Locale.ROOT, "%.5f MHz", fq[0]), x0, by, false, cF - 10, th.get(DisplayPalette.Field.SCAN));
-        } else field(g, "FREQUENCY", freq.isEmpty() ? "-" : freq + " MHz", x0, by, active, cF - 10, DisplayPalette.Field.FREQ);
+            field(g, fq[1] > 0 ? (conventional ? "SCAN \u00b7 CHANNEL" : "SCAN \u00b7 CONTROL CH") : "SCAN \u00b7 VOICE CH", String.format(Locale.ROOT, "%.5f MHz", fq[0]), x0, by, false, col - 16, th.get(DisplayPalette.Field.SCAN));
+        } else field(g, "FREQUENCY", freq.isEmpty() ? "-" : freq + " MHz", x0, by, active, col - 16, DisplayPalette.Field.FREQ);
         var rl = radioLabel;
         String rtext = radioId > 0 && rl != null ? rl.apply(radioId) : radio;
-        radioField(g, rtext.isEmpty() ? "-" : rtext, x0 + cF, by, active, cR - 12);
+        radioField(g, rtext.isEmpty() ? "-" : rtext, x0 + col, by, active, col - 16);
         long secs = active ? (System.currentTimeMillis() - callStart) / 1000 : (lastActivity == 0 ? -1 : (System.currentTimeMillis() - lastActivity) / 1000);
-        field(g, active ? "CALL TIME" : "LAST CALL", secs < 0 ? "-" : active ? String.format("%d:%02d", secs / 60, secs % 60) : ago(secs), x0 + cF + cR, by, active, cT - 8, DisplayPalette.Field.CALLTIME);
-        field(g, "EVENT", eventText.isEmpty() ? "-" : eventText, x0 + cF + cR + cT, by, active, Math.min(200, cE), DisplayPalette.Field.EVENT);
-        g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 80));
-        int divTop = by - 30, divBot = by + 4;
-        for (int dx : new int[]{x0 + cF - 8, x0 + cF + cR - 8, x0 + cF + cR + cT - 6}) g.drawLine(dx, divTop, dx, divBot);
+        field(g, active ? "CALL TIME" : "LAST CALL", secs < 0 ? "-" : active ? String.format("%d:%02d", secs / 60, secs % 60) : ago(secs), x0 + col * 2, by, active, col - 16, DisplayPalette.Field.CALLTIME);
+        field(g, "EVENT", eventText.isEmpty() ? "-" : eventText, x0 + col * 3, by, active, col - 12, DisplayPalette.Field.EVENT);
+        g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 90));
+        for (int i = 1; i < 4; i++) g.drawLine(x0 + col * i - 8, fieldLine + 6, x0 + col * i - 8, by + 4);
 
         // ---------- right-side meters (Advanced view only) ----------
         if (simple) { g.dispose(); return; }
@@ -361,8 +362,8 @@ public class ScannerDisplay extends JComponent {
     /** The Display only buttons, laid into the bottom of this panel. */
     @Override public void doLayout() {
         if (getComponentCount() == 0) return;
-        int margin = 12, bh = Math.min(48, Math.max(32, getHeight() / 6));
-        int y = Math.max(8, getHeight() - 10 - bh);
+        int margin = 22, bh = Math.min(40, Math.max(30, getHeight() / 7));
+        int y = Math.max(8, getHeight() - 14 - bh);
         for (Component c : getComponents()) c.setBounds(margin, y, Math.max(0, getWidth() - margin * 2), bh);
     }
 
@@ -374,7 +375,7 @@ public class ScannerDisplay extends JComponent {
      * meters, so Display only (simple view) still shows it.
      */
     void paintTop(Graphics2D g, int x0, int y, int right, double z, DisplayPalette th) {
-        g.setFont(Theme.mono(Font.BOLD, 12f));
+        g.setFont(DisplayFont.ui(12f));
         FontMetrics fm = g.getFontMetrics();
         String head = (systemName + (siteName.isBlank() ? "" : "  \u00b7  " + siteName)).toUpperCase();
         String cc = ccText == null ? "" : ccText;
@@ -410,17 +411,15 @@ public class ScannerDisplay extends JComponent {
     void paintSignal(Graphics2D g, int x, int y, int barsW, DisplayPalette th) {
         double db = readSignal();
         int lit = SignalMeter.bars(db);
-        Color fill = th.get(DisplayPalette.Field.SCAN);
-        if (fill == null) fill = Theme.GREEN;
-        Color number = th.get(DisplayPalette.Field.FREQ);
-        if (number == null) number = Theme.TEXT;
-        Color track = signalTrack(number);
+        Color fill = METER_ON;
+        Color number = new Color(0xE7EEF6);
+        Color track = METER_OFF;
         int top = y - SIG_BH;
         for (int i = 0; i < SignalMeter.BARS; i++) {
             g.setColor(i < lit ? fill : track);
             g.fillRect(x + i * (SIG_BW + SIG_GAP), top, SIG_BW, SIG_BH);
         }
-        g.setFont(Theme.mono(Font.BOLD, 12f));
+        g.setFont(DisplayFont.ui(12f));
         g.setColor(number);
         g.drawString(SignalMeter.text(db), x + barsW + 6, y);
     }
@@ -454,6 +453,31 @@ public class ScannerDisplay extends JComponent {
         }
     }
 
+    /** A halo around the letters. The letters themselves stay the ink colour, drawn last. */
+    private void halo(Graphics2D g, String text, int x, int y, Color glow, Color ink) {
+        g.setColor(new Color(glow.getRed(), glow.getGreen(), glow.getBlue(), 40));
+        for (int[] d : new int[][]{{-6, 0}, {6, 0}, {0, -4}, {0, 4}, {-4, -3}, {4, -3}, {-4, 3}, {4, 3}})
+            g.drawString(text, x + d[0], y + d[1]);
+        g.setColor(new Color(glow.getRed(), glow.getGreen(), glow.getBlue(), 70));
+        g.drawString(text, x - 2, y);
+        g.drawString(text, x + 2, y);
+        g.drawString(text, x, y - 1);
+        g.drawString(text, x, y + 1);
+        g.setColor(ink);
+        g.drawString(text, x, y);
+        g.drawString(text, x, y);
+    }
+
+    /** Yellow outline only, the way the favourite mark is drawn on the reference panel. */
+    private int badgeOutline(Graphics2D g, String t, Color c, int x, int y) {
+        g.setFont(DisplayFont.ui(11f));
+        int tw = g.getFontMetrics().stringWidth(t) + 14;
+        g.setColor(c);
+        g.draw(new RoundRectangle2D.Double(x, y, tw, 16, 8, 8));
+        g.drawString(t, x + 7, y + 12);
+        return x + tw + 8;
+    }
+
     private int badge(Graphics2D g, String t, Color c, int x, int y) {
         g.setFont(Theme.mono(Font.BOLD, 11f));
         int tw = g.getFontMetrics().stringWidth(t) + 14;
@@ -468,32 +492,32 @@ public class ScannerDisplay extends JComponent {
     /** The radio field: "NAME (ID)" shrinks to fit its column (down to 11 pt), then the name is shortened, never the ID. */
     private void radioField(Graphics2D g, String value, int x, int y, boolean on, int w) {
         DisplayPalette th = palette;
-        g.setFont(Theme.mono(Font.PLAIN, 10f));
+        g.setFont(DisplayFont.ui(11f));
         g.setColor(th.get(DisplayPalette.Field.LABELBAR_TEXT));
-        g.drawString("UNIT / RADIO", x, y - 18);
-        float pt = 15f;
-        g.setFont(Theme.mono(Font.BOLD, pt));
-        while (pt > 11f && g.getFontMetrics().stringWidth(value) > w) g.setFont(Theme.mono(Font.BOLD, pt -= 0.5f));
+        g.drawString("UNIT / RADIO", x, y - 16);
+        float pt = 16f;
+        g.setFont(DisplayFont.ui(pt));
+        while (pt > 12f && g.getFontMetrics().stringWidth(value) > w) g.setFont(DisplayFont.ui(pt -= 0.5f));
         int p = value.lastIndexOf(" (");
         if (g.getFontMetrics().stringWidth(value) > w && p > 0 && value.endsWith(")")) {
             String id = value.substring(p);
             value = fit(g, value.substring(0, p), Math.max(20, w - g.getFontMetrics().stringWidth(id))) + id;
         } else value = fit(g, value, w);
-        g.setColor(on ? th.get(DisplayPalette.Field.RADIO) : th.idle(DisplayPalette.Field.RADIO));
+        g.setColor(on ? VALUE_GREEN : new Color(0x1E6B45));
         g.drawString(value, x, y);
     }
 
     private void field(Graphics2D g, String label, String value, int x, int y, boolean on, int w, DisplayPalette.Field f) {
         DisplayPalette th = palette;
-        field(g, label, value, x, y, on, w, on ? th.get(f) : th.idle(f));
+        field(g, label, value, x, y, on, w, on ? VALUE_GREEN : new Color(0x1E6B45));
     }
 
     private void field(Graphics2D g, String label, String value, int x, int y, boolean on, int w, Color valueColor) {
         DisplayPalette th = palette;
-        g.setFont(Theme.mono(Font.PLAIN, 10f));
+        g.setFont(DisplayFont.ui(11f));
         g.setColor(th.get(DisplayPalette.Field.LABELBAR_TEXT));
-        g.drawString(label, x, y - 18);
-        g.setFont(Theme.mono(Font.BOLD, 15f));
+        g.drawString(label, x, y - 16);
+        g.setFont(DisplayFont.ui(16f));
         g.setColor(valueColor);
         g.drawString(fit(g, value, Math.min(200, w)), x, y);
     }
@@ -523,12 +547,10 @@ public class ScannerDisplay extends JComponent {
             g.draw(new RoundRectangle2D.Double(0.5, 0.5, w - 2, h - 2, 22, 22));
         }   // else: no frame - only the glass
         Shape lcd = new RoundRectangle2D.Double(pad, pad, lcdW, lcdH, 16, 16);
-        g.setColor(bg);
+        // dark navy, every theme. The theme colours the border glow, not this fill.
+        g.setPaint(new GradientPaint(0, pad, new Color(0x0C1622), 0, pad + lcdH, new Color(0x05080E)));
         g.fill(lcd);
-        // the glow: 1.4.4 strength without backlight; with it, from a faint one (dark) to a strong one (lit by a call)
-        int glow = lt < 0 ? (active ? 38 : 14) : (int) Math.round(8 + 52 * lt);
-        g.setPaint(new RadialGradientPaint(new Point2D.Double(pad + lcdW * 0.3, pad), lcdW * 0.9f, new float[]{0f, 1f},
-                new Color[]{new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), glow), new Color(0, 0, 0, 0)}));
+        g.setPaint(new GradientPaint(0, pad, new Color(255, 255, 255, 16), 0, pad + 36, new Color(255, 255, 255, 0)));
         g.fill(lcd);
         // soft-key style bars behind the top line and the field labels (Full color preset, or the user's own colours, 1.4.9)
         Color top = th.get(DisplayPalette.Field.TOPBAR), lab = th.get(DisplayPalette.Field.LABELBAR);

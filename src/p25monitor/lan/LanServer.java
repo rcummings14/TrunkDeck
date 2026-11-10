@@ -194,7 +194,7 @@ public final class LanServer {
             String method = ex.getRequestMethod();
             String path = ex.getRequestURI() == null || ex.getRequestURI().getPath() == null ? "/" : ex.getRequestURI().getPath();
             if ("GET".equals(method) && ("/".equals(path) || "/index.html".equals(path))) {
-                send(ex, 200, "text/html; charset=utf-8", LanPage.HTML);
+                send(ex, 200, "text/html; charset=utf-8", LanPage.page());
                 return;
             }
             if ("POST".equals(method) && "/api/login".equals(path)) { login(ex); return; }

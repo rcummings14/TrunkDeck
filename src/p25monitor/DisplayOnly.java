@@ -40,7 +40,7 @@ final class DisplayOnly {
     final JButton muteAllBtn = touchButton("Mute all");
     final JButton muteTgBtn = touchButton("Mute talkgroup");
     final JButton holdBtn = touchButton("Hold");
-    final JComboBox<String> mutedList = new JComboBox<>();
+    final JComboBox<String> mutedList = new PillCombo();
     final List<Integer> mutedIds = new ArrayList<>();
     boolean fillingList;
     /** Saves the remembered size / position a moment after the last move (not on every pixel). */
@@ -93,6 +93,7 @@ final class DisplayOnly {
         muteTgBtn.setName("touchMuteTg");
         holdBtn.setName("touchHold");
         mutedList.setName("touchMutedList");
+        mutedList.setOpaque(false);
         muteAllBtn.setToolTipText("Silence everything you hear. Calls are still decoded, logged, recorded and streamed.");
         muteTgBtn.setToolTipText("Mute the talkgroup on the display, or the latest call if the display is idle. It stays muted everywhere.");
         holdBtn.setToolTipText("Stay on the talkgroup that is on the air, and ignore other talkgroups, until you tap again. Not remembered after a restart.");
@@ -206,15 +207,57 @@ final class DisplayOnly {
 
     JButton touchButton(String text) {
         JButton b = new GlowButton(text);
-        Font base = UIManager.getFont("Label.font");
-        if (base == null) base = new Font(Font.SANS_SERIF, Font.PLAIN, 16);
-        b.setFont(base.deriveFont(Font.BOLD, 15f));
-        b.setForeground(new Color(0xE8F7FF));
-        b.setBackground(new Color(0x102833));
+        b.setFont(DisplayFont.ui(15f));
+        b.setForeground(Color.WHITE);
+        b.setBackground(new Color(0x0A1624));
         b.setFocusPainted(false);
         b.setPreferredSize(new Dimension(160, 44));
         b.setMargin(new Insets(8, 10, 8, 10));
         return b;
+    }
+
+    /** Same pill as the other buttons. updateUI keeps FlatLaf from replacing this look. */
+    static final class PillCombo extends JComboBox<String> {
+        @Override public void updateUI() { setUI(new PillComboUI()); }
+        @Override public Dimension getMinimumSize() { return new Dimension(0, 28); }
+        @Override public Dimension getPreferredSize() { return new Dimension(40, 36); }
+    }
+
+    /** Muted-list control drawn as the same pill as the other buttons, clipped to its box. */
+    static final class PillComboUI extends javax.swing.plaf.basic.BasicComboBoxUI {
+        @Override protected JButton createArrowButton() {
+            JButton b = new JButton("\u25BE");
+            b.setFont(DisplayFont.ui(11f));
+            b.setForeground(Color.WHITE);
+            b.setContentAreaFilled(false);
+            b.setBorderPainted(false);
+            b.setFocusPainted(false);
+            b.setOpaque(false);
+            return b;
+        }
+        @Override public void paint(Graphics g, JComponent c) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            int w = c.getWidth(), h = c.getHeight();
+            boolean on = c.isEnabled();
+            Object rim = c.getClientProperty("rim");
+            Color accent = rim instanceof Color ? (Color) rim : Theme.CYAN;
+            if (!on) accent = new Color(0x1C6F88);
+            g2.setPaint(new GradientPaint(0, 2, new Color(0x071018), 0, h - 2, on ? new Color(0x143044) : new Color(0x101820)));
+            g2.fillRoundRect(1, 1, Math.max(0, w - 2), Math.max(0, h - 2), 14, 14);
+            g2.setColor(accent);
+            g2.drawRoundRect(1, 1, Math.max(0, w - 3), Math.max(0, h - 3), 14, 14);
+            String text = comboBox == null || comboBox.getSelectedItem() == null ? "" : comboBox.getSelectedItem().toString();
+            g2.setFont(c.getFont() == null ? DisplayFont.ui(15f) : c.getFont());
+            g2.setColor(on ? Color.WHITE : new Color(0x9AA6B2));
+            FontMetrics fm = g2.getFontMetrics();
+            int ty = (h + fm.getAscent() - fm.getDescent()) / 2;
+            g2.drawString(text, 12, ty);
+            int ax = w - 16, ay = h / 2;
+            g2.fillPolygon(new int[]{ax - 4, ax + 4, ax}, new int[]{ay - 2, ay - 2, ay + 3}, 3);
+            g2.dispose();
+        }
     }
 
     /** Rounded button. The rim follows the display theme (cyan on the default theme). */
@@ -228,15 +271,16 @@ final class DisplayOnly {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             int w = getWidth(), h = getHeight();
-            Color fill = getBackground() == null ? new Color(0x102833) : getBackground();
+            Color fill = isEnabled() ? (getBackground() == null ? new Color(0x0A1624) : getBackground()) : new Color(0x121820);
             Color accent = accent();
-            g2.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 70));
-            g2.fillRoundRect(0, 0, w, h, 18, 18);
-            g2.setColor(fill);
-            g2.fillRoundRect(2, 2, Math.max(0, w - 4), Math.max(0, h - 4), 16, 16);
+            if (!isEnabled()) accent = new Color(0x2A3A48);
+            g2.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), isEnabled() ? 80 : 40));
+            g2.fillRoundRect(1, 1, Math.max(0, w - 2), Math.max(0, h - 2), 16, 16);
+            g2.setPaint(new GradientPaint(0, 3, new Color(0x07111C), 0, h - 3, new Color(0x12384A)));
+            g2.fillRoundRect(3, 3, Math.max(0, w - 6), Math.max(0, h - 6), 14, 14);
             g2.setColor(accent);
-            g2.setStroke(new BasicStroke(1.4f));
-            g2.drawRoundRect(2, 2, Math.max(0, w - 5), Math.max(0, h - 5), 16, 16);
+            g2.setStroke(new BasicStroke(1.6f));
+            g2.drawRoundRect(3, 3, Math.max(0, w - 7), Math.max(0, h - 7), 14, 14);
             g2.dispose();
             super.paintComponent(g);
         }
@@ -246,18 +290,23 @@ final class DisplayOnly {
     void refreshTouch() {
         boolean all = f.touch.muteAll();
         Color accent = f.display.palette != null && f.display.palette.accent != null ? f.display.palette.accent : Theme.CYAN;
-        Color ink = f.display.palette == null ? Theme.TEXT : f.display.palette.get(DisplayPalette.Field.FREQ);
-        if (ink == null) ink = Theme.TEXT;
+        Color navy = new Color(0x0A1624);
         muteAllBtn.setText(all ? "All muted" : "Mute all");
-        muteAllBtn.setBackground(all ? Theme.RED : Theme.PANEL2);
-        muteAllBtn.setForeground(all ? Color.WHITE : ink);
-        muteTgBtn.setForeground(ink);
+        muteAllBtn.setBackground(navy);
+        muteAllBtn.setForeground(Color.WHITE);
+        muteTgBtn.setBackground(navy);
+        muteTgBtn.setForeground(Color.WHITE);
         boolean holding = f.touch.hold();
         holdBtn.setText(holding ? "Holding" : "Hold");
-        holdBtn.setBackground(holding ? Theme.AMBER : Theme.PANEL2);
-        holdBtn.setForeground(holding ? Color.BLACK : ink);
-        mutedList.setForeground(ink);
-        mutedList.setBorder(BorderFactory.createLineBorder(accent, 1, true));
+        holdBtn.setBackground(navy);
+        holdBtn.setForeground(Color.WHITE);
+        mutedList.setBackground(navy);
+        mutedList.setForeground(Color.WHITE);
+        mutedList.setFont(DisplayFont.ui(15f));
+        mutedList.setMinimumSize(new Dimension(0, 32));
+        mutedList.putClientProperty("JComponent.arc", 14);
+        mutedList.putClientProperty("rim", accent);
+        mutedList.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 4));
         fillingList = true;
         mutedIds.clear();
         mutedList.removeAllItems();
@@ -265,8 +314,10 @@ final class DisplayOnly {
         if (rows.isEmpty()) {
             mutedList.addItem("No muted talkgroups");
             mutedList.setEnabled(false);
+            mutedList.setForeground(new Color(0x8A97A6));
         } else {
             mutedList.setEnabled(true);
+            mutedList.setForeground(Color.WHITE);
             mutedList.addItem("Muted list");
             for (Talkgroup t : rows) {
                 mutedIds.add(t.decimal);

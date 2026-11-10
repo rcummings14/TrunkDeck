@@ -100,39 +100,39 @@ public final class SignalMeterTests {
         ScannerDisplay d = display(true);          // Display only: no side meters
         d.controlDb = -42;
         BufferedImage img = paint(d);
-        int bars = count(img, 0, 0, W, H, MAGENTA);
+        int bars = count(img, 0, 0, W, H, ScannerDisplay.METER_ON);
         check(bars == lit, "display-only, dark glass: " + bars + " lit-segment pixels (want " + lit + ")");
-        check(d.signalX >= 0 && img.getRGB(d.signalX + 2, d.signalY + ScannerDisplay.SIG_BH / 2) == MAGENTA.getRGB(),
-                "a lit segment is the full scan colour, not dimmed with the backlight");
+        check(d.signalX >= 0 && img.getRGB(d.signalX + 2, d.signalY + ScannerDisplay.SIG_BH / 2) == ScannerDisplay.METER_ON.getRGB(),
+                "a lit segment is amber, not dimmed with the backlight");
         int ux = d.signalX + SignalMeter.bars(-42) * (ScannerDisplay.SIG_BW + ScannerDisplay.SIG_GAP) + 2;
         Color trackPx = new Color(img.getRGB(ux, d.signalY + 4));
-        Color track = ScannerDisplay.signalTrack(d.palette.get(DisplayPalette.Field.FREQ));
+        Color track = ScannerDisplay.METER_OFF;
         Color nearby = new Color(img.getRGB(Math.max(0, d.signalX - 8), d.signalY + 4));
         check(trackPx.equals(track), String.format("unlit segment is the track colour (%06X, want %06X)", trackPx.getRGB() & 0xFFFFFF, track.getRGB() & 0xFFFFFF));
         check(DisplayTheme.lum(trackPx) > DisplayTheme.lum(nearby) + 0.05, "unlit segment stays brighter than the dark glass beside it");
 
         d.controlDb = Double.NaN;
         BufferedImage empty = paint(d);
-        check(count(empty, 0, 0, W, H, MAGENTA) == 0, "no level: no lit segments (not a fake full reading)");
+        check(count(empty, 0, 0, W, H, ScannerDisplay.METER_ON) == 0, "no level: no lit segments (not a fake full reading)");
         check(d.signalX >= 0, "the empty meter is still drawn while scanning");
 
         d.setEngine("STOPPED", false);
         d.controlDb = -20;
         BufferedImage stopped = paint(d);
-        check(count(stopped, 0, 0, W, H, MAGENTA) == 0 && d.signalX < 0, "stopped: the meter is not shown");
+        check(count(stopped, 0, 0, W, H, ScannerDisplay.METER_ON) == 0 && d.signalX < 0, "stopped: the meter is not shown");
 
         ScannerDisplay live = display(false);      // advanced view: side meters are on the right
         live.controlDb = -42;
         BufferedImage adv = paint(live);
         int side = PAD * 2 + (W - PAD * 3 - Math.min(300, W / 3));
-        check(count(adv, side, 0, W, H, MAGENTA) == 0, "the signal meter stays on the glass, not on the activity meter");
-        check(count(adv, 0, 0, side, H, MAGENTA) == lit, "advanced view still draws it on the control-channel row");
+        check(count(adv, side, 0, W, H, ScannerDisplay.METER_ON) == 0, "the signal meter stays on the glass, not on the activity meter");
+        check(count(adv, 0, 0, side, H, ScannerDisplay.METER_ON) == lit, "advanced view still draws it on the control-channel row");
 
         live.controlDb = -20;
         live.controlSignal = () -> Double.NaN;
-        check(count(paint(live), 0, 0, W, H, MAGENTA) == 0, "a live source that is not reporting wins over a stored number");
+        check(count(paint(live), 0, 0, W, H, ScannerDisplay.METER_ON) == 0, "a live source that is not reporting wins over a stored number");
         live.controlSignal = () -> -20.0;
-        check(count(paint(live), 0, 0, W, H, MAGENTA) == SignalMeter.BARS * ScannerDisplay.SIG_BW * ScannerDisplay.SIG_BH,
+        check(count(paint(live), 0, 0, W, H, ScannerDisplay.METER_ON) == SignalMeter.BARS * ScannerDisplay.SIG_BW * ScannerDisplay.SIG_BH,
                 "the live level is what gets drawn");
 
         String over = live.getToolTipText(new MouseEvent(live, MouseEvent.MOUSE_MOVED, 0, 0, live.signalX + 4, live.signalY + 4, 0, false));

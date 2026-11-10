@@ -13,6 +13,7 @@ final class LanPage {
 <meta name="referrer" content="no-referrer">
 <title>TrunkDeck</title>
 <style>
+/*DISPLAY_FONT*/
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: #0A0E13; color: #DCE6F0;
@@ -37,10 +38,10 @@ final class LanPage {
   .bezel { background: linear-gradient(#1A2430, #0B1118); border: 1px solid var(--accent, #00E5FF); border-radius: 22px; padding: 14px;
     box-shadow: 0 0 18px color-mix(in srgb, var(--accent, #00E5FF) 45%, transparent); }
   .glass { position: relative; overflow: hidden; min-height: 230px; border-radius: 16px; border: 1px solid var(--accent, #00E5FF);
-    box-shadow: inset 0 0 28px color-mix(in srgb, var(--accent, #00E5FF) 28%, transparent), 0 0 10px color-mix(in srgb, var(--accent, #00E5FF) 35%, transparent);
-    background: var(--dark, #020608); color: var(--tg, #00E5FF); padding: 18px 18px 14px;
-    font-family: Consolas, "Cascadia Mono", ui-monospace, monospace; }
-  .glass.call { background: var(--lit, #0A3440); border-color: var(--tg, #00E5FF); }
+    box-shadow: 0 0 16px color-mix(in srgb, var(--accent, #00E5FF) 55%, transparent), inset 0 0 18px color-mix(in srgb, var(--accent, #00E5FF) 18%, transparent);
+    background: linear-gradient(#0C1622, #05080E); color: #EAF7FF; padding: 18px 18px 14px;
+    font-family: "TrunkDeck UI", "Segoe UI", sans-serif; }
+  .glass.call { border-color: var(--accent, #00E5FF); }
   .glass::after { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 16px;
     background: repeating-linear-gradient(to bottom, rgba(255,255,255,.04) 0 1px, transparent 1px 4px); }
   .grow-top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-end; position: relative; z-index: 1; }
@@ -48,16 +49,17 @@ final class LanPage {
   .cc { color: var(--system, #7D8FA3); font-weight: 700; font-size: 12px; white-space: nowrap; }
   .sig { display: inline-flex; align-items: flex-end; gap: 6px; margin-left: 12px; }
   .sig i { width: 5px; height: 11px; background: rgba(220,230,240,.28); display: inline-block; }
-  .sig i.on { background: var(--scan, #00E5FF); }
+  .sig i.on { background: #FF8C1A; }
   .sig b { color: var(--freq, #DCE6F0); font-size: 12px; font-weight: 700; }
-  .big { position: relative; z-index: 1; font-weight: 800; font-size: clamp(28px, 4.6vw, 56px); letter-spacing: .02em;
-    margin: 22px 0 6px; min-height: 1.15em; white-space: nowrap; overflow: hidden;
-    text-shadow: 0 0 14px currentColor, 0 0 2px currentColor; }
+  .big { position: relative; z-index: 1; font-family: "TrunkDeck Name", "TrunkDeck UI", sans-serif; font-weight: 700;
+    font-size: clamp(36px, 5.4vw, 68px); letter-spacing: .01em; font-style: normal;
+    margin: 18px 0 4px; min-height: 1.05em; white-space: nowrap; overflow: hidden; color: #EAF7FF;
+    text-shadow: 0 0 12px var(--accent, #00E5FF), 0 0 24px var(--accent, #00E5FF); }
   .big.scan { color: var(--scan, #00E5FF); }
   .big.idle { color: var(--idle, #2F5A66); }
   .big .run { display: inline-block; padding-left: 8px; animation: tick 7s linear infinite; }
   @keyframes tick { from { transform: translateX(8%); } to { transform: translateX(-55%); } }
-  .line2 { position: relative; z-index: 1; min-height: 1.4em; font-weight: 700; font-size: 17px; color: var(--tgid, #FFB300); }
+  .line2 { position: relative; z-index: 1; min-height: 1.4em; font-weight: 700; font-size: 16px; color: #3D96FF; }
   .line2.dim { color: var(--label, #7D8FA3); }
   .badges { position: relative; z-index: 1; display: flex; gap: 8px; min-height: 8px; margin: 6px 0 14px; }
   .badge { font-size: 11px; font-weight: 700; letter-spacing: .04em; border-radius: 9px; padding: 1px 7px; border: 1px solid; }
@@ -70,8 +72,7 @@ final class LanPage {
   .fields > div:first-child { border-left: 0; padding-left: 0; }
   .fields label { display: block; color: var(--label, #7D8FA3); font-size: 10px; letter-spacing: .06em; }
   .fields b { display: block; font-size: 15px; font-weight: 700; color: var(--value, #8FA3B5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .fields b.on { color: var(--freq, #DCE6F0); }
-  .fields b.unit.on { color: var(--radio, #DCE6F0); }
+  .fields b.on, .fields b.unit.on { color: #2BFF88; }
   .cols { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; margin-top: 12px; }
   .card { background: #111821; border: 1px solid #243244; border-radius: 12px; padding: 12px 14px; margin: 0 0 12px; }
   .card h2 { margin: 0 0 8px; color: #7D8FA3; font: 700 11px/1.2 Consolas, monospace; letter-spacing: .08em; }
@@ -285,7 +286,9 @@ function paint(s) {
   if (!on && left > 0) { big.classList.add('idle'); big.textContent = 'STARTING IN ' + left; }
   else if (!on) { big.classList.add('idle'); big.textContent = (s.engine || 'STOPPED').toUpperCase(); }
   else if (call) {
-    big.style.color = s.emergency ? '#FF4D5E' : s.encrypted ? '#B388FF' : (s.liveText || '');
+    const tint = s.emergency ? '#FF4D5E' : s.encrypted ? '#B388FF' : (s.liveText || '');
+    big.style.color = tint;
+    big.style.textShadow = tint ? ('0 0 12px ' + tint + ', 0 0 24px ' + tint) : '';
     big.textContent = (s.talkgroup || 'TG ' + s.talkgroupId).toUpperCase();
   } else {
     big.classList.add('scan');
@@ -568,4 +571,9 @@ fetch('/api/state', { credentials: 'same-origin' }).then((r) => {
 </body>
 </html>
 """;
+
+    /** The page, with the bundled display fonts filled in. */
+    static String page() {
+        return HTML.replace("/*DISPLAY_FONT*/", p25monitor.DisplayFont.faceCss());
+    }
 }
