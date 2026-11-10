@@ -268,6 +268,12 @@ function clock(ms) {
 function paint(s) {
   state = s;
   cssColors(s.colors);
+  if (s.liveBg) {
+    const g = $('bezel');
+    g.style.setProperty('--lit', s.liveBg);
+    g.style.setProperty('--tg', s.liveInk || '#F5F8FC');
+    g.style.setProperty('--tgid', s.liveInk || '#F5F8FC');
+  }
   const on = !!s.monitoring;
   const call = s.activity === 'call';
   const cd = $('countdown');
@@ -347,6 +353,10 @@ function paint(s) {
   (s.active || []).forEach((c) => {
     const tr = document.createElement('tr');
     if (c.audible) tr.classList.add('aud');
+    if (s.liveBg && c.audible && c.tg === s.talkgroupId) {
+      tr.style.background = s.liveBg;
+      tr.style.color = s.liveInk || '#F5F8FC';
+    }
     if (c.tg === sel) tr.classList.add('pick');
     tr.addEventListener('click', () => { sel = c.tg; paint(state); });
     const color = c.emergency ? '#FF4D5E' : c.encrypted ? '#B388FF' : c.audible ? '#00E5FF' : (c.state || '').startsWith('WAITING') ? '#FFB300' : '#DCE6F0';

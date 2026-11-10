@@ -33,8 +33,8 @@ public class TalkgroupPage extends JPanel {
     /** Stream checkbox columns, one per stream, by channel name (model columns BASE..). */
     List<String> streamCols = new ArrayList<>();
     final Map<Object, TableColumn> columnsById = new HashMap<>();
-    static final int BASE = 14;
-    static final int[] ADV_COLS = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}, SIMPLE_COLS = {0, 1, 2, 3, 5};
+    static final int BASE = 15;
+    static final int[] ADV_COLS = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, SIMPLE_COLS = {0, 1, 2, 3, 5, 14};
 
     TalkgroupPage(MainFrame f) {
         super(new BorderLayout(0, 10));
@@ -102,7 +102,7 @@ public class TalkgroupPage extends JPanel {
         table.setShowVerticalLines(false);
         table.setDefaultRenderer(Object.class, new Renderer());
         table.setDefaultRenderer(Integer.class, new Renderer());
-        int[] w = {34, 50, 38, 70, 60, 220, 46, 250, 130, 170, 56, 130, 50, 80};
+        int[] w = {34, 50, 38, 70, 60, 220, 46, 250, 130, 170, 56, 130, 50, 80, 120};
         for (int i = 0; i < w.length; i++) {
             TableColumn c = new TableColumn(i, w[i]);
             c.setHeaderValue(model.getColumnName(i));
@@ -110,10 +110,17 @@ public class TalkgroupPage extends JPanel {
             columnsById.put(i, c);
         }
         showColumns();
+        JComboBox<String> colorChoices = new JComboBox<>(TalkgroupColors.names());
+        TableColumn colorCol = columnsById.get(14);
+        colorCol.setCellEditor(new DefaultCellEditor(colorChoices));
         table.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) {
                 int col = table.columnAtPoint(e.getPoint());
                 if (e.getClickCount() == 2 && table.convertColumnIndexToModel(col) == 11) streamsDialog();
+                if (e.getClickCount() == 1 && table.convertColumnIndexToModel(col) == 14) {
+                    int row = table.rowAtPoint(e.getPoint());
+                    if (row >= 0) table.editCellAt(row, col);
+                }
             }
         });
         JScrollPane sp = new JScrollPane(table);
@@ -345,13 +352,13 @@ public class TalkgroupPage extends JPanel {
 
     // ------------------------------------------------------------------ table model
     class Model extends AbstractTableModel {
-        final String[] cols = {"\u2605", "Mute", "Rec", "Decimal", "Hex", "Alpha tag", "Mode", "Description", "Tag", "Category", "Priority", "Streams", "Calls", "Last heard"};
+        final String[] cols = {"\u2605", "Mute", "Rec", "Decimal", "Hex", "Alpha tag", "Mode", "Description", "Tag", "Category", "Priority", "Streams", "Calls", "Last heard", "Color"};
         List<Talkgroup> rows() { return sys == null ? Collections.emptyList() : sys.talkgroups; }
         public int getRowCount() { return rows().size(); }
         public int getColumnCount() { return cols.length + (streamCols == null ? 0 : streamCols.size()); }
         public String getColumnName(int c) { return c < BASE ? cols[c] : streamCols.get(c - BASE); }
         public Class<?> getColumnClass(int c) { return c <= 2 || c >= BASE ? Boolean.class : (c == 3 || c == 10 || c == 12) ? Integer.class : String.class; }
-        public boolean isCellEditable(int r, int c) { return c <= 2 || (c >= 5 && c <= 10) || c >= BASE; }
+        public boolean isCellEditable(int r, int c) { return c <= 2 || (c >= 5 && c <= 10) || c == 14 || c >= BASE; }
         public Object getValueAt(int r, int c) {
             Talkgroup t = rows().get(r);
             if (c >= BASE) return t.streams.contains(streamCols.get(c - BASE));
@@ -369,6 +376,7 @@ public class TalkgroupPage extends JPanel {
                 case 10: return t.priority;
                 case 11: return String.join(", ", t.streams);
                 case 12: return t.calls;
+                case 14: return TalkgroupColors.label(t.color);
                 default: return t.lastHeard == 0 ? "" : ScannerDisplay.ago((System.currentTimeMillis() - t.lastHeard) / 1000);
             }
         }
@@ -390,6 +398,7 @@ public class TalkgroupPage extends JPanel {
                 case 8: t.tag = String.valueOf(v).trim(); break;
                 case 9: t.category = String.valueOf(v).trim(); break;
                 case 10: t.priority = Math.max(1, Math.min(100, v instanceof Integer ? (Integer) v : 100)); break;
+                case 14: t.color = TalkgroupColors.store(String.valueOf(v)); break;
                 default: return;
             }
             fireTableRowsUpdated(r, r);
@@ -405,7 +414,13 @@ public class TalkgroupPage extends JPanel {
             Talkgroup t = model.rows().get(mr);
             setHorizontalAlignment(mc == 3 || mc == 10 || mc == 12 ? RIGHT : LEFT);
             setFont(mc == 5 ? Theme.ui(Font.BOLD, 13f) : (mc == 3 || mc == 4 || mc == 12) ? Theme.mono(Font.PLAIN, 12f) : Theme.ui(Font.PLAIN, 12f));
-            if (!sel) {
+            if (!sel && mc == 14) {
+                Color swatch = TalkgroupColors.parse(t.color);
+                if (swatch != null) {
+                    setBackground(swatch);
+                    setForeground(TalkgroupColors.ink(swatch));
+                }
+            } else if (!sel) {
                 Color fg = Theme.TEXT;
                 if (t.muted) fg = Theme.DIM;
                 else if (mc == 5) fg = t.favorite ? Theme.AMBER : Theme.CYAN;

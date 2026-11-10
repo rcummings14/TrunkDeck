@@ -181,9 +181,10 @@ public class HelpPage extends JPanel {
                 "(RadioReference exports work as-is). Use <b>Save CSV template</b> to start your own. " +
                 "<b>Radio IDs\u2026</b> on the same page names the radios: import a DSD+ <i>.radios</i> file or a CSV (radio_id,alias), or right-click a radio ID on the Monitor page \u2192 <b>Name this radio\u2026</b>. "
                 + "Sites of the same radio system share one talkgroup list. TrunkDeck matches a WACN plus System ID (leading zeros do not matter) or the same RadioReference system. "
-                + "A name, favorite, mute, record, priority or stream assignment is kept once: change it on any of those sites and the others follow. "
+                + "A name, favorite, mute, record, priority, colour or stream assignment is kept once: change it on any of those sites and the others follow. "
                 + "A site with none of those IDs keeps its own list, so two sites with blank IDs stay separate. A conventional system keeps its own list too. "
-                + "Adding another site of a system you already have starts from the list you already keep, and a RadioReference import merges names into it and leaves favorites, mutes, record, priority and streams as they are.<br>" +
+                + "Adding another site of a system you already have starts from the list you already keep, and a RadioReference import merges names into it and leaves favorites, mutes, record, priority and streams as they are. "
+                + "The <b>Color</b> column sets an optional live colour (or Default). While that talkgroup is on the air, the Monitor, Display only, and the home-network page highlight it in that colour. Default keeps the display theme. The writing stays readable on the colour.<br>" +
                 "<h3 style='color:#00E5FF'>5. Press START MONITORING</h3>" +
                 "The scanner display shows the call you are hearing. While TrunkDeck is scanning, the control channel on that display has a signal meter (bars and a level in dB). " +
                 "On a conventional system the same meter shows the channel being listened to. " +

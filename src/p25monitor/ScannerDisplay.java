@@ -54,6 +54,8 @@ public class ScannerDisplay extends JComponent {
     public volatile boolean reduceMotion;
     /** 1.5.0 Display only: the whole display drawn this much larger (or smaller); 1 = as in the main window. */
     public volatile double zoom = 1;
+    /** Talkgroup colour while this call is on the glass, or null to keep the theme. */
+    Color liveTint;
 
     /** Talkgroup on the glass while a call is showing, or -1 while scanning or stopped. */
     public int shownTalkgroup() {
@@ -193,6 +195,7 @@ public class ScannerDisplay extends JComponent {
         if (e.frequencyMHz > 25 && e.frequencyMHz < 1300 && voiceFreqs.size() < 64) voiceFreqs.add(Math.round(e.frequencyMHz * 1e5) / 1e5);
         encrypted = e.isEncrypted();
         emergency = e.isEmergency();
+        liveTint = t == null ? null : TalkgroupColors.parse(t.color);
         eventText = (e.event + (e.timeslot.isBlank() ? "" : "  " + e.timeslot)).toUpperCase();
         repaint();
     }
@@ -229,8 +232,15 @@ public class ScannerDisplay extends JComponent {
         int lcdW = w - pad * (simple ? 2 : 3) - meterW, lcdH = h - pad * 2;
         Color accent = emergency ? Theme.RED : encrypted ? Theme.VIOLET : active ? th.accent : th.accentIdle;
         Color tgColor = emergency ? Theme.RED : encrypted ? Theme.VIOLET : th.get(DisplayPalette.Field.TALKGROUP);
+        Color litBg = th.get(DisplayPalette.Field.BACKGROUND);
+        Color live = (active || hang) ? liveTint : null;
+        if (live != null && !emergency && !encrypted) {
+            accent = live;
+            litBg = TalkgroupColors.background(live);
+            tgColor = TalkgroupColors.ink(litBg);
+        }
         double lt = backlight ? Math.round(light * 32) / 32.0 : -1;   // quantized: the glass cache holds a few fade steps
-        Color glassBg = lt < 0 ? th.lcd : mix(th.get(DisplayPalette.Field.DARK), th.get(DisplayPalette.Field.BACKGROUND), lt);
+        Color glassBg = lt < 0 ? th.lcd : mix(th.get(DisplayPalette.Field.DARK), litBg, lt);
         // bezel, LCD glass, its glow and the scanline texture: drawn once per size / colours, then reused every frame
         g.drawImage(glass(w, h, pad, lcdW, lcdH, th, accent, glassBg, lt, g.getTransform()), 0, 0, w, h, null);
         Color frame = th.get(DisplayPalette.Field.BORDER);
@@ -265,7 +275,7 @@ public class ScannerDisplay extends JComponent {
         if (active) { // glow
             g.setColor(new Color(tgColor.getRed(), tgColor.getGreen(), tgColor.getBlue(), 60));
             g.drawString(main, x0 + 1, my + 1);
-            g.setColor(th.brighten || emergency || encrypted ? tgColor.brighter() : tgColor);
+            g.setColor(live != null && !emergency && !encrypted ? tgColor : (th.brighten || emergency || encrypted ? tgColor.brighter() : tgColor));
             g.drawString(main, x0, my);
         } else if (anim) marquee(g, main, pad + 6, pad + lcdW - 6, x0, my, lcdW, th, glassBg, lt < 0 ? 1 : ScannerDisplay.DIM_SCAN + (1 - ScannerDisplay.DIM_SCAN) * lt, now);   // scrolls like a scanner's ticker
         else { g.setColor(th.idleText); g.drawString(main, x0, my); }   // (Reduce motion: still text)   // idle: dim, like an unlit LCD segment
@@ -277,7 +287,7 @@ public class ScannerDisplay extends JComponent {
         else if (!engineLive) line2 = "";
         else line2 = tgText.isEmpty() ? "" : (hang ? "HOLDING " : "LAST  ") + tgText + (alpha.isEmpty() ? "" : "  " + alpha.toUpperCase());
         int l2y = my + 12 + 17;
-        g.setColor(active ? th.get(DisplayPalette.Field.TGID) : th.get(DisplayPalette.Field.LABELS));
+        g.setColor(active ? (live != null && !emergency && !encrypted ? tgColor : th.get(DisplayPalette.Field.TGID)) : th.get(DisplayPalette.Field.LABELS));
         line2 = fit(g, line2, lcdW - 40 - (active ? 220 : 0));
         g.drawString(line2, x0, l2y);
         // badges after the second line
@@ -461,7 +471,7 @@ public class ScannerDisplay extends JComponent {
     /** The static layers (same drawing as 1.4.4, in the preset's colours), cached at the screen's pixel scale. */
     java.awt.image.BufferedImage glass(int w, int h, int pad, int lcdW, int lcdH, DisplayPalette th, Color accent, Color bg, double lt, java.awt.geom.AffineTransform tx) {
         double sx = Math.max(1, tx.getScaleX()), sy = Math.max(1, tx.getScaleY());
-        String key = w + "x" + h + "@" + sx + "," + sy + ":" + lcdW + ":" + System.identityHashCode(th) + ":" + accent.getRGB() + ":" + active + ":" + lt;
+        String key = w + "x" + h + "@" + sx + "," + sy + ":" + lcdW + ":" + System.identityHashCode(th) + ":" + accent.getRGB() + ":" + bg.getRGB() + ":" + active + ":" + lt;
         if (glassImg != null && key.equals(glassKey)) return glassImg;
         java.awt.image.BufferedImage img = new java.awt.image.BufferedImage((int) Math.ceil(w * sx), (int) Math.ceil(h * sy), java.awt.image.BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();

@@ -38,6 +38,7 @@ public final class Jargon {
         put("Record: save every call on this talkgroup as an audio file. Play it from the Recordings page or the call log.", "Rec");
         put("Mute / lock out: never play this talkgroup on the speaker and don't follow its calls.", "Mute");
         put("Favorite: listen to it in \"Favorites only\" mode, highlighted in lists.", "\u2605", "Fav");
+        put("Live colour for this talkgroup. Default keeps the display theme. A colour highlights that talkgroup while it is on the air, on the Monitor, Display only, and the home-network page. Sites of the same system share it.", "Color");
         put("The talkgroup number (decimal), as on Radio Reference.", "TG", "Decimal");
         put("The radio (unit ID) talking. Name radios with a right-click.", "Radio", "Unit / radio");
         put("Mount point: the path of your stream on the Icecast server, given by the stream provider (Broadcastify: in your feed's technicals).", "Mount", "Mount point");

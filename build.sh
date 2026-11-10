@@ -45,6 +45,7 @@ if [ "${1:-}" = "test" ]; then
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.RecordingFolderTests   # chosen recordings folder, fallback, and playback of older folders
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.AutoStartTests   # auto-start when TrunkDeck opens: one system, saved, countdown wording
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.lan.TouchTests   # touch buttons: mute all, touch-only muted list, hold
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.TalkgroupColorTests   # optional live colour, saved with the talkgroup list, readable text
   "$JAVA" -Dtrunkdeck.lib=lib ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.TrayTests   # system tray (1.4.7): logic always; window and real tray parts need a display / a tray
   "$JAVA" --enable-native-access=ALL-UNNAMED -Dtrunkdeck.librtlsdr=../app/native/linux-x64/librtlsdr.so ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.sdr.RtlHealTests   # (1.4.3; skipped if librtlsdr is not loadable)
   "$JAVA" ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.AirspyFuzz 30   # Airspy DSP chain fuzz / stress (1.4.3)

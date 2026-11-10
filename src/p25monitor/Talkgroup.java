@@ -12,6 +12,8 @@ public class Talkgroup {
     public boolean muted;           // not followed, not played
     /** Muted from the Display only or home-network touch button. Cleared if unmuted anywhere else. */
     public boolean touchMuted;
+    /** Live highlight colour as #RRGGBB, or blank to keep the display theme. Shared with the other sites of this system. */
+    public String color = "";
     public boolean record;
     public int priority = 100;
     /** Names of streams (Broadcastify Calls / OpenMHz / Feeds / Icecast) this talkgroup is sent to. */
@@ -25,6 +27,7 @@ public class Talkgroup {
         Talkgroup t = new Talkgroup();
         t.decimal = decimal; t.alphaTag = alphaTag; t.mode = mode; t.description = description; t.tag = tag; t.category = category;
         t.favorite = favorite; t.muted = muted; t.touchMuted = touchMuted; t.record = record; t.priority = priority;
+        t.color = color;
         t.streams = new java.util.TreeSet<>(streams);
         t.lastHeard = lastHeard; t.calls = calls;
         return t;

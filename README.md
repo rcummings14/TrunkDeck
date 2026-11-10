@@ -49,13 +49,16 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   control channels and talkgroup names. *Refresh* later merges new and renamed talkgroups and keeps your own settings.
   Needs a RadioReference app key (not in this repository - see [below](#radioreference-app-key)).
 * **Shared talkgroup lists** (1.7.2): sites of the same radio system share one talkgroup list (matching WACN and
-  System ID, or imported from the same RadioReference system). Names, favorites, mutes, record, priority, and stream
+  System ID, or imported from the same RadioReference system). Names, favorites, mutes, record, priority, colours, and stream
   assignments stay in sync. Radio ID names stay per site.
 * **Now-playing tags** on Broadcastify Feeds / Icecast (1.5.1): the talkgroup (optionally the radio) of the call playing
   is sent as the stream title, in step with the audio - your choice of format, an optional text between calls, and a
   *Send test tag* button. A separate short request: the audio connection is never touched.
 * Recordings of every call, played back in the app (a live call pauses playback), call log, Active-calls table, control-channel decode meter, activity graph, per-call
   diagnostics, talkgroup CSV import (RadioReference format), Simple and Advanced views.
+* **Talkgroup colours:** the Talkgroups page has a **Color** column. Pick a colour, or Default. While that talkgroup is
+  on the air, the Monitor, Display only, and the home-network page highlight it in that colour. Default leaves the
+  display theme unchanged. Sites of the same system share the colour.
 * **Recordings folder:** on the Recordings page, *Choose folder...* picks where new recordings are saved. The change is used
   right away, without restarting. *Use default* goes back to the usual folder in your home directory (`TrunkDeck/recordings`,
   which on Windows is under your user profile). Recordings already saved stay where they are and can still be played from

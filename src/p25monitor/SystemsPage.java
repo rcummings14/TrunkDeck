@@ -305,7 +305,7 @@ public class SystemsPage extends JPanel {
         for (Talkgroup t : o.talkgroups) {
             Talkgroup n = new Talkgroup();
             n.decimal = t.decimal; n.alphaTag = t.alphaTag; n.mode = t.mode; n.description = t.description; n.tag = t.tag; n.category = t.category;
-            n.favorite = t.favorite; n.muted = t.muted; n.touchMuted = t.touchMuted; n.record = t.record; n.priority = t.priority; n.streams.addAll(t.streams);
+            n.favorite = t.favorite; n.muted = t.muted; n.touchMuted = t.touchMuted; n.record = t.record; n.priority = t.priority; n.color = t.color; n.streams.addAll(t.streams);
             s.talkgroups.add(n);
         }
         s.radios = o.radios.copy();

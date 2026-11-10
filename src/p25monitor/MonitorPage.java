@@ -453,6 +453,13 @@ public class MonitorPage extends JPanel {
         return t;
     }
 
+    /** Saved live colour for this talkgroup, or blank. Does not add a row. */
+    String colorOf(int tg) {
+        RadioSystem s = f.app.current;
+        Talkgroup t = s == null ? null : s.find(tg);
+        return t == null || t.color == null ? "" : t.color;
+    }
+
     /** The home-network page changed the speaker mode: show it here without applying it a second time. */
     void showSpeakerMode() {
         int i = switch (f.nativeEngine.speakerMode()) {
@@ -741,7 +748,17 @@ public class MonitorPage extends JPanel {
             Color fg = v.emergency ? Theme.RED : v.encrypted ? Theme.VIOLET : v.audible ? Theme.CYAN : v.state.startsWith("WAITING") ? Theme.AMBER
                     : v.state.equals("HANG") || v.state.equals("LISTENING") ? Theme.DIM : Theme.TEXT;
             if (c == 0 && v.recording && !v.onSpeaker) fg = Theme.RED;
-            if (!sel) { setForeground(fg); setBackground(v.audible ? new Color(0x0F2A33) : t.getBackground()); }
+            if (!sel) {
+                Color custom = v.audible && f.app.current != null ? TalkgroupColors.parse(colorOf(v.tg)) : null;
+                if (custom != null && !v.emergency && !v.encrypted) {
+                    Color bg = TalkgroupColors.background(custom);
+                    setBackground(bg);
+                    setForeground(TalkgroupColors.ink(bg));
+                } else {
+                    setForeground(fg);
+                    setBackground(v.audible ? new Color(0x0F2A33) : t.getBackground());
+                }
+            }
             return this;
         }
     }

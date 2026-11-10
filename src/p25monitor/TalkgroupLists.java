@@ -131,6 +131,7 @@ public final class TalkgroupLists {
                 old.muted |= n.muted;
                 old.record |= n.record;
                 if (n.priority != 100) old.priority = n.priority;
+                if (n.color != null && !n.color.isBlank()) old.color = TalkgroupColors.store(n.color);
                 if (n.streams != null) old.streams.addAll(n.streams);
                 if (n.lastHeard > old.lastHeard) old.lastHeard = n.lastHeard;
                 if (n.calls > old.calls) old.calls = n.calls;

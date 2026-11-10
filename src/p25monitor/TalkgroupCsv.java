@@ -10,9 +10,9 @@ public final class TalkgroupCsv {
     private TalkgroupCsv() {}
 
     public static final String[] HEADER = {"Decimal", "Hex", "Alpha Tag", "Mode", "Description", "Tag", "Category",
-            "Favorite", "Mute", "Record", "Priority", "Streams"};
+            "Favorite", "Mute", "Record", "Priority", "Streams", "Color"};
 
-    enum Col { DECIMAL, HEX, ALPHA, MODE, DESC, TAG, CATEGORY, FAVORITE, MUTE, RECORD, PRIORITY, STREAMS }
+    enum Col { DECIMAL, HEX, ALPHA, MODE, DESC, TAG, CATEGORY, FAVORITE, MUTE, RECORD, PRIORITY, STREAMS, COLOR }
 
     private static final Map<String, Col> NAMES = new HashMap<>();
     static {
@@ -29,6 +29,7 @@ public final class TalkgroupCsv {
         for (String n : new String[]{"record", "rec", "recording"}) NAMES.put(n, Col.RECORD);
         for (String n : new String[]{"priority", "prio", "pri"}) NAMES.put(n, Col.PRIORITY);
         for (String n : new String[]{"streams", "stream", "feeds", "broadcast", "broadcastchannels"}) NAMES.put(n, Col.STREAMS);
+        for (String n : new String[]{"color", "colour", "livecolor", "highlight"}) NAMES.put(n, Col.COLOR);
     }
 
     static String norm(String h) { return h == null ? "" : h.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", ""); }
@@ -99,6 +100,7 @@ public final class TalkgroupCsv {
                 String p = get(row, map, Col.PRIORITY).replaceAll("[^0-9]", "");
                 if (!p.isEmpty()) t.priority = Math.max(1, Math.min(100, Integer.parseInt(p)));
                 for (String st : get(row, map, Col.STREAMS).split("[;|]")) if (!st.isBlank()) t.streams.add(st.trim());
+                t.color = TalkgroupColors.store(get(row, map, Col.COLOR));
                 if (!seen.add(t.decimal)) { r.warnings.add("Row " + (i + 1) + ": duplicate talkgroup " + t.decimal + ", skipped."); continue; }
                 r.talkgroups.add(t);
             } catch (NumberFormatException ex) {
@@ -126,7 +128,8 @@ public final class TalkgroupCsv {
         StringBuilder sb = new StringBuilder(Csv.line(HEADER)).append("\r\n");
         for (Talkgroup t : tgs)
             sb.append(Csv.line(String.valueOf(t.decimal), t.hex(), t.alphaTag, t.mode, t.description, t.tag, t.category,
-                    t.favorite ? "Yes" : "", t.muted ? "Yes" : "", t.record ? "Yes" : "", String.valueOf(t.priority), String.join(";", t.streams))).append("\r\n");
+                    t.favorite ? "Yes" : "", t.muted ? "Yes" : "", t.record ? "Yes" : "", String.valueOf(t.priority), String.join(";", t.streams),
+                    t.color == null ? "" : t.color)).append("\r\n");
         return sb.toString();
     }
 
