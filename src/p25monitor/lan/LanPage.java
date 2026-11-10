@@ -35,15 +35,16 @@ final class LanPage {
   .note { color: #7D8FA3; font-size: 12px; margin: 0 16px 8px; }
   .err { color: #FF4D5E; min-height: 1.1em; margin: 0 16px 8px; font-size: 13px; }
   main { padding: 0 16px 28px; }
-  .bezel { background: linear-gradient(#1A2430, #0B1118); border: 1px solid var(--accent, #00E5FF); border-radius: 22px; padding: 14px;
-    box-shadow: 0 0 18px color-mix(in srgb, var(--accent, #00E5FF) 45%, transparent); }
-  .glass { position: relative; overflow: hidden; min-height: 230px; border-radius: 16px; border: 1px solid var(--accent, #00E5FF);
-    box-shadow: 0 0 16px color-mix(in srgb, var(--accent, #00E5FF) 55%, transparent), inset 0 0 18px color-mix(in srgb, var(--accent, #00E5FF) 18%, transparent);
-    background: linear-gradient(#0C1622, #05080E); color: #EAF7FF; padding: 18px 18px 14px;
+  .bezel { background: linear-gradient(#1A2430, #0B1118); border: 1px solid var(--glow, transparent); border-radius: 22px; padding: 14px;
+    box-shadow: 0 0 18px color-mix(in srgb, var(--glow, transparent) 45%, transparent); }
+  .glass { position: relative; overflow: hidden; min-height: 230px; border-radius: 16px; border: 1px solid var(--glow, transparent);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--glow, transparent) 55%, transparent);
+    background: var(--dark, #020608); color: #EAF7FF; padding: 18px 18px 14px;
     font-family: "TrunkDeck UI", "Segoe UI", sans-serif; }
-  .glass.call { border-color: var(--accent, #00E5FF); }
+  .glass.call { background: var(--lit, #0A3440); }
   .grow-top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-end; position: relative; z-index: 1;
-    padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid color-mix(in srgb, var(--accent, #00E5FF) 55%, transparent); }
+    padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid color-mix(in srgb, var(--glow, #ffffff) 35%, transparent);
+    background: var(--topbar, transparent); border-radius: 10px; }
   .sys { color: var(--system, #7D8FA3); font-weight: 700; font-size: 12px; letter-spacing: .04em; }
   .cc { color: var(--system, #7D8FA3); font-weight: 700; font-size: 12px; white-space: nowrap; }
   .sig { display: inline-flex; align-items: flex-end; gap: 6px; margin-left: 12px; }
@@ -52,14 +53,14 @@ final class LanPage {
   .sig b { color: var(--freq, #DCE6F0); font-size: 12px; font-weight: 700; }
   .big { position: relative; z-index: 1; font-family: "TrunkDeck Name", "TrunkDeck UI", sans-serif; font-weight: 700;
     font-size: clamp(36px, 5.4vw, 68px); letter-spacing: .01em; font-style: normal;
-    margin: 18px 0 4px; min-height: 1.05em; white-space: nowrap; overflow: hidden; color: #EAF7FF;
-    text-shadow: 0 0 12px var(--accent, #00E5FF), 0 0 24px var(--accent, #00E5FF); }
+    margin: 18px 0 4px; min-height: 1.05em; white-space: nowrap; overflow: hidden; color: var(--tg, #00E5FF);
+    text-shadow: 0 0 12px var(--glow, transparent), 0 0 24px var(--glow, transparent); }
   .big.scan { color: var(--scan, #00E5FF); }
   .big.idle { color: var(--idle, #2F5A66); }
   .big .run { display: inline-block; padding-left: 8px; animation: tick 7s linear infinite; }
   @keyframes tick { from { transform: translateX(8%); } to { transform: translateX(-55%); } }
-  .line2 { position: relative; z-index: 1; min-height: 1.4em; font-weight: 700; font-size: 16px; color: #3D96FF; margin: 8px 0 0; }
-  .line2.dim { color: var(--label, #7D8FA3); }
+  .line2 { position: relative; z-index: 1; min-height: 1.4em; font-weight: 700; font-size: 16px; color: var(--tgid, #FFB300); margin: 8px 0 0; }
+  .line2.dim { color: var(--labels, #7D8FA3); }
   .badges { position: relative; z-index: 1; display: flex; gap: 8px; min-height: 8px; margin: 10px 0 16px; }
   .badge { font-size: 11px; font-weight: 700; letter-spacing: .04em; border-radius: 9px; padding: 1px 7px; border: 1px solid; }
   .badge.hot { color: #FF4D5E; border-color: #FF4D5E; }
@@ -67,12 +68,15 @@ final class LanPage {
   .badge.fav { color: #FFB300; border-color: #FFB300; }
   .badge.mute { color: #7D8FA3; border-color: #7D8FA3; }
   .fields { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0;
-    margin-top: 4px; padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--accent, #00E5FF) 55%, transparent); }
-  .fields > div { border-left: 1px solid color-mix(in srgb, var(--accent, #00E5FF) 45%, transparent); padding: 2px 16px; min-width: 0; }
+    margin-top: 4px; padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--glow, #ffffff) 28%, transparent);
+    background: var(--labbar, transparent); border-radius: 8px; }
+  .fields > div { border-left: 1px solid color-mix(in srgb, var(--glow, #ffffff) 22%, transparent); padding: 2px 16px; min-width: 0; }
   .fields > div:first-child { border-left: 0; padding-left: 0; }
   .fields label { display: block; color: var(--label, #7D8FA3); font-size: 10px; letter-spacing: .06em; }
-  .fields b { display: block; font-size: 15px; font-weight: 700; color: var(--value, #8FA3B5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .fields b.on, .fields b.unit.on { color: #2BFF88; }
+  .fields b { display: block; font-size: 15px; font-weight: 700; color: var(--freq, #DCE6F0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #unit { color: var(--radio, #DCE6F0); }
+  #ctime { color: var(--call, #DCE6F0); }
+  #event { color: var(--event, #DCE6F0); }
   .cols { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; margin-top: 12px; }
   .card { background: #111821; border: 1px solid #243244; border-radius: 12px; padding: 12px 14px; margin: 0 0 12px; }
   .card h2 { margin: 0 0 8px; color: #7D8FA3; font: 700 11px/1.2 Consolas, monospace; letter-spacing: .08em; }
@@ -225,7 +229,13 @@ function cssColors(c) {
   set('--lit', c.lit, '#0A3440');
   set('--idle', c.idle, '#2F5A66');
   set('--label', c.label, '#7D8FA3');
+  set('--labels', c.labels, '#7D8FA3');
+  set('--event', c.event, '#DCE6F0');
+  set('--call', c.calltime, '#DCE6F0');
   set('--accent', c.accent, c.talkgroup || '#00E5FF');
+  set('--glow', c.glow, 'transparent');
+  set('--topbar', c.topbar, 'transparent');
+  set('--labbar', c.labelbar, 'transparent');
 }
 
 function bars(n, text, show) {
@@ -264,8 +274,21 @@ function clock(ms) {
 function paint(s) {
   state = s;
   cssColors(s.colors);
+  const col = s.colors || {};
+  const glow = col.glow || '';
   const on = !!s.monitoring;
   const call = s.activity === 'call';
+  const glass = $('glass');
+  glass.style.background = call ? (col.lit || '#0A3440') : (col.dark || '#020608');
+  glass.style.borderColor = glow || 'transparent';
+  glass.style.boxShadow = glow ? ('0 0 16px ' + glow) : 'none';
+  const bezel = $('bezel');
+  bezel.style.borderColor = glow || 'transparent';
+  bezel.style.boxShadow = glow ? ('0 0 18px ' + glow) : 'none';
+  const top = document.querySelector('.grow-top');
+  if (top) top.style.background = col.topbar || 'transparent';
+  const fields = document.querySelector('.fields');
+  if (fields) fields.style.background = col.labelbar || 'transparent';
   const cd = $('countdown');
   const left = s.autoStartIn || 0;
   if (left > 0) {
@@ -286,13 +309,14 @@ function paint(s) {
   if (!on && left > 0) { big.classList.add('idle'); big.textContent = 'STARTING IN ' + left; }
   else if (!on) { big.classList.add('idle'); big.textContent = (s.engine || 'STOPPED').toUpperCase(); }
   else if (call) {
-    const tint = s.emergency ? '#FF4D5E' : s.encrypted ? '#B388FF' : (s.liveText || '');
+    const tint = s.emergency ? '#FF4D5E' : s.encrypted ? '#B388FF' : (s.liveText || col.talkgroup || '');
     big.style.color = tint;
-    big.style.textShadow = tint ? ('0 0 12px ' + tint + ', 0 0 24px ' + tint) : '';
+    big.style.textShadow = (!s.emergency && !s.encrypted && glow) ? ('0 0 12px ' + glow + ', 0 0 24px ' + glow) : 'none';
     big.textContent = (s.talkgroup || 'TG ' + s.talkgroupId).toUpperCase();
   } else {
     big.classList.add('scan');
-    big.style.color = '';
+    big.style.color = col.scan || '';
+    big.style.textShadow = glow ? ('0 0 12px ' + glow + ', 0 0 24px ' + glow) : 'none';
     big.replaceChildren();
     const run = document.createElement('span');
     run.className = 'run';
@@ -301,7 +325,8 @@ function paint(s) {
   }
   const line = $('line2');
   line.className = 'line2' + (call ? '' : ' dim');
-  line.style.color = (s.liveText && !s.emergency && !s.encrypted && (call || s.hang)) ? s.liveText : '';
+  line.style.color = (s.liveText && !s.emergency && !s.encrypted && (call || s.hang)) ? s.liveText
+      : (call || s.hang) ? (col.tgid || '') : (col.labels || '');
   if (call) line.textContent = (s.talkgroupId > 0 ? 'TG ' + s.talkgroupId : '') + (s.category ? '   ' + s.category : '') + (s.tag ? '  ·  ' + s.tag : '');
   else if (on && s.hang && s.talkgroupId > 0) line.textContent = 'HOLDING TG ' + s.talkgroupId + (s.talkgroup ? '  ' + s.talkgroup.toUpperCase() : '');
   else if (on && s.lastAgo >= 0 && s.talkgroupId > 0) line.textContent = 'LAST  TG ' + s.talkgroupId + (s.talkgroup ? '  ' + s.talkgroup.toUpperCase() : '');
@@ -330,12 +355,12 @@ function paint(s) {
     $('tlab').textContent = 'LAST CALL';
     $('ctime').textContent = '-';
   }
-  $('freq').className = call ? 'on' : '';
   $('unit').textContent = (call || s.hang || s.lastAgo >= 0) && s.radio ? s.radio : '-';
-  $('unit').className = 'unit' + (call ? ' on' : '');
   $('event').textContent = (call || s.hang) && s.event ? s.event : '-';
-  $('event').className = call ? 'on' : '';
-  $('ctime').className = call ? 'on' : '';
+  if (col.freq) $('freq').style.color = col.freq;
+  if (col.radio) $('unit').style.color = col.radio;
+  if (col.calltime) $('ctime').style.color = col.calltime;
+  if (col.event) $('event').style.color = col.event;
   $('pill').textContent = on ? 'LIVE' : 'STOPPED';
   $('pill').className = 'pill' + (on ? ' live' : '');
   $('start').disabled = on;

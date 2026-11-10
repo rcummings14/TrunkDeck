@@ -281,10 +281,7 @@ final class DisplayOnly {
     /** Rounded button. The rim follows the display theme (cyan on the default theme). */
     final class GlowButton extends JButton {
         GlowButton(String text) { super(text); setContentAreaFilled(false); setOpaque(false); setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10)); }
-        Color accent() {
-            DisplayPalette p = f.display.palette;
-            return p != null && p.accent != null ? p.accent : Theme.CYAN;
-        }
+        Color accent() { return ScannerDisplay.buttonRim(f.display.palette); }
         @Override protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -307,7 +304,7 @@ final class DisplayOnly {
     /** Button labels and the muted list, from the shared touch state. */
     void refreshTouch() {
         boolean all = f.touch.muteAll();
-        Color accent = f.display.palette != null && f.display.palette.accent != null ? f.display.palette.accent : Theme.CYAN;
+        Color accent = ScannerDisplay.buttonRim(f.display.palette);
         Color navy = new Color(0x0A1624);
         muteAllBtn.setText(all ? "All muted" : "Mute all");
         muteAllBtn.setBackground(navy);

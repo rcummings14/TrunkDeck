@@ -231,6 +231,9 @@ public final class LanTests {
         check(r.code == 200 && r.body.contains("Listen") && r.body.contains(">Start<") && r.body.contains(">Stop<"), "page has Listen, Start and Stop");
         check(r.body.contains("SCANNING") && r.body.contains("ACTIVE CALLS") && r.body.contains("UNIT / RADIO") && r.body.contains("Hold one talkgroup"),
                 "page is laid out like the Monitor");
+        check(r.body.contains("col.freq") && r.body.contains("col.radio") && r.body.contains("col.event") && r.body.contains("col.calltime")
+                && r.body.contains("col.glow") && r.body.contains("col.scan") && r.body.contains("col.labels") && r.body.contains("col.talkgroup"),
+                "the glass uses each custom colour");
         check(r.body.contains("SCAN · CHANNEL") && r.body.contains("SCAN · CONTROL CH"), "conventional systems label the channel, trunked systems the control channel");
         check(r.body.toLowerCase().contains("home network"), "page says it is for the home network");
         check(!r.body.contains("Choose folder") && !r.body.contains("recordings.dir"), "home-network page has no recordings-folder control");

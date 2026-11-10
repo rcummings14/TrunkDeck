@@ -110,8 +110,8 @@ public class DisplayBarsTests {
         ScannerDisplay amberD = display();
         amberD.setColors(DisplayTheme.AMBER, DisplayPalette.of(DisplayTheme.AMBER));
         call(amberD);
-        int greenPx = count(paint(amberD), PAD + 10, PAD + 40, PAD + lcdW() - 10, H - PAD, new Color(0x2BFF88), 70);
-        check(greenPx > 8, "field values stay bright green on a non-default theme (" + greenPx + " px)");
+        int amberPx = count(paint(amberD), PAD + 10, PAD + 40, PAD + lcdW() - 10, H - PAD, new Color(0xFFE6B8), 50);
+        check(amberPx > 8, "field values use the Amber theme colour (" + amberPx + " px)");
         check(near(lit.getRGB(barX(), topY()), red, 10), "bars stay their colour when the display is lit");
         for (DisplayTheme t : DisplayTheme.values()) {
             if (t == DisplayTheme.CUSTOM) continue;

@@ -478,13 +478,21 @@ final class LanCard {
         c.tgid = hex(p.get(DisplayPalette.Field.TGID));
         c.radio = hex(p.get(DisplayPalette.Field.RADIO));
         c.freq = hex(p.get(DisplayPalette.Field.FREQ));
+        c.event = hex(p.get(DisplayPalette.Field.EVENT));
+        c.calltime = hex(p.get(DisplayPalette.Field.CALLTIME));
         c.system = hex(p.get(DisplayPalette.Field.SYSTEM));
         c.scan = hex(p.get(DisplayPalette.Field.SCAN));
+        c.labels = hex(p.get(DisplayPalette.Field.LABELS));
         c.dark = hex(p.get(DisplayPalette.Field.DARK));
         c.lit = hex(p.get(DisplayPalette.Field.BACKGROUND));
         c.idle = hex(p.idleText);
         c.label = hex(p.get(DisplayPalette.Field.LABELBAR_TEXT));
         c.accent = hex(p.accent);
+        Color border = p.get(DisplayPalette.Field.BORDER);
+        c.glow = ScannerDisplay.silentRim(border) ? "" : hex(border == null ? p.accent : border);
+        Color top = p.get(DisplayPalette.Field.TOPBAR), lab = p.get(DisplayPalette.Field.LABELBAR);
+        c.topbar = top == null ? "" : hex(top);
+        c.labelbar = lab == null ? "" : hex(lab);
         return c;
     }
 

@@ -85,7 +85,7 @@ public final class LanServer {
 
     /** Colours of the glass, so the page matches the display preset in use. Empty uses the cyan default. */
     public static final class Colors {
-        public String talkgroup = "", tgid = "", radio = "", freq = "", system = "", scan = "", dark = "", lit = "", idle = "", label = "", accent = "";
+        public String talkgroup = "", tgid = "", radio = "", freq = "", event = "", calltime = "", system = "", scan = "", labels = "", dark = "", lit = "", idle = "", label = "", accent = "", glow = "", topbar = "", labelbar = "";
     }
 
     public static final class Active {
@@ -363,13 +363,19 @@ public final class LanServer {
                     .append(",\"tgid\":").append(LanJson.quote(c.tgid))
                     .append(",\"radio\":").append(LanJson.quote(c.radio))
                     .append(",\"freq\":").append(LanJson.quote(c.freq))
+                    .append(",\"event\":").append(LanJson.quote(c.event))
+                    .append(",\"calltime\":").append(LanJson.quote(c.calltime))
                     .append(",\"system\":").append(LanJson.quote(c.system))
                     .append(",\"scan\":").append(LanJson.quote(c.scan))
+                    .append(",\"labels\":").append(LanJson.quote(c.labels))
                     .append(",\"dark\":").append(LanJson.quote(c.dark))
                     .append(",\"lit\":").append(LanJson.quote(c.lit))
                     .append(",\"idle\":").append(LanJson.quote(c.idle))
                     .append(",\"label\":").append(LanJson.quote(c.label))
-                    .append(",\"accent\":").append(LanJson.quote(c.accent)).append('}');
+                    .append(",\"accent\":").append(LanJson.quote(c.accent))
+                    .append(",\"glow\":").append(LanJson.quote(c.glow))
+                    .append(",\"topbar\":").append(LanJson.quote(c.topbar))
+                    .append(",\"labelbar\":").append(LanJson.quote(c.labelbar)).append('}');
         }
         b.append(",\"active\":[");
         for (int i = 0; i < s.active.size(); i++) {

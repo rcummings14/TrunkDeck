@@ -106,10 +106,34 @@ public class ScannerDisplay extends JComponent {
     /** The meter's lit segments stay this amber, on every display theme. */
     public static final Color METER_ON = new Color(0xFF8C1A);
     static final Color METER_OFF = new Color(0xC48A3A);
-    /** Field values on a call. The mockup's green, on every theme. */
-    static final Color VALUE_GREEN = new Color(0x2BFF88);
-    /** Second line (TG number, category, tag) on every theme. */
-    static final Color LINE_BLUE = new Color(0x3D96FF);
+    /** Black, or None: the panel draws no coloured rim and no glow. Standard (null) still uses the theme accent. */
+    static boolean silentRim(Color border) {
+        if (border == null) return false;
+        if (DisplayPalette.noBorder(border)) return true;
+        return border.getRed() == 0 && border.getGreen() == 0 && border.getBlue() == 0;
+    }
+
+    /** Touch-button rim. A real border colour wins; black and None fall back to the theme accent. */
+    static Color buttonRim(DisplayPalette p) {
+        if (p == null) return Theme.CYAN;
+        Color b = p.get(DisplayPalette.Field.BORDER);
+        if (b != null && !silentRim(b)) return b;
+        return p.accent != null ? p.accent : Theme.CYAN;
+    }
+
+    private static Color ruleColor(Color glow) {
+        return glow == null ? new Color(255, 255, 255, 36)
+                : new Color(glow.getRed(), glow.getGreen(), glow.getBlue(), 120);
+    }
+
+    private void stampRim(Color rim) { stampRim(this, rim); }
+
+    private static void stampRim(Container parent, Color rim) {
+        for (Component c : parent.getComponents()) {
+            if (c instanceof JComponent jc) jc.putClientProperty("rim", rim);
+            if (c instanceof Container box && box.getComponentCount() > 0) stampRim(box, rim);
+        }
+    }
     /** Where the meter was drawn, in logical pixels. {@code signalX < 0} means it is not on screen. */
     int signalX = -1, signalY, signalW, signalH;
     /** Same rectangle in component pixels (display-only zoom included), for the tooltip. */
@@ -243,40 +267,37 @@ public class ScannerDisplay extends JComponent {
 
         int pad = 14, meterW = simple ? 0 : Math.min(300, w / 3);
         int lcdW = w - pad * (simple ? 2 : 3) - meterW, lcdH = h - pad * 2;
-        Color accent = emergency ? Theme.RED : encrypted ? Theme.VIOLET : th.accent;
         Color live = (active || hang) ? liveTint : null;
-        Color nameGlow = (live != null && !emergency && !encrypted) ? live : accent;
-        Color nameInk = emergency ? Theme.RED : encrypted ? Theme.VIOLET
-                : (live != null ? live : mix(Color.WHITE, accent, 0.08f));
-        double lt = backlight ? Math.round(light * 32) / 32.0 : -1;   // quantized: the glass cache holds a few fade steps
-        Color glassBg = new Color(0x071018);
-        // bezel, LCD glass, its glow and the scanline texture: drawn once per size / colours, then reused every frame
-        g.drawImage(glass(w, h, pad, lcdW, lcdH, th, accent, glassBg, lt, g.getTransform()), 0, 0, w, h, null);
+        // Display border colours the rim and its glow. Standard keeps the theme accent. Black and None do not glow.
         Color frame = th.get(DisplayPalette.Field.BORDER);
-        if (frame == null || emergency || encrypted) {   // the glass outline: the accent (as before), red / violet for emergency / encrypted
-            g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 90));
-            g.draw(new RoundRectangle2D.Double(pad, pad, lcdW, lcdH, 16, 16));
-        } else if (!DisplayPalette.noBorder(frame)) {   // 1.5.0: the user's border colour, a little lighter
-            Color o = mix(frame, Color.WHITE, 0.35);
-            g.setColor(new Color(o.getRed(), o.getGreen(), o.getBlue(), 170));
-            g.draw(new RoundRectangle2D.Double(pad, pad, lcdW, lcdH, 16, 16));
-        }   // None: no outline either
-        // a soft cyan rim inside the glass, so the panel reads as a glowing rounded display
-        Stroke rimStroke = g.getStroke();
-        g.setStroke(new BasicStroke(5f));
-        g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 42));
-        g.draw(new RoundRectangle2D.Double(pad + 2, pad + 2, lcdW - 4, lcdH - 4, 16, 16));
-        g.setStroke(new BasicStroke(1.6f));
-        g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 200));
-        g.draw(new RoundRectangle2D.Double(pad + 1, pad + 1, lcdW - 2, lcdH - 2, 16, 16));
-        g.setStroke(rimStroke);
+        Color glow = emergency ? Theme.RED : encrypted ? Theme.VIOLET
+                : silentRim(frame) ? null : frame == null ? th.accent : frame;
+        Color nameColor = emergency ? Theme.RED : encrypted ? Theme.VIOLET
+                : (live != null ? live
+                : (active || hang) ? (th.brighten ? th.get(DisplayPalette.Field.TALKGROUP).brighter() : th.get(DisplayPalette.Field.TALKGROUP))
+                : engineLive ? th.get(DisplayPalette.Field.SCAN) : th.idleText);
+        double lt = backlight ? Math.round(light * 32) / 32.0 : -1;   // quantized: the glass cache holds a few fade steps
+        Color darkBg = th.get(DisplayPalette.Field.DARK), litBg = th.get(DisplayPalette.Field.BACKGROUND);
+        Color glassBg = darkBg == null ? th.lcd : (lt < 0 ? darkBg : mix(darkBg, litBg == null ? darkBg : litBg, lt));
+        g.drawImage(glass(w, h, pad, lcdW, lcdH, th, glow == null ? th.accent : glow, glassBg, lt, g.getTransform()), 0, 0, w, h, null);
+        if (glow != null) {
+            Stroke rimStroke = g.getStroke();
+            g.setStroke(new BasicStroke(5f));
+            g.setColor(new Color(glow.getRed(), glow.getGreen(), glow.getBlue(), 42));
+            g.draw(new RoundRectangle2D.Double(pad + 2, pad + 2, lcdW - 4, lcdH - 4, 16, 16));
+            g.setStroke(new BasicStroke(1.6f));
+            g.setColor(new Color(glow.getRed(), glow.getGreen(), glow.getBlue(), 210));
+            g.draw(new RoundRectangle2D.Double(pad + 1, pad + 1, lcdW - 2, lcdH - 2, 16, 16));
+            g.setStroke(rimStroke);
+        }
+        if (embedTouch) stampRim(buttonRim(th));
 
         int x0 = pad + 18;
         int headerY = pad + 17;
         paintTop(g, x0, headerY, pad + lcdW - 18, z, th);
         // The header rule sits below the top-line ink, with open panel on both sides of the letters.
         int rule1 = headerY + 9;
-        g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 120));
+        g.setColor(ruleColor(glow));
         g.drawLine(pad + 14, rule1, pad + lcdW - 14, rule1);
 
         // Buttons stay off the rim. Values sit a fixed gap above the buttons. The name fills the room above that.
@@ -306,9 +327,11 @@ public class ScannerDisplay extends JComponent {
         int slack = Math.max(0, rule2 - regionTop - nameInkH - minNameGap - tgInk - minTgGap);
         int above = slack * 2 / 3;
         int my = regionTop + above + nameInkH;
-        if (active) halo(g, main, x0, my, nameGlow, nameInk);
+        if (active && glow != null) halo(g, main, x0, my, glow, nameColor);
+        else if (active) { g.setColor(nameColor); g.drawString(main, x0, my); }
         else if (anim) marquee(g, main, pad + 6, pad + lcdW - 6, x0, my, lcdW, th, glassBg, lt < 0 ? 1 : ScannerDisplay.DIM_SCAN + (1 - ScannerDisplay.DIM_SCAN) * lt, now);
-        else { g.setColor(th.idleText); g.drawString(main, x0, my); }
+        else if (engineLive && glow != null) halo(g, main, x0, my, glow, nameColor);
+        else { g.setColor(nameColor); g.drawString(main, x0, my); }
 
         g.setFont(DisplayFont.ui(16f));
         String line2;
@@ -320,7 +343,9 @@ public class ScannerDisplay extends JComponent {
         else line2 = tgText.isEmpty() ? "" : (hang ? "HOLDING " : "LAST  ") + tgText + (alpha.isEmpty() ? "" : "  " + alpha.toUpperCase());
         int between = slack - above;
         int l2y = my + minNameGap + between + tgInk;
-        g.setColor(active || hang ? LINE_BLUE : th.get(DisplayPalette.Field.LABELS));
+        Color lineColor = (live != null && !emergency && !encrypted && (active || hang)) ? live
+                : (active || hang) ? th.get(DisplayPalette.Field.TGID) : th.get(DisplayPalette.Field.LABELS);
+        g.setColor(lineColor);
         int textRoom = lcdW - 48;
         line2 = fit(g, line2, Math.max(20, textRoom));
         g.drawString(line2, x0, l2y);
@@ -339,13 +364,13 @@ public class ScannerDisplay extends JComponent {
         String dl = active && db != null ? db.get() : null;
         if (dl != null && !dl.isEmpty()) bx = badge(g, dl, Theme.CYAN, bx, l2y - 13);
 
-        g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 120));
+        g.setColor(ruleColor(glow));
         g.drawLine(pad + 14, rule2, pad + lcdW - 14, rule2);
         int fw = lcdW - 36, col = fw / 4;
         java.util.List<double[]> sl = anim ? scanList() : java.util.List.of();
         if (!sl.isEmpty()) {   // classic scanner: the frequency readout steps through the system's real channels
             double[] fq = sl.get((int) ((now / STEP_MS) % sl.size()));
-            field(g, fq[1] > 0 ? (conventional ? "SCAN \u00b7 CHANNEL" : "SCAN \u00b7 CONTROL CH") : "SCAN \u00b7 VOICE CH", String.format(Locale.ROOT, "%.5f MHz", fq[0]), x0, by, false, col - 28, th.get(DisplayPalette.Field.SCAN));
+            field(g, fq[1] > 0 ? (conventional ? "SCAN \u00b7 CHANNEL" : "SCAN \u00b7 CONTROL CH") : "SCAN \u00b7 VOICE CH", String.format(Locale.ROOT, "%.5f MHz", fq[0]), x0, by, false, col - 28, DisplayPalette.Field.FREQ);
         } else field(g, "FREQUENCY", freq.isEmpty() ? "-" : freq + " MHz", x0, by, active, col - 28, DisplayPalette.Field.FREQ);
         var rl = radioLabel;
         String rtext = radioId > 0 && rl != null ? rl.apply(radioId) : radio;
@@ -354,7 +379,7 @@ public class ScannerDisplay extends JComponent {
         field(g, active ? "CALL TIME" : "LAST CALL", secs < 0 ? "-" : active ? String.format("%d:%02d", secs / 60, secs % 60) : ago(secs), x0 + col * 2, by, active, col - 28, DisplayPalette.Field.CALLTIME);
         field(g, "EVENT", eventText.isEmpty() ? "-" : eventText, x0 + col * 3, by, active, col - 28, DisplayPalette.Field.EVENT);
         // Vertical rules stay in the gutter and stop at the bottom of the values, short of the button gap.
-        g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 90));
+        g.setColor(ruleColor(glow));
         int vTop = rule2 + 10, vBot = by + 1;
         if (vBot > vTop) for (int i = 1; i < 4; i++) g.drawLine(x0 + col * i - 14, vTop, x0 + col * i - 14, vBot);
 
@@ -625,13 +650,13 @@ public class ScannerDisplay extends JComponent {
             String id = value.substring(p);
             value = fit(g, value.substring(0, p), Math.max(20, w - g.getFontMetrics().stringWidth(id))) + id;
         } else value = fit(g, value, w);
-        g.setColor(on ? VALUE_GREEN : new Color(0x1E6B45));
+        g.setColor(th.get(DisplayPalette.Field.RADIO));
         g.drawString(value, x, y);
     }
 
     private void field(Graphics2D g, String label, String value, int x, int y, boolean on, int w, DisplayPalette.Field f) {
         DisplayPalette th = palette;
-        field(g, label, value, x, y, on, w, on ? VALUE_GREEN : new Color(0x1E6B45));
+        field(g, label, value, x, y, on, w, th.get(f));
     }
 
     private void field(Graphics2D g, String label, String value, int x, int y, boolean on, int w, Color valueColor) {
@@ -669,10 +694,9 @@ public class ScannerDisplay extends JComponent {
             g.draw(new RoundRectangle2D.Double(0.5, 0.5, w - 2, h - 2, 22, 22));
         }   // else: no frame - only the glass
         Shape lcd = new RoundRectangle2D.Double(pad, pad, lcdW, lcdH, 16, 16);
-        // dark navy, every theme. The theme colours the border glow, not this fill.
-        g.setPaint(new GradientPaint(0, pad, new Color(0x0C1622), 0, pad + lcdH, new Color(0x05080E)));
-        g.fill(lcd);
-        g.setPaint(new GradientPaint(0, pad, new Color(255, 255, 255, 16), 0, pad + 36, new Color(255, 255, 255, 0)));
+        // Interior: scanning background, or the lit background while a call is up. The border does not tint this fill.
+        Color fill = bg == null ? new Color(0x020608) : bg;
+        g.setPaint(new GradientPaint(0, pad, fill, 0, pad + lcdH, mix(fill, Color.BLACK, 0.12)));
         g.fill(lcd);
         // soft-key style bars behind the top line and the field labels (Full color preset, or the user's own colours, 1.4.9)
         Color top = th.get(DisplayPalette.Field.TOPBAR), lab = th.get(DisplayPalette.Field.LABELBAR);
@@ -695,10 +719,10 @@ public class ScannerDisplay extends JComponent {
         double unit = fm.stringWidth(text) + Math.max(80, lcdW * 0.3);   // text + gap before it comes round again
         double speed = (right - left) / PASS_MS;                          // px per ms
         double off = (now * speed) % unit;
-        Color c = mix(bg, th.get(DisplayPalette.Field.SCAN), bright);   // dimmer on the dark (unlit) glass
+        Color c = th.get(DisplayPalette.Field.SCAN);
         for (double x = x0 - off; x < right; x += unit) {
             if (x + unit < left) continue;
-            g.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), (int) Math.round(60 * bright)));   // glow, as for a call
+            g.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), (int) Math.round(70 * bright)));
             g.drawString(text, (float) x + 1, y + 1);
             g.setColor(c);
             g.drawString(text, (float) x, y);
