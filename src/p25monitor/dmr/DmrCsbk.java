@@ -18,8 +18,7 @@ public final class DmrCsbk {
 
     public static DmrCsbk parse(boolean[] info96) {
         if (info96 == null || info96.length < 96) return new DmrCsbk(0, 0, 0, 0, 0, 0, 0, false);
-        int crc = DmrBits.read(info96, 80, 16);
-        boolean ok = crc == DmrBits.crc16(info96, 0, 80);
+        boolean ok = DmrFec.csbkOk(info96);
         int opcode = DmrBits.read(info96, 2, 6);
         int fid = DmrBits.read(info96, 8, 8);
         int target = DmrBits.read(info96, 16, 24);

@@ -12,10 +12,24 @@ public final class DmrLc {
         this.encrypted = encrypted; this.ok = ok;
     }
 
-    public static DmrLc parse(boolean[] info96) {
-        if (info96 == null || info96.length < 88) return new DmrLc(0, 0, 0, 0, false, false);
-        int crc = DmrBits.read(info96, 72, 16);
-        boolean ok = crc == DmrBits.crc16(info96, 0, 72);
+    public static DmrLc parse(boolean[] info96) { return parse(info96, DmrBurst.VOICE_LC); }
+
+    /** Voice LC header uses mask 969696; a terminator uses 999999. Both are the RS(12,9) parity (table B.21). */
+    public static DmrLc parse(boolean[] info96, int dataType) {
+        if (info96 == null || info96.length < 96) return new DmrLc(0, 0, 0, 0, false, false);
+        int mask = dataType == DmrBurst.TERMINATOR ? DmrFec.MASK_TERMINATOR : DmrFec.MASK_VOICE_LC;
+        return fields(info96, DmrFec.fullLcOk(info96, mask));
+    }
+
+    /** Embedded LC has already passed the 5-bit checksum. There is no RS field on those 72 bits. */
+    public static DmrLc embedded(boolean[] lc72) {
+        if (lc72 == null || lc72.length < 72) return new DmrLc(0, 0, 0, 0, false, false);
+        boolean[] info = new boolean[96];
+        System.arraycopy(lc72, 0, info, 0, 72);
+        return fields(info, true);
+    }
+
+    static DmrLc fields(boolean[] info96, boolean ok) {
         return new DmrLc(DmrBits.read(info96, 2, 6), DmrBits.read(info96, 8, 8),
                 DmrBits.read(info96, 16, 24), DmrBits.read(info96, 40, 24), info96[64], ok);
     }

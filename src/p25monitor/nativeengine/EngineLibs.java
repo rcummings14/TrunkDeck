@@ -162,9 +162,11 @@ public final class EngineLibs {
     }
 
     /**
-     * AMBE+2 half-rate (Phase 2 TDMA) decoder from JMBE 2.0 (codec "AMBE 3600 x 2450"). Input: one 72-bit voice frame as
-     * sent in a 4V/2V burst after descrambling (9 bytes, first bit = MSB of byte 0); JMBE does the deinterleaving, the
+     * AMBE+2 half-rate decoder from JMBE 2.0 (codec "AMBE 3600 x 2450"). For P25 Phase 2 the input is one 72-bit frame as
+     * sent in a 4V/2V burst after descrambling (9 bytes, first bit = MSB of byte 0); JMBE does the P25 deinterleaving, the
      * Golay(24,12) / Golay(23,12) error correction and the PN demodulation of the second codeword itself.
+     * DMR does not use that interleave: clause 6.1 of ETSI TS 102 361-1 places three 72-bit frames in VS(215)..VS(0)
+     * with no extra bit shuffle ({@code p25monitor.dmr.DmrVoice}). These DMR frames are not what this codec expects.
      */
     public static final class Ambe implements VoiceCodec {
         final Object codec; final Method getAudio, reset; Constructor<?> frameCtor; Method errors;

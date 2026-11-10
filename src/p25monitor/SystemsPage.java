@@ -19,7 +19,21 @@ public class SystemsPage extends JPanel {
             sysId = new JTextField(), rfss = new JTextField(), siteNo = new JTextField(), tuner = new JTextField();
     final JLabel freqLabel = new JLabel("Control channel(s) MHz");
     final JLabel freqHelp = new JLabel();
+    final JLabel demodLabel = new JLabel("Demodulator");
+    final JLabel demodHelp = new JLabel();
+    final JLabel idsLabel = new JLabel("IDs (optional)");
+    final JLabel idsHelp = new JLabel();
+    final JLabel nacLabel = new JLabel("NAC");
+    final JLabel wacnLabel = new JLabel("WACN");
+    final JLabel sysLabel = new JLabel("Sys ID");
+    final JLabel dmrLabel = new JLabel("DMR");
+    final JLabel dmrHelp = new JLabel();
+    final JPanel dmrOpts = new JPanel(new GridLayout(1, 1, 8, 0));
     final JPanel trunkIds = new JPanel(new GridLayout(1, 0, 6, 0));
+    final JPanel wacnBox = new JPanel(new BorderLayout(4, 0));
+    final JPanel sysBox = new JPanel(new BorderLayout(4, 0));
+    final JPanel rfssBox = new JPanel(new BorderLayout(4, 0));
+    final JPanel siteBox = new JPanel(new BorderLayout(4, 0));
     final JComboBox<String> modulation = new JComboBox<>(new String[]{"C4FM (normal)", "CQPSK / LSM (simulcast)"});
     final JComboBox<String> nativeMod = new JComboBox<>(new String[]{"Auto - try C4FM and LSM, use the better one", "C4FM only", "LSM / CQPSK only (simulcast)"});
     final JSpinner traffic = new JSpinner(new SpinnerNumberModel(20, 1, 32, 1));
@@ -89,6 +103,15 @@ public class SystemsPage extends JPanel {
         cc.setFont(Theme.mono(Font.BOLD, 15f));
         tuner.putClientProperty("JTextField.placeholderText", "optional - e.g. Airspy 0x26A464DC2B5A7C9F (see Setup & Help \u2192 Tuners)");
         kindBox.addActionListener(e -> showKind(kindBox.getSelectedIndex()));
+        dmrFlavor.addActionListener(e -> { if (kindBox.getSelectedIndex() == 3) showKind(3); });
+        dmrFlavor.setPrototypeDisplayValue("Capacity Plus");
+        dmrSlot.setPrototypeDisplayValue("Both timeslots");
+        JSpinner.DefaultEditor trafficEditor = (JSpinner.DefaultEditor) traffic.getEditor();
+        JTextField trafficText = trafficEditor.getTextField();
+        trafficText.setColumns(3);
+        trafficText.setOpaque(true);
+        trafficText.setForeground(new Color(220, 228, 236));
+        traffic.setValue(20);
         y = row(g, c, y, "Kind", kindBox, "Trunked follows a control channel. Conventional stays on the frequencies you type. There is no control channel.");
         c.gridy = y; c.gridx = 1; c.weightx = 1; c.gridwidth = 1;
         c.insets = new Insets(0, 4, 8, 8);
@@ -98,19 +121,20 @@ public class SystemsPage extends JPanel {
         y = row(g, c, y, "System name", name, null);
         y = row(g, c, y, "Site name", site, null);
         y = freqRow(g, c, y);
-        y = row(g, c, y, "Demodulator", nativeMod, "Auto runs both demodulators (C4FM and LSM/CQPSK for simulcast) on every channel and uses the one with fewer bit errors (shown on the Engine page).");
-        JPanel nacOnly = idBox("NAC", nac);
+        y = row(g, c, y, demodLabel, nativeMod, demodHelp);
+        idLine(wacnBox, wacnLabel, wacn);
+        idLine(sysBox, sysLabel, sysId);
+        idLine(rfssBox, new JLabel("RFSS"), rfss);
+        idLine(siteBox, new JLabel("Site #"), siteNo);
         trunkIds.setOpaque(false);
-        for (Object[] o : new Object[][]{{"WACN", wacn}, {"Sys ID", sysId}, {"RFSS", rfss}, {"Site #", siteNo}}) trunkIds.add(idBox((String) o[0], (JComponent) o[1]));
+        JPanel nacOnly = idBox(nacLabel, nac);
         JPanel ids = new JPanel(new BorderLayout(6, 0));
         ids.setOpaque(false);
         ids.add(nacOnly, BorderLayout.WEST);
         ids.add(trunkIds, BorderLayout.CENTER);
-        y = row(g, c, y, "IDs (optional)", ids, "On a trunked system, sites with the same WACN and System ID share one talkgroup list. A conventional system keeps its own list. NAC makes the receiver ignore other traffic on the same frequency. On DMR, the NAC box is the colour code (0-15).");
-        JPanel dmrOpts = new JPanel(new GridLayout(1, 2, 8, 0));
+        y = row(g, c, y, idsLabel, ids, idsHelp);
         dmrOpts.setOpaque(false);
-        dmrOpts.add(dmrFlavor); dmrOpts.add(dmrSlot);
-        y = row(g, c, y, "DMR", dmrOpts, "Trunked DMR: Tier III follows a control-channel grant. Capacity Plus and XPT follow the rest channel. Connect Plus follows a voice grant. (untested)");
+        y = row(g, c, y, dmrLabel, dmrOpts, dmrHelp);
         y = row(g, c, y, "Max simultaneous calls", traffic, "How many calls the engine decodes at the same time (each uses about 4% of one CPU core). Calls must also fall inside a dongle's window.");
         JPanel checks = new JPanel(new GridLayout(0, 1));
         checks.setOpaque(false);
@@ -145,29 +169,46 @@ public class SystemsPage extends JPanel {
     }
 
     int row(JPanel g, GridBagConstraints c, int y, String label, JComponent comp, String help) {
+        return row(g, c, y, new JLabel(label), comp, help == null ? null : new JLabel(helpHtml(help)));
+    }
+
+    int row(JPanel g, GridBagConstraints c, int y, JLabel l, JComponent comp, JLabel help) {
         c.gridy = y; c.gridx = 0; c.weightx = 0; c.gridwidth = 1;
-        JLabel l = new JLabel(label);
         l.setFont(Theme.ui(Font.BOLD, 12f));
-        Jargon.explain(l, label);
-        if (Jargon.tip(label) != null) comp.setToolTipText(l.getToolTipText());
+        Jargon.explain(l, l.getText());
+        if (Jargon.tip(l.getText()) != null) comp.setToolTipText(l.getToolTipText());
         g.add(l, c);
         c.gridx = 1; c.weightx = 1;
         g.add(comp, c);
         if (help != null) {
             c.gridy = ++y; c.gridx = 1;
-            JLabel h = new JLabel("<html><span style='color:#7D8FA3;font-size:10px'>" + help + "</span></html>");
+            if (!help.getText().startsWith("<html>")) help.setText(helpHtml(help.getText()));
             c.insets = new Insets(0, 4, 6, 8);
-            g.add(h, c);
+            g.add(help, c);
             c.insets = new Insets(5, 4, 5, 8);
         }
         return y + 1;
     }
 
-    static JPanel idBox(String label, JComponent field) {
-        JPanel p = new JPanel(new BorderLayout(4, 0)); p.setOpaque(false);
-        JLabel l = new JLabel(label); l.setForeground(Theme.DIM);
-        Jargon.explain(l, label); field.setToolTipText(l.getToolTipText());
-        p.add(l, BorderLayout.WEST); p.add(field, BorderLayout.CENTER);
+    static String helpHtml(String text) { return helpHtml(text, "#7D8FA3", 10); }
+
+    /** A table width is what Swing's HTML actually wraps. A CSS width on the body was clipped at the card edge. */
+    static String helpHtml(String text, String color, int px) {
+        return "<html><table width='340' cellpadding='0' cellspacing='0'><tr><td><span style='color:" + color + ";font-size:" + px + "px'>" + text + "</span></td></tr></table></html>";
+    }
+
+    static void idLine(JPanel p, JLabel label, JComponent field) {
+        p.setOpaque(false);
+        label.setForeground(Theme.DIM);
+        Jargon.explain(label, label.getText());
+        field.setToolTipText(label.getToolTipText());
+        p.add(label, BorderLayout.WEST);
+        p.add(field, BorderLayout.CENTER);
+    }
+
+    static JPanel idBox(JLabel label, JComponent field) {
+        JPanel p = new JPanel(new BorderLayout(4, 0));
+        idLine(p, label, field);
         return p;
     }
 
@@ -192,20 +233,49 @@ public class SystemsPage extends JPanel {
         Jargon.explain(freqLabel, fixed ? "Channels MHz" : "Control channel(s) MHz");
         cc.setToolTipText(freqLabel.getToolTipText());
         cc.putClientProperty("JTextField.placeholderText", kind == 2 ? "e.g. 450.0000:1/1 Sample" : fixed ? "e.g. 155.2500, 155.3700:2D5" : "e.g. 851.0125, 851.5125");
-        freqHelp.setText("<html><span style='color:#7D8FA3;font-size:10px'>" + (kind == 2
+        freqHelp.setText(helpHtml(kind == 2
                 ? "DMR channels, separated by commas. Colour code and timeslot after a colon: 450.0000:1/2. The colour code below applies when a channel does not set its own. (untested)"
                 : fixed
                 ? "The frequencies to listen on, separated by commas. Add a NAC after a colon when one channel uses its own, for example 155.2500:2D5. The NAC below applies to every channel without its own."
-                : "Primary first; add alternate control channels separated by commas. TrunkDeck rotates through them until one locks.") + "</span></html>");
-        trunkIds.setVisible(kind == 0);
-        dmrFlavor.setVisible(kind == 3);
-        dmrSlot.setVisible(dmr);
+                : "Primary first; add alternate control channels separated by commas. TrunkDeck rotates through them until one locks."));
+        boolean tier3 = kind == 3 && dmrFlavor.getSelectedIndex() == 0;
+        demodLabel.setVisible(!dmr);
+        nativeMod.setVisible(!dmr);
+        demodHelp.setVisible(!dmr);
+        demodHelp.setText(helpHtml("Auto runs both demodulators (C4FM and LSM/CQPSK for simulcast) on every channel and uses the one with fewer bit errors (shown on the Engine page)."));
+        idsLabel.setText(dmr ? "Colour code" : "IDs (optional)");
+        nacLabel.setText(dmr ? "CC" : "NAC");
+        wacnLabel.setText(tier3 ? "Network" : "WACN");
+        sysLabel.setText(tier3 ? "Site" : "Sys ID");
+        trunkIds.removeAll();
+        if (kind == 0) { trunkIds.add(wacnBox); trunkIds.add(sysBox); trunkIds.add(rfssBox); trunkIds.add(siteBox); }
+        else if (tier3) { trunkIds.add(wacnBox); trunkIds.add(sysBox); }
+        trunkIds.setVisible(kind == 0 || tier3);
+        idsHelp.setText(helpHtml(kind == 2
+                ? "Colour code 0-15. Bursts with a different colour code are ignored. A channel can set its own after the frequency, for example 450.0000:3/1."
+                : tier3
+                ? "Colour code 0-15. Network and Site are optional Tier III identifiers. Bursts with a different colour code are ignored. (untested)"
+                : kind == 3
+                ? "Colour code 0-15. Bursts with a different colour code are ignored. (untested)"
+                : "On a trunked system, sites with the same WACN and System ID share one talkgroup list. A conventional system keeps its own list. NAC makes the receiver ignore other traffic on the same frequency."));
+        dmrOpts.removeAll();
+        if (kind == 3) dmrOpts.add(dmrFlavor);
+        if (kind == 2) dmrOpts.add(dmrSlot);
+        dmrLabel.setText(kind == 2 ? "Timeslot" : "Trunking");
+        dmrLabel.setVisible(dmr);
+        dmrOpts.setVisible(dmr);
+        dmrHelp.setVisible(dmr);
+        dmrHelp.setText(helpHtml(kind == 2
+                ? "Listen to timeslot 1, timeslot 2, or both. (untested)"
+                : "Tier III follows a control-channel grant. Capacity Plus and XPT follow the rest channel. Connect Plus follows a voice grant. (untested)"));
         String note = kind == 1 ? "P25 conventional has not been tested on a real radio system yet."
                 : kind == 2 ? "DMR conventional has not been tested on a real radio system yet."
                 : kind == 3 ? "DMR trunking (Tier III, Capacity Plus, Connect Plus and XPT) has not been tested on a real radio system yet."
                 : "";
-        untestedNote.setText(note.isEmpty() ? " " : "<html><span style='color:#FFB300;font-size:11px'>" + note + " If something doesn't work, please report it on GitHub Issues ("
-                + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").</span></html>");
+        untestedNote.setText(note.isEmpty() ? " " : helpHtml(note + " If something doesn't work, please report it on GitHub Issues ("
+                + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").", "#FFB300", 11));
+        revalidate();
+        repaint();
     }
 
     void refreshList() {
@@ -226,6 +296,7 @@ public class SystemsPage extends JPanel {
         dmrFlavor.setSelectedIndex(switch (s.dmrFlavor == null ? "" : s.dmrFlavor) {
             case "capplus" -> 1; case "conplus" -> 2; case "xpt" -> 3; default -> 0; });
         dmrSlot.setSelectedIndex(s.timeslot == 1 ? 1 : s.timeslot == 2 ? 2 : 0);
+        showKind(kind);
         nac.setText(s.dmr() && s.colorCode >= 0 ? String.valueOf(s.colorCode) : s.nac);
         wacn.setText(s.wacn); sysId.setText(s.sysId); rfss.setText(s.rfss); siteNo.setText(s.siteNumber);
         modulation.setSelectedIndex("CQPSK".equals(s.modulation) ? 1 : 0);

@@ -33,35 +33,14 @@ public final class DmrBits {
         return v;
     }
 
-    /** CRC-CCITT, poly 0x1021, init 0xFFFF. Used on CSBK and link control. */
-    public static int crc16(boolean[] bits, int at, int width) {
-        int crc = 0xFFFF;
-        for (int i = 0; i < width; i++) {
-            int bit = bits[at + i] ? 1 : 0;
-            int msb = (crc >> 15) & 1;
-            crc = ((crc << 1) & 0xFFFF) | bit;
-            if (msb != 0) crc ^= 0x1021;
-        }
-        return crc & 0xFFFF;
-    }
-
     /**
-     * 12-bit check over the 8 slot-type information bits (colour code and data type).
-     * ETSI protects this field with a Golay(20,8) code. This CRC-12 (poly 0x80F) rejects a damaged slot type in the
-     * same position. It has not been checked against on-air Golay parity, so a real radio's slot type may not pass
-     * until that matrix is confirmed. DMR support is untested.
+     * 20-bit slot type: colour code, data type, then 12 Golay parity bits (clause B.3.1).
+     * The high 8 bits are the information. Up to 3 wrong bits still decode.
      */
-    public static int slotCheck(int info8) {
-        int crc = info8 & 0xFF;
-        for (int i = 0; i < 8; i++) {
-            if (((crc >> 7) & 1) != 0) crc = ((crc << 1) ^ 0x80F) & 0xFFF;
-            else crc = (crc << 1) & 0xFFF;
-        }
-        return crc;
+    public static int slotWord(int colorCode, int dataType) {
+        return DmrFec.golayEncode(((colorCode & 15) << 4) | (dataType & 15));
     }
 
-    public static int slotWord(int colorCode, int dataType) {
-        int info = ((colorCode & 15) << 4) | (dataType & 15);
-        return (info << 12) | slotCheck(info);
-    }
+    /** Colour code and data type, or -1 when more than 3 bits of the 20-bit word are wrong. */
+    public static int slotInfo(int word20) { return DmrFec.golayDecode(word20); }
 }
