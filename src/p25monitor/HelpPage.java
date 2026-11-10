@@ -217,7 +217,7 @@ public class HelpPage extends JPanel {
                 + "<li><b>Display only</b> (header button, or Ctrl+D): the window shrinks to just the big display - resize it and the display grows with it, drag it by the display. "
                 + "Double-click it (or Esc, Ctrl+D) for the full window; right-click it for <b>Full window</b>, <b>Always on top</b>, <b>Mute speaker</b>, <b>Minimize to tray</b> and <b>Quit</b>. "
                 + "Its size, place and Always on top are remembered. Monitoring, the speaker, recordings, feeds and uploads keep running the whole time. "
-                + "Large buttons under the display: <b>Mute all</b> silences what you hear here and on Listen, while calls are still decoded, logged, recorded and streamed. "
+                + "Large buttons along the bottom of the display, inside the panel: <b>Mute all</b> silences what you hear here and on Listen, while calls are still decoded, logged, recorded and streamed. "
                 + "<b>Mute talkgroup</b> mutes the talkgroup on the display (or the latest call if nothing is on the air) everywhere, and keeps it in the <b>Muted list</b>. "
                 + "Tap a name in that list to unmute it. Talkgroups muted from the main window are not listed there. "
                 + "<b>Hold</b> stays on the talkgroup that is on the air and ignores the others until you tap it again. It is not remembered the next time TrunkDeck opens. "

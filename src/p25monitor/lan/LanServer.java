@@ -85,7 +85,7 @@ public final class LanServer {
 
     /** Colours of the glass, so the page matches the display preset in use. Empty uses the cyan default. */
     public static final class Colors {
-        public String talkgroup = "", tgid = "", radio = "", freq = "", system = "", scan = "", dark = "", lit = "", idle = "", label = "";
+        public String talkgroup = "", tgid = "", radio = "", freq = "", system = "", scan = "", dark = "", lit = "", idle = "", label = "", accent = "";
     }
 
     public static final class Active {
@@ -368,7 +368,8 @@ public final class LanServer {
                     .append(",\"dark\":").append(LanJson.quote(c.dark))
                     .append(",\"lit\":").append(LanJson.quote(c.lit))
                     .append(",\"idle\":").append(LanJson.quote(c.idle))
-                    .append(",\"label\":").append(LanJson.quote(c.label)).append('}');
+                    .append(",\"label\":").append(LanJson.quote(c.label))
+                    .append(",\"accent\":").append(LanJson.quote(c.accent)).append('}');
         }
         b.append(",\"active\":[");
         for (int i = 0; i < s.active.size(); i++) {

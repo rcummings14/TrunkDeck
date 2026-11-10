@@ -484,6 +484,7 @@ final class LanCard {
         c.lit = hex(p.get(DisplayPalette.Field.BACKGROUND));
         c.idle = hex(p.idleText);
         c.label = hex(p.get(DisplayPalette.Field.LABELBAR_TEXT));
+        c.accent = hex(p.accent);
         return c;
     }
 

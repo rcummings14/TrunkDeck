@@ -107,6 +107,17 @@ public class DisplayBarsTests {
         call(d); BufferedImage lit = paint(d);
         int pk = count(lit, PAD + 10, labY() - 8, PAD + lcdW() - 10, labY() + 8, pink, 40);
         check(pk > 40, "label bar text (FREQUENCY / UNIT / RADIO) in the chosen colour (" + pk + " px)");
+        int by = PAD + (H - PAD * 2) - 18;
+        ScannerDisplay amberD = display();
+        amberD.setColors(DisplayTheme.AMBER, DisplayPalette.of(DisplayTheme.AMBER));
+        call(amberD);
+        int amberPx = count(paint(amberD), PAD + 18, by - 14, PAD + 180, by + 2, DisplayTheme.AMBER.value, 40);
+        check(amberPx > 12, "amber theme: the frequency value follows that theme (" + amberPx + " px)");
+        ScannerDisplay cyanD = display();
+        cyanD.setColors(DisplayTheme.CYAN, DisplayPalette.of(DisplayTheme.CYAN));
+        call(cyanD);
+        int cyanPx = count(paint(cyanD), PAD + 18, by - 14, PAD + 180, by + 2, DisplayTheme.CYAN.value, 40);
+        check(cyanPx > 12, "cyan theme: the frequency value follows that theme (" + cyanPx + " px)");
         check(near(lit.getRGB(barX(), topY()), red, 10), "bars stay their colour when the display is lit");
         for (DisplayTheme t : DisplayTheme.values()) {
             if (t == DisplayTheme.CUSTOM) continue;

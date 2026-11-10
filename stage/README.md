@@ -84,7 +84,7 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
   tray* (greyed out without a tray) and *Quit*. Size, position and Always on top are remembered
   (`ui.displayOnly.bounds`, `ui.displayOnly.onTop`); if that place is no longer on a screen it is put back on one.
   Monitoring, the speaker, recordings, feeds and uploads keep running — nothing restarts or reconnects.
-  Under the display, large buttons: **Mute all** (silence what you hear; decoding, the log, recordings and streams
+  Inside the display, along the bottom, large buttons: **Mute all** (silence what you hear; decoding, the log, recordings and streams
   keep going), **Mute talkgroup** (the talkgroup on the display, or the latest call if the display is idle; muted
   everywhere, and only those show in **Muted list** — tap one to unmute), and **Hold** (stay on the talkgroup that
   is on the air until you tap again; forgotten when TrunkDeck closes). These buttons are only on Display only.

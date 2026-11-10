@@ -191,6 +191,7 @@ public final class DisplayOnlyTests {
         edt(() -> f.displayOnlyBtn.doClick());
         Thread.sleep(600);
         check(f.displayOnly() && f.getContentPane() == f.displayOnly.root && f.display.getParent() == f.displayOnly.root, "Display only: the window shows just the display");
+        check(f.display.embedTouch && f.displayOnly.touchBar.getParent() == f.display, "the touch buttons are inside the display, not under it");
         check(f.isShowing() && visibleFrames() == 1 && Frame.getFrames().length == windows0, "same window (1 visible frame, no new frame: " + Frame.getFrames().length + ")");
         Rectangle mb = edtGet(f::getBounds);
         check(Math.abs(mb.width - DisplayOnly.DEFAULT_SIZE.width) <= 2 && Math.abs(mb.height - DisplayOnly.DEFAULT_SIZE.height) <= 2, "first time: default size " + mb.width + "x" + mb.height);
@@ -248,6 +249,7 @@ public final class DisplayOnlyTests {
         Thread.sleep(600);
         Rectangle back = edtGet(f::getBounds);
         check(!f.displayOnly() && f.getContentPane() == f.root && f.display.getParent() == f.monitor && f.display.zoom == 1 && f.display.simple == f.simpleMode, "double-click: the full window, display back on the Monitor page");
+        check(!f.display.embedTouch && f.displayOnly.touchBar.getParent() != f.display, "the Monitor display has no button row");
         check(back.equals(full0) && !f.isAlwaysOnTop(), "... same size and place as before (" + back.width + "x" + back.height + "), not on top");
         check(f.getMinimumSize().width == 800, "... its minimum size back (800 px)");
         edt(() -> f.getRootPane().getActionMap().get("displayOnly").actionPerformed(null));

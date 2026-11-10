@@ -56,6 +56,8 @@ public class ScannerDisplay extends JComponent {
     public volatile double zoom = 1;
     /** Talkgroup colour while this call is on the glass, or null to keep the theme. */
     Color liveTint;
+    /** Display only: the touch buttons sit inside this panel, so the text stops above them. */
+    public boolean embedTouch;
 
     /** Talkgroup on the glass while a call is showing, or -1 while scanning or stopped. */
     public int shownTalkgroup() {
@@ -230,6 +232,7 @@ public class ScannerDisplay extends JComponent {
 
         int pad = 14, meterW = simple ? 0 : Math.min(300, w / 3);
         int lcdW = w - pad * (simple ? 2 : 3) - meterW, lcdH = h - pad * 2;
+        int foot = embedTouch ? (int) Math.ceil(64.0 / Math.max(z, 0.5)) : 0;
         Color accent = emergency ? Theme.RED : encrypted ? Theme.VIOLET : active ? th.accent : th.accentIdle;
         Color tgColor = emergency ? Theme.RED : encrypted ? Theme.VIOLET : th.get(DisplayPalette.Field.TALKGROUP);
         Color live = (active || hang) ? liveTint : null;
@@ -247,13 +250,22 @@ public class ScannerDisplay extends JComponent {
             g.setColor(new Color(o.getRed(), o.getGreen(), o.getBlue(), 170));
             g.draw(new RoundRectangle2D.Double(pad, pad, lcdW, lcdH, 16, 16));
         }   // None: no outline either
+        // a soft cyan rim inside the glass, so the panel reads as a glowing rounded display
+        Stroke rimStroke = g.getStroke();
+        g.setStroke(new BasicStroke(5f));
+        g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 42));
+        g.draw(new RoundRectangle2D.Double(pad + 2, pad + 2, lcdW - 4, lcdH - 4, 16, 16));
+        g.setStroke(new BasicStroke(1.6f));
+        g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 200));
+        g.draw(new RoundRectangle2D.Double(pad + 1, pad + 1, lcdW - 2, lcdH - 2, 16, 16));
+        g.setStroke(rimStroke);
 
         int x0 = pad + 18, y = pad + 26;
         paintTop(g, x0, y, pad + lcdW - 18, z, th);
 
         // big text: the talkgroup while a call is playing (lit until its audio has finished), otherwise SCANNING (dimmed).
         // 1.3.2: this replaces the separate small "Scanning..." status line; its height went to the big text.
-        int by = pad + lcdH - 18;                       // bottom fields baseline
+        int by = pad + lcdH - 18 - foot;                 // bottom fields baseline (above the in-panel buttons)
         int areaTop = y + 10, areaBottom = by - 34;      // between the top row and the bottom field labels
         int avail = Math.max(40, areaBottom - areaTop);
         int big = Math.max(26, Math.min(64, (int) ((avail - 26) * 0.95)));
@@ -267,27 +279,41 @@ public class ScannerDisplay extends JComponent {
         int asc = g.getFontMetrics().getAscent() * 4 / 5;   // cap height of the mono font, roughly
         int block = asc + 12 + 17;                          // big line + gap + second line
         int my = areaTop + Math.max(0, (avail - block) / 2) + asc;
-        if (active) { // glow
-            g.setColor(new Color(tgColor.getRed(), tgColor.getGreen(), tgColor.getBlue(), 60));
+        if (active) { // glow around the name
+            Color ink = live != null && !emergency && !encrypted ? tgColor : (th.brighten || emergency || encrypted ? tgColor.brighter() : tgColor);
+            g.setColor(new Color(ink.getRed(), ink.getGreen(), ink.getBlue(), 70));
+            g.drawString(main, x0 + 2, my + 2);
+            g.setColor(new Color(ink.getRed(), ink.getGreen(), ink.getBlue(), 110));
             g.drawString(main, x0 + 1, my + 1);
-            g.setColor(live != null && !emergency && !encrypted ? tgColor : (th.brighten || emergency || encrypted ? tgColor.brighter() : tgColor));
+            g.setColor(ink);
             g.drawString(main, x0, my);
         } else if (anim) marquee(g, main, pad + 6, pad + lcdW - 6, x0, my, lcdW, th, glassBg, lt < 0 ? 1 : ScannerDisplay.DIM_SCAN + (1 - ScannerDisplay.DIM_SCAN) * lt, now);   // scrolls like a scanner's ticker
         else { g.setColor(th.idleText); g.drawString(main, x0, my); }   // (Reduce motion: still text)   // idle: dim, like an unlit LCD segment
 
-        // second line: TG + category while active; when idle, what was heard last (dim), or the hang time
+        // second line: TG number in the live colour, then category and tag; when idle, what was heard last
         g.setFont(Theme.mono(Font.BOLD, 17f));
         String line2;
-        if (active) line2 = (tgText.isEmpty() ? "" : tgText) + (category.isBlank() ? "" : "   " + category) + (tag.isBlank() ? "" : "  \u00b7  " + tag);
-        else if (!engineLive) line2 = "";
+        String meta = "";
+        if (active) {
+            line2 = tgText.isEmpty() ? "" : tgText;
+            meta = (category.isBlank() ? "" : "   " + category) + (tag.isBlank() ? "" : "  \u00b7  " + tag);
+        } else if (!engineLive) line2 = "";
         else line2 = tgText.isEmpty() ? "" : (hang ? "HOLDING " : "LAST  ") + tgText + (alpha.isEmpty() ? "" : "  " + alpha.toUpperCase());
         int l2y = my + 12 + 17;
         boolean coloredText = live != null && !emergency && !encrypted && (active || hang);
         g.setColor(coloredText ? live : (active ? th.get(DisplayPalette.Field.TGID) : th.get(DisplayPalette.Field.LABELS)));
-        line2 = fit(g, line2, lcdW - 40 - (active ? 220 : 0));
+        int lineRoom = lcdW - 40 - (active ? 220 : 0);
+        line2 = fit(g, line2, Math.max(20, lineRoom));
         g.drawString(line2, x0, l2y);
+        int afterId = x0 + g.getFontMetrics().stringWidth(line2);
+        if (active && !meta.isEmpty()) {
+            g.setColor(th.get(DisplayPalette.Field.LABELS));
+            meta = fit(g, meta, Math.max(20, lineRoom - g.getFontMetrics().stringWidth(line2)));
+            g.drawString(meta, afterId, l2y);
+            afterId += g.getFontMetrics().stringWidth(meta);
+        }
         // badges after the second line
-        int bx = x0 + g.getFontMetrics().stringWidth(line2) + (line2.isEmpty() ? 0 : 14);
+        int bx = afterId + ((line2.isEmpty() && meta.isEmpty()) ? 0 : 14);
         if (active && emergency) bx = badge(g, "EMERGENCY", Theme.RED, bx, l2y - 13);
         if (active && encrypted) bx = badge(g, "ENC", Theme.VIOLET, bx, l2y - 13);
         if (active && favorite) bx = badge(g, "\u2605 FAV", Theme.AMBER, bx, l2y - 13);
@@ -311,6 +337,9 @@ public class ScannerDisplay extends JComponent {
         long secs = active ? (System.currentTimeMillis() - callStart) / 1000 : (lastActivity == 0 ? -1 : (System.currentTimeMillis() - lastActivity) / 1000);
         field(g, active ? "CALL TIME" : "LAST CALL", secs < 0 ? "-" : active ? String.format("%d:%02d", secs / 60, secs % 60) : ago(secs), x0 + cF + cR, by, active, cT - 8, DisplayPalette.Field.CALLTIME);
         field(g, "EVENT", eventText.isEmpty() ? "-" : eventText, x0 + cF + cR + cT, by, active, Math.min(200, cE), DisplayPalette.Field.EVENT);
+        g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 80));
+        int divTop = by - 30, divBot = by + 4;
+        for (int dx : new int[]{x0 + cF - 8, x0 + cF + cR - 8, x0 + cF + cR + cT - 6}) g.drawLine(dx, divTop, dx, divBot);
 
         // ---------- right-side meters (Advanced view only) ----------
         if (simple) { g.dispose(); return; }
@@ -327,6 +356,14 @@ public class ScannerDisplay extends JComponent {
         double calls = 0; for (double a : activity) calls += a;
         meter(g, mx, pad * 2 + mh, mw, mh, "ACTIVITY", String.format(Locale.ROOT, "%.0f calls / 2 min", calls), Theme.CYAN, activity, 4);
         g.dispose();
+    }
+
+    /** The Display only buttons, laid into the bottom of this panel. */
+    @Override public void doLayout() {
+        if (getComponentCount() == 0) return;
+        int margin = 12, bh = Math.min(48, Math.max(32, getHeight() / 6));
+        int y = Math.max(8, getHeight() - 10 - bh);
+        for (Component c : getComponents()) c.setBounds(margin, y, Math.max(0, getWidth() - margin * 2), bh);
     }
 
     static String ago(long s) { return s < 60 ? s + "s ago" : s < 3600 ? (s / 60) + "m ago" : (s / 3600) + "h ago"; }

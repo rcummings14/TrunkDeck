@@ -34,8 +34,10 @@ final class LanPage {
   .note { color: #7D8FA3; font-size: 12px; margin: 0 16px 8px; }
   .err { color: #FF4D5E; min-height: 1.1em; margin: 0 16px 8px; font-size: 13px; }
   main { padding: 0 16px 28px; }
-  .bezel { background: linear-gradient(#1A2430, #0B1118); border: 1px solid #243244; border-radius: 22px; padding: 14px; }
-  .glass { position: relative; overflow: hidden; min-height: 230px; border-radius: 16px; border: 1px solid rgba(0,229,255,.35);
+  .bezel { background: linear-gradient(#1A2430, #0B1118); border: 1px solid var(--accent, #00E5FF); border-radius: 22px; padding: 14px;
+    box-shadow: 0 0 18px color-mix(in srgb, var(--accent, #00E5FF) 45%, transparent); }
+  .glass { position: relative; overflow: hidden; min-height: 230px; border-radius: 16px; border: 1px solid var(--accent, #00E5FF);
+    box-shadow: inset 0 0 28px color-mix(in srgb, var(--accent, #00E5FF) 28%, transparent), 0 0 10px color-mix(in srgb, var(--accent, #00E5FF) 35%, transparent);
     background: var(--dark, #020608); color: var(--tg, #00E5FF); padding: 18px 18px 14px;
     font-family: Consolas, "Cascadia Mono", ui-monospace, monospace; }
   .glass.call { background: var(--lit, #0A3440); border-color: var(--tg, #00E5FF); }
@@ -49,7 +51,8 @@ final class LanPage {
   .sig i.on { background: var(--scan, #00E5FF); }
   .sig b { color: var(--freq, #DCE6F0); font-size: 12px; font-weight: 700; }
   .big { position: relative; z-index: 1; font-weight: 800; font-size: clamp(28px, 4.6vw, 56px); letter-spacing: .02em;
-    margin: 22px 0 6px; min-height: 1.15em; white-space: nowrap; overflow: hidden; }
+    margin: 22px 0 6px; min-height: 1.15em; white-space: nowrap; overflow: hidden;
+    text-shadow: 0 0 14px currentColor, 0 0 2px currentColor; }
   .big.scan { color: var(--scan, #00E5FF); }
   .big.idle { color: var(--idle, #2F5A66); }
   .big .run { display: inline-block; padding-left: 8px; animation: tick 7s linear infinite; }
@@ -62,7 +65,9 @@ final class LanPage {
   .badge.enc { color: #B388FF; border-color: #B388FF; }
   .badge.fav { color: #FFB300; border-color: #FFB300; }
   .badge.mute { color: #7D8FA3; border-color: #7D8FA3; }
-  .fields { position: relative; z-index: 1; display: grid; grid-template-columns: 1.3fr 1.6fr .8fr 1.2fr; gap: 8px; }
+  .fields { position: relative; z-index: 1; display: grid; grid-template-columns: 1.3fr 1.6fr .8fr 1.2fr; gap: 0; }
+  .fields > div { border-left: 1px solid color-mix(in srgb, var(--accent, #00E5FF) 35%, transparent); padding: 0 12px; }
+  .fields > div:first-child { border-left: 0; padding-left: 0; }
   .fields label { display: block; color: var(--label, #7D8FA3); font-size: 10px; letter-spacing: .06em; }
   .fields b { display: block; font-size: 15px; font-weight: 700; color: var(--value, #8FA3B5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .fields b.on { color: var(--freq, #DCE6F0); }
@@ -219,6 +224,7 @@ function cssColors(c) {
   set('--lit', c.lit, '#0A3440');
   set('--idle', c.idle, '#2F5A66');
   set('--label', c.label, '#7D8FA3');
+  set('--accent', c.accent, c.talkgroup || '#00E5FF');
 }
 
 function bars(n, text, show) {

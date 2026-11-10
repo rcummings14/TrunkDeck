@@ -36,7 +36,7 @@ final class DisplayOnly {
     final JPopupMenu menu = new JPopupMenu();
     final JMenuItem fullItem = new JMenuItem("Full window"), trayItem = new JMenuItem("Minimize to tray"), quitItem = new JMenuItem("Quit");
     final JCheckBoxMenuItem onTopItem = new JCheckBoxMenuItem("Always on top"), muteItem = new JCheckBoxMenuItem("Mute speaker");
-    final JPanel touchBar = new JPanel(new GridLayout(1, 4, 8, 0));
+    final JPanel touchBar = new JPanel(new GridLayout(1, 4, 10, 0));
     final JButton muteAllBtn = touchButton("Mute all");
     final JButton muteTgBtn = touchButton("Mute talkgroup");
     final JButton holdBtn = touchButton("Hold");
@@ -88,7 +88,6 @@ final class DisplayOnly {
         quitItem.addActionListener(e -> f.quit());
         menu.add(fullItem); menu.add(onTopItem); menu.add(muteItem); menu.add(trayItem); menu.addSeparator(); menu.add(quitItem);
         touchBar.setOpaque(false);
-        touchBar.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
         touchBar.setName("touchBar");
         muteAllBtn.setName("touchMuteAll");
         muteTgBtn.setName("touchMuteTg");
@@ -113,7 +112,9 @@ final class DisplayOnly {
         muteTgBtn.addActionListener(e -> { String why = f.touchMuteTalkgroup(); if (why != null) f.toast(why); refreshTouch(); });
         holdBtn.addActionListener(e -> { String why = f.touchHoldToggle(); if (why != null) f.toast(why); refreshTouch(); });
         touchBar.add(muteAllBtn); touchBar.add(muteTgBtn); touchBar.add(holdBtn); touchBar.add(mutedList);
-        root.add(touchBar, BorderLayout.SOUTH);
+        mutedList.setBackground(new Color(0x102833));
+        mutedList.setForeground(new Color(0xE8F7FF));
+        mutedList.setBorder(BorderFactory.createLineBorder(new Color(0x3AD4FF), 1, true));
         refreshTouch();
         // keys while the display is shown: Esc = full window, M = mute (as on the Monitor page)
         InputMap im = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
@@ -156,6 +157,8 @@ final class DisplayOnly {
         if (displayParent != null && displayParent.getLayout() instanceof BorderLayout bl) displayConstraint = bl.getConstraints(f.display);
         if (displayParent != null) { displayParent.remove(f.display); ((JComponent) displayParent).revalidate(); }
         f.display.simple = true;        // side meters off (decode rate and activity). The control-channel signal meter stays on the glass.
+        f.display.embedTouch = true;
+        f.display.add(touchBar);
         root.add(f.display, BorderLayout.CENTER);
         f.setContentPane(root);
         if ((st & Frame.MAXIMIZED_BOTH) != 0) f.setExtendedState(st & ~Frame.MAXIMIZED_BOTH);
@@ -175,6 +178,8 @@ final class DisplayOnly {
         remember(); saveLater.stop(); f.app.saveSettings();
         on = false; exits++;
         if (f.isAlwaysOnTop()) f.setAlwaysOnTop(false);
+        f.display.remove(touchBar);
+        f.display.embedTouch = false;
         root.remove(f.display);
         f.display.zoom = 1;
         f.display.simple = f.simpleMode;
@@ -193,33 +198,66 @@ final class DisplayOnly {
     void updateZoom() {
         if (!on) return;
         int w = f.display.getWidth(), h = f.display.getHeight();
-        if (w <= 0 || h <= 0) { w = root.getWidth(); h = Math.max(0, root.getHeight() - touchBar.getPreferredSize().height); }
+        if (w <= 0 || h <= 0) { w = root.getWidth(); h = root.getHeight(); }
         if (w <= 0 || h <= 0) return;
         f.display.zoom = zoomFor(w, h);
         f.display.repaint();
     }
 
-    static JButton touchButton(String text) {
-        JButton b = new JButton(text);
+    JButton touchButton(String text) {
+        JButton b = new GlowButton(text);
         Font base = UIManager.getFont("Label.font");
         if (base == null) base = new Font(Font.SANS_SERIF, Font.PLAIN, 16);
-        b.setFont(base.deriveFont(Font.BOLD, 16f));
+        b.setFont(base.deriveFont(Font.BOLD, 15f));
+        b.setForeground(new Color(0xE8F7FF));
+        b.setBackground(new Color(0x102833));
         b.setFocusPainted(false);
-        b.setPreferredSize(new Dimension(160, 56));
-        b.setMargin(new Insets(10, 12, 10, 12));
+        b.setPreferredSize(new Dimension(160, 44));
+        b.setMargin(new Insets(8, 10, 8, 10));
         return b;
+    }
+
+    /** Rounded button. The rim follows the display theme (cyan on the default theme). */
+    final class GlowButton extends JButton {
+        GlowButton(String text) { super(text); setContentAreaFilled(false); setOpaque(false); setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10)); }
+        Color accent() {
+            DisplayPalette p = f.display.palette;
+            return p != null && p.accent != null ? p.accent : Theme.CYAN;
+        }
+        @Override protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int w = getWidth(), h = getHeight();
+            Color fill = getBackground() == null ? new Color(0x102833) : getBackground();
+            Color accent = accent();
+            g2.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 70));
+            g2.fillRoundRect(0, 0, w, h, 18, 18);
+            g2.setColor(fill);
+            g2.fillRoundRect(2, 2, Math.max(0, w - 4), Math.max(0, h - 4), 16, 16);
+            g2.setColor(accent);
+            g2.setStroke(new BasicStroke(1.4f));
+            g2.drawRoundRect(2, 2, Math.max(0, w - 5), Math.max(0, h - 5), 16, 16);
+            g2.dispose();
+            super.paintComponent(g);
+        }
     }
 
     /** Button labels and the muted list, from the shared touch state. */
     void refreshTouch() {
         boolean all = f.touch.muteAll();
+        Color accent = f.display.palette != null && f.display.palette.accent != null ? f.display.palette.accent : Theme.CYAN;
+        Color ink = f.display.palette == null ? Theme.TEXT : f.display.palette.get(DisplayPalette.Field.FREQ);
+        if (ink == null) ink = Theme.TEXT;
         muteAllBtn.setText(all ? "All muted" : "Mute all");
         muteAllBtn.setBackground(all ? Theme.RED : Theme.PANEL2);
-        muteAllBtn.setForeground(all ? Color.WHITE : Theme.TEXT);
+        muteAllBtn.setForeground(all ? Color.WHITE : ink);
+        muteTgBtn.setForeground(ink);
         boolean holding = f.touch.hold();
         holdBtn.setText(holding ? "Holding" : "Hold");
         holdBtn.setBackground(holding ? Theme.AMBER : Theme.PANEL2);
-        holdBtn.setForeground(holding ? Color.BLACK : Theme.TEXT);
+        holdBtn.setForeground(holding ? Color.BLACK : ink);
+        mutedList.setForeground(ink);
+        mutedList.setBorder(BorderFactory.createLineBorder(accent, 1, true));
         fillingList = true;
         mutedIds.clear();
         mutedList.removeAllItems();
