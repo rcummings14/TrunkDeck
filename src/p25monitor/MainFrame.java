@@ -243,7 +243,7 @@ public class MainFrame extends JFrame {
         displayOnlyBtn.setMargin(new Insets(4, 8, 4, 10));
         displayOnlyBtn.putClientProperty("JButton.buttonType", "toolBarButton");
         displayOnlyBtn.setToolTipText("<html><b>Display only</b> (Ctrl+D): the window shrinks to just the big scanner display.<br>"
-                + "Double-click it (or Esc) for the full window again; right-click it for more. Monitoring, the speaker, recordings,<br>"
+                + "Double-click the panel (or Esc) for the full window again; right-click it for more. Monitoring, the speaker, recordings,<br>"
                 + "feeds and uploads keep running.</html>");
         displayOnlyBtn.addActionListener(e -> displayOnly.enter());
         left.add(displayOnlyBtn);

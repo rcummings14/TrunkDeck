@@ -137,6 +137,11 @@ public final class DisplayOnlyTests {
         check(DisplayOnly.parse("1,2,3,4").equals(new Rectangle(1, 2, 3, 4)) && DisplayOnly.parse("x") == null && DisplayOnly.parse("1,2,0,4") == null && DisplayOnly.parse(null) == null, "remembered bounds parsed, broken ones ignored");
         check(Math.abs(DisplayOnly.zoomFor(560, 230) - 1) < 1e-9 && Math.abs(DisplayOnly.zoomFor(1120, 460) - 2) < 1e-9 && DisplayOnly.zoomFor(10, 10) == DisplayOnly.MIN_ZOOM
                 && DisplayOnly.zoomFor(9000, 9000) == DisplayOnly.MAX_ZOOM && DisplayOnly.zoomFor(2000, 230) == 1, "zoom follows the window (1 at 560 x 230, 2 at twice that, limited)");
+        Rectangle east = DisplayOnly.resized(new Rectangle(10, 20, 400, 200), 2, 50, 0);
+        Rectangle west = DisplayOnly.resized(new Rectangle(10, 20, 400, 200), 1, 40, 0);
+        Rectangle minW = DisplayOnly.resized(new Rectangle(10, 20, 400, 200), 1, 500, 0);
+        check(east.equals(new Rectangle(10, 20, 450, 200)) && west.equals(new Rectangle(50, 20, 360, 200)) && minW.width == DisplayOnly.MIN_SIZE.width && minW.x == 10 + 400 - DisplayOnly.MIN_SIZE.width,
+                "edge resize grows the east side, pulls the west side, and stops at the minimum");
     }
 
     // ------------------------------------------------------------------ B
@@ -190,7 +195,7 @@ public final class DisplayOnlyTests {
         check(f.displayOnlyBtn.isShowing() && f.displayOnlyBtn.getToolTipText().contains("Ctrl+D"), "\"Display only\" button in the header (tooltip names Ctrl+D)");
         edt(() -> f.displayOnlyBtn.doClick());
         Thread.sleep(600);
-        check(f.displayOnly() && f.getContentPane() == f.displayOnly.root && f.display.getParent() == f.displayOnly.root, "Display only: the window shows just the display");
+        check(f.displayOnly() && f.isUndecorated() && f.getContentPane() == f.displayOnly.root && f.display.getParent() == f.displayOnly.root, "Display only: no title bar, the window shows just the display");
         check(f.display.embedTouch && f.displayOnly.touchBar.getParent() == f.display, "the touch buttons are inside the display, not under it");
         check(f.isShowing() && visibleFrames() == 1 && Frame.getFrames().length == windows0, "same window (1 visible frame, no new frame: " + Frame.getFrames().length + ")");
         Rectangle mb = edtGet(f::getBounds);
@@ -211,6 +216,10 @@ public final class DisplayOnlyTests {
         Thread.sleep(500);
         Point now = edtGet(f::getLocationOnScreen);
         check(Math.abs(now.x - at.x - 100) <= 4 && Math.abs(now.y - at.y - 40) <= 4, "dragging the display moves the window (" + at + " -> " + now + ")");
+        int wide = edtGet(f::getWidth);
+        drag(f.display, f.display.getWidth() - 3, 40, f.display.getWidth() - 3 + 70, 40);
+        Thread.sleep(400);
+        check(Math.abs(edtGet(f::getWidth) - wide - 70) <= 4, "dragging the right edge resizes (" + wide + " -> " + f.getWidth() + ")");
         Thread.sleep(1000);
         Rectangle remembered = DisplayOnly.parse(app.settings.getProperty(DisplayOnly.KEY_BOUNDS));
         Rectangle cur = edtGet(f::getBounds);
@@ -220,7 +229,7 @@ public final class DisplayOnlyTests {
         edt(() -> f.displayOnly.showMenu(f.display, 30, 30)); Thread.sleep(400);
         List<String> items = new ArrayList<>();
         for (Component m : f.displayOnly.menu.getComponents()) items.add(m instanceof JMenuItem mi ? mi.getText() : "-");
-        check(items.equals(List.of("Full window", "Always on top", "Mute speaker", "Minimize to tray", "-", "Quit")), "menu " + items);
+            check(items.equals(List.of("Exit Display-Only", "Always on top", "Mute speaker", "Minimize to tray", "-", "Close TrunkDeck")), "menu " + items);
         check(f.displayOnly.trayItem.isEnabled() && !f.displayOnly.onTopItem.isSelected() && !f.displayOnly.muteItem.isSelected(), "Minimize to tray enabled (tray), Always on top / Mute off");
         boolean topOk = Toolkit.getDefaultToolkit().isAlwaysOnTopSupported();
         if (topOk) {
@@ -245,10 +254,20 @@ public final class DisplayOnlyTests {
         edt(() -> f.monitor.toggleSpeakerMute());
 
         System.out.println("B4. out: double-click, Esc, Ctrl+D, menu");
+        edt(() -> {
+            JButton b = f.displayOnly.muteAllBtn;
+            Point p = SwingUtilities.convertPoint(b, Math.max(1, b.getWidth() / 2), Math.max(1, b.getHeight() / 2), f.display);
+            MouseEvent onBtn = new MouseEvent(b, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0, Math.max(1, b.getWidth() / 2), Math.max(1, b.getHeight() / 2), 2, false, MouseEvent.BUTTON1);
+            for (MouseListener l : b.getMouseListeners()) l.mouseClicked(onBtn);
+            MouseEvent over = new MouseEvent(f.display, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0, p.x, p.y, 2, false, MouseEvent.BUTTON1);
+            for (MouseListener l : f.display.getMouseListeners()) l.mouseClicked(over);
+        });
+        check(f.displayOnly(), "double-click a touch button: stays in Display only");
         edt(() -> { MouseEvent e = new MouseEvent(f.display, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0, 50, 50, 2, false, MouseEvent.BUTTON1); for (MouseListener l : f.display.getMouseListeners()) l.mouseClicked(e); });
         Thread.sleep(600);
         Rectangle back = edtGet(f::getBounds);
-        check(!f.displayOnly() && f.getContentPane() == f.root && f.display.getParent() == f.monitor && f.display.zoom == 1 && f.display.simple == f.simpleMode, "double-click: the full window, display back on the Monitor page");
+        check(!f.displayOnly() && !f.isUndecorated() && f.getContentPane() == f.root && SwingUtilities.isDescendingFrom(f.display, f.monitor) && f.display.zoom == 1 && f.display.simple == f.simpleMode,
+                "double-click: the full window, title bar back, display back on the Monitor page");
         check(!f.display.embedTouch && f.displayOnly.touchBar.getParent() != f.display, "the Monitor display has no button row");
         check(back.equals(full0) && !f.isAlwaysOnTop(), "... same size and place as before (" + back.width + "x" + back.height + "), not on top");
         check(f.getMinimumSize().width == 800, "... its minimum size back (800 px)");
@@ -261,7 +280,7 @@ public final class DisplayOnlyTests {
         check(!f.displayOnly(), "Esc: the full window");
         edt(() -> f.getRootPane().getActionMap().get("displayOnly").actionPerformed(null)); Thread.sleep(300);
         edt(() -> f.displayOnly.fullItem.doClick()); Thread.sleep(300);
-        check(!f.displayOnly(), "menu Full window: the full window");
+            check(!f.displayOnly(), "menu Exit Display-Only: the full window");
         edt(() -> f.setExtendedState(Frame.MAXIMIZED_BOTH)); Thread.sleep(800);
         edt(() -> f.displayOnly.enter()); Thread.sleep(500);
         check(f.displayOnly() && (f.getExtendedState() & Frame.MAXIMIZED_BOTH) == 0, "maximized full window: Display only is not maximized");

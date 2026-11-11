@@ -14,11 +14,11 @@ import java.util.Locale;
  * the speaker, recordings, feeds and uploads keep running (no engine call is made here). The control-channel
  * signal meter stays on the glass (the side decode-rate and activity meters do not).
  * <p>
- * In / out: the header's "Display only" button, Ctrl+D, the close / minimize choices, the tray menu; back with a
- * double-click on the display, Esc, Ctrl+D or the right-click menu (Full window, Always on top, Mute speaker,
- * Minimize to tray, Quit). The window can be dragged by the display itself and resized; its size, position and
- * Always on top are remembered (ui.displayOnly.bounds / ui.displayOnly.onTop) and it is put back on a screen if that
- * screen is gone.
+ * In / out: the header's "Display only" button, Ctrl+D, the close / minimize choices, the tray menu. Back with a
+ * double-click on the panel (not on a touch button). Esc and the right-click menu (Exit Display-Only, Always on top,
+ * Mute speaker, Minimize to tray, Close TrunkDeck) do the same exit, or close the app. The window has no title bar.
+ * Drag the panel background to move it, and drag an edge or corner to resize. Size, position and Always on top are
+ * remembered (ui.displayOnly.bounds / ui.displayOnly.onTop) and it is put back on a screen if that screen is gone.
  */
 final class DisplayOnly {
     static final String KEY_BOUNDS = "ui.displayOnly.bounds", KEY_ON_TOP = "ui.displayOnly.onTop";
@@ -33,8 +33,9 @@ final class DisplayOnly {
     /** The full window, to go back to. */
     Rectangle fullBounds; int fullState; Dimension fullMin; String fullTitle;
     Container displayParent; Object displayConstraint;
+    static final int EDGE = 8, DRAG_SLOP = 4;
     final JPopupMenu menu = new JPopupMenu();
-    final JMenuItem fullItem = new JMenuItem("Full window"), trayItem = new JMenuItem("Minimize to tray"), quitItem = new JMenuItem("Quit");
+    final JMenuItem fullItem = new JMenuItem("Exit Display-Only"), trayItem = new JMenuItem("Minimize to tray"), quitItem = new JMenuItem("Close TrunkDeck");
     final JCheckBoxMenuItem onTopItem = new JCheckBoxMenuItem("Always on top"), muteItem = new JCheckBoxMenuItem("Mute speaker");
     final JPanel touchBar = new JPanel(new GridLayout(1, 4, 10, 0));
     final JButton muteAllBtn = touchButton("Mute all");
@@ -46,6 +47,8 @@ final class DisplayOnly {
     /** Saves the remembered size / position a moment after the last move (not on every pixel). */
     final javax.swing.Timer saveLater;
     Point dragFrom, frameFrom;
+    Rectangle dragBounds;
+    int dragEdge;
     /** Times entered / left (tests). */
     int enters, exits;
 
@@ -60,17 +63,32 @@ final class DisplayOnly {
             public void componentMoved(ComponentEvent e) { if (on && f.isShowing()) saveLater.restart(); }
             public void componentResized(ComponentEvent e) { if (on && f.isShowing()) saveLater.restart(); }
         });
-        // the display: double-click = full window, right-click = the menu, drag = move the window
+        // the panel: double-click = leave Display-Only, right-click = the menu, drag the background = move,
+        // drag an edge or corner = resize. A click that does not travel is not a drag, so double-click still lands.
         MouseAdapter m = new MouseAdapter() {
-            public void mousePressed(MouseEvent e) { if (!on) return; if (popup(e)) return;
-                if (SwingUtilities.isLeftMouseButton(e)) { dragFrom = e.getLocationOnScreen(); frameFrom = f.getLocation(); } }
-            public void mouseReleased(MouseEvent e) { if (!on) return; popup(e); dragFrom = null; }
+            public void mousePressed(MouseEvent e) {
+                if (!on) return;
+                if (popup(e)) return;
+                if (!SwingUtilities.isLeftMouseButton(e) || overTouch(e)) return;
+                dragFrom = e.getLocationOnScreen();
+                frameFrom = f.getLocation();
+                dragBounds = f.getBounds();
+                dragEdge = edgeAt(e);
+            }
+            public void mouseReleased(MouseEvent e) { if (!on) return; popup(e); dragFrom = null; dragEdge = 0; cursor(Cursor.DEFAULT_CURSOR); }
+            public void mouseMoved(MouseEvent e) { if (on) cursor(edgeAt(e) == 0 ? Cursor.DEFAULT_CURSOR : cursorFor(edgeAt(e))); }
+            public void mouseExited(MouseEvent e) { if (dragFrom == null) cursor(Cursor.DEFAULT_CURSOR); }
             public void mouseDragged(MouseEvent e) {
                 if (!on || dragFrom == null || (f.getExtendedState() & Frame.MAXIMIZED_BOTH) != 0) return;
                 Point p = e.getLocationOnScreen();
-                f.setLocation(frameFrom.x + p.x - dragFrom.x, frameFrom.y + p.y - dragFrom.y);
+                int dx = p.x - dragFrom.x, dy = p.y - dragFrom.y;
+                if (dx * dx + dy * dy < DRAG_SLOP * DRAG_SLOP) return;
+                if (dragEdge != 0) f.setBounds(resized(dragBounds, dragEdge, dx, dy));
+                else f.setLocation(frameFrom.x + dx, frameFrom.y + dy);
             }
-            public void mouseClicked(MouseEvent e) { if (on && SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) exit(); }
+            public void mouseClicked(MouseEvent e) {
+                if (on && !overTouch(e) && SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) exit();
+            }
             boolean popup(MouseEvent e) { if (!e.isPopupTrigger()) return false; showMenu(e.getComponent(), e.getX(), e.getY()); return true; }
         };
         f.display.addMouseListener(m); f.display.addMouseMotionListener(m);
@@ -78,7 +96,7 @@ final class DisplayOnly {
         // the menu
         fullItem.setFont(fullItem.getFont().deriveFont(Font.BOLD));
         fullItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_D, InputEvent.CTRL_DOWN_MASK));
-        fullItem.setToolTipText("Back to the full window (also: double-click the display, Esc or Ctrl+D)");
+        fullItem.setToolTipText("Back to the full window. Double-click the panel does this too, and so do Esc and Ctrl+D.");
         fullItem.addActionListener(e -> exit());
         onTopItem.setToolTipText("Keep the display above other windows (remembered)");
         onTopItem.addActionListener(e -> setOnTop(onTopItem.isSelected()));
@@ -164,9 +182,8 @@ final class DisplayOnly {
         f.setContentPane(root);
         if ((st & Frame.MAXIMIZED_BOTH) != 0) f.setExtendedState(st & ~Frame.MAXIMIZED_BOTH);
         f.setMinimumSize(MIN_SIZE);
-        f.setBounds(onScreen(saved(), fullBounds));
         f.setTitle(App.NAME);
-        if (Toolkit.getDefaultToolkit().isAlwaysOnTopSupported()) f.setAlwaysOnTop(onTop());
+        showFrameless(onScreen(saved(), fullBounds));
         root.revalidate(); updateZoom(); root.repaint();
         f.host.showWindow();
         refreshTouch();
@@ -188,11 +205,81 @@ final class DisplayOnly {
         f.setContentPane(f.root);
         f.setTitle(fullTitle != null ? fullTitle : f.getTitle());
         f.setMinimumSize(fullMin);
-        f.setBounds(onScreen(fullBounds, fullBounds));
-        if ((fullState & Frame.MAXIMIZED_BOTH) != 0) f.setExtendedState(fullState);
+        showDecorated(onScreen(fullBounds, fullBounds), fullState);
         f.root.revalidate(); f.root.repaint();
         f.display.repaint();
         if (f.isVisible()) f.host.showWindow();
+    }
+
+    /** No title bar while Display-Only is showing. The frame has to be rebuilt for that; it is still this same window. */
+    void showFrameless(Rectangle bounds) { showWithDecoration(true, bounds, Frame.NORMAL); }
+
+    /** The main window's title bar comes back with the rest of the UI. */
+    void showDecorated(Rectangle bounds, int state) { showWithDecoration(false, bounds, state); }
+
+    void showWithDecoration(boolean frameless, Rectangle bounds, int state) {
+        boolean show = f.isVisible() || f.isDisplayable();
+        f.dispose();
+        f.setUndecorated(frameless);
+        f.setBounds(bounds);
+        if (frameless && Toolkit.getDefaultToolkit().isAlwaysOnTopSupported()) f.setAlwaysOnTop(onTop());
+        if (show) f.setVisible(true);
+        if ((state & Frame.MAXIMIZED_BOTH) != 0) f.setExtendedState(state);
+    }
+
+    /** A touch button, or the muted-list control. Double-click and drag there stay on the control. */
+    boolean overTouch(MouseEvent e) {
+        if (touchBar.getParent() == null || e.getComponent() == null) return false;
+        Point p = SwingUtilities.convertPoint(e.getComponent(), e.getPoint(), f.display);
+        Component hit = SwingUtilities.getDeepestComponentAt(f.display, p.x, p.y);
+        return hit != null && hit != f.display && SwingUtilities.isDescendingFrom(hit, touchBar);
+    }
+
+    /** Bit flags: 1 west, 2 east, 4 north, 8 south. Zero is the panel background. */
+    int edgeAt(MouseEvent e) {
+        if (e.getComponent() == null) return 0;
+        Point p = SwingUtilities.convertPoint(e.getComponent(), e.getPoint(), f.getContentPane());
+        int w = f.getContentPane().getWidth(), h = f.getContentPane().getHeight();
+        int edge = 0;
+        if (p.x >= 0 && p.x < EDGE) edge |= 1;
+        if (p.x >= w - EDGE && p.x < w) edge |= 2;
+        if (p.y >= 0 && p.y < EDGE) edge |= 4;
+        if (p.y >= h - EDGE && p.y < h) edge |= 8;
+        return edge;
+    }
+
+    static int cursorFor(int edge) {
+        return switch (edge) {
+            case 1, 2 -> Cursor.E_RESIZE_CURSOR;
+            case 4, 8 -> Cursor.S_RESIZE_CURSOR;
+            case 5, 10 -> Cursor.NW_RESIZE_CURSOR;
+            case 6, 9 -> Cursor.NE_RESIZE_CURSOR;
+            default -> Cursor.DEFAULT_CURSOR;
+        };
+    }
+
+    void cursor(int kind) {
+        Cursor c = Cursor.getPredefinedCursor(kind);
+        if (f.getCursor().getType() != kind) f.setCursor(c);
+        root.setCursor(c);
+        f.display.setCursor(c);
+    }
+
+    static Rectangle resized(Rectangle start, int edge, int dx, int dy) {
+        Rectangle r = new Rectangle(start);
+        if ((edge & 1) != 0) { r.x += dx; r.width -= dx; }
+        if ((edge & 2) != 0) r.width += dx;
+        if ((edge & 4) != 0) { r.y += dy; r.height -= dy; }
+        if ((edge & 8) != 0) r.height += dy;
+        if (r.width < MIN_SIZE.width) {
+            if ((edge & 1) != 0) r.x -= MIN_SIZE.width - r.width;
+            r.width = MIN_SIZE.width;
+        }
+        if (r.height < MIN_SIZE.height) {
+            if ((edge & 4) != 0) r.y -= MIN_SIZE.height - r.height;
+            r.height = MIN_SIZE.height;
+        }
+        return r;
     }
 
     /** The display's size follows the window: 1 at its size in the main window, larger or smaller with the window. */

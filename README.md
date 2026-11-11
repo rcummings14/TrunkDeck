@@ -31,8 +31,9 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   and the display border), glow, scan lines, backlight on calls, SCANNING ticker.
 * **Control-channel signal meter** (1.7.2): the scanner display shows a signal meter on the control-channel row so you
   can compare sites and antennas.
-* **Display only** mode: the window shrinks to just the scanner display (resizable, draggable, always-on-top option);
-  double-click to get the full window back. Everything keeps running. A row of large buttons sits inside the display,
+* **Display only** mode: the window drops its title bar and shows just the scanner display (drag the panel to move it,
+  drag an edge or corner to resize, always-on-top option); double-click the panel to get the full window back.
+  Everything keeps running. A row of large buttons sits inside the display,
   along its bottom, and only on this window: **Mute all** (silence what you hear; decoding, the log, recordings and streams keep going),
   **Mute talkgroup** (mute the talkgroup on the display, or the latest call if the display is idle), **Hold** (stay on
   the talkgroup that is on the air until you tap again; not remembered after a restart), and a **Muted list** of

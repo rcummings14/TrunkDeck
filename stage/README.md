@@ -78,10 +78,11 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
 **New in 1.5.0 – Display only, close / minimize choices, display border colour**
 * **Display only** (header button **Display only**, or **Ctrl+D**): the same window shrinks to just the big scanner
   display (top bar, talkgroup name, TG line, label bar), with its colours, glow, scan lines, dark-while-scanning /
-  lit-by-a-call backlight and the SCANNING ticker. Resize it and the display scales with it; drag it by the display.
-  Back to the full window: **double-click** the display, **Esc** or **Ctrl+D**. **Right-click** the display:
-  *Full window*, *Always on top* (check box), *Mute speaker* (the Monitor page's mute, kept in sync), *Minimize to
-  tray* (greyed out without a tray) and *Quit*. Size, position and Always on top are remembered
+  lit-by-a-call backlight and the SCANNING ticker. The title bar is gone. Drag the panel to move the window, and drag
+  an edge or a corner to resize it; the display scales with the window.
+  Back to the full window: **double-click** the panel (not a touch button). **Esc** and **Ctrl+D** do the same.
+  **Right-click** the panel: *Exit Display-Only*, *Always on top* (check box), *Mute speaker* (the Monitor page's mute,
+  kept in sync), *Minimize to tray* (greyed out without a tray) and *Close TrunkDeck*. Size, position and Always on top are remembered
   (`ui.displayOnly.bounds`, `ui.displayOnly.onTop`); if that place is no longer on a screen it is put back on one.
   Monitoring, the speaker, recordings, feeds and uploads keep running — nothing restarts or reconnects.
   Inside the display, along the bottom, large buttons: **Mute all** (silence what you hear; decoding, the log, recordings and streams
