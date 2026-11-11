@@ -33,6 +33,7 @@ public class App {
 
     public void load() throws IOException {
         Files.createDirectories(systemsDir());
+        DiagLog.attach(profile);
         if (Files.exists(settingsFile())) try (Reader r = Files.newBufferedReader(settingsFile(), StandardCharsets.UTF_8)) { settings.load(r); }
         systems.clear();
         try (DirectoryStream<Path> ds = Files.newDirectoryStream(systemsDir())) {

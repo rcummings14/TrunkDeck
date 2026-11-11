@@ -341,6 +341,37 @@ final class ChannelDecoder {
     double frequencyError() { return afcHz + active.demod.freqErrorHz; }
     boolean locked(long now) { return now - lastFrameAt < 2500; }
 
+    int syncResets;
+    long lastSyncResetAt;
+
+    /**
+     * The channel is still at about the level it had while frames were decoding, but nothing has framed for a long
+     * time. A channel that has never framed only counts when the level is high, so a quiet channel is left alone.
+     */
+    boolean carrierWithoutFrame(long now) {
+        if (Double.isNaN(signalDb) || samples < 48_000L * 20) return false;
+        long quiet = Long.getLong("trunkdeck.syncQuietMs", 90_000L);
+        if (lastFrameAt > 0) {
+            if (now - lastFrameAt < quiet) return false;
+            return !Double.isNaN(syncPower) && signalDb >= syncPower - 8;
+        }
+        return signalDb > -12 && samples >= 48_000L * 45;
+    }
+
+    /** Pulls the channel filter back and drops symbol timing. At most once a minute. */
+    boolean resyncCarrier(long now) {
+        if (!carrierWithoutFrame(now) || (lastSyncResetAt != 0 && now - lastSyncResetAt < 60_000)) return false;
+        lastSyncResetAt = now;
+        syncResets++;
+        double back = 0;
+        java.util.function.DoubleSupplier as = anchor;
+        if (as != null) { double a = as.getAsDouble(); if (!Double.isNaN(a)) back = a; }
+        afcHz = back;
+        ch.setOffset(freqHz - centerHz + afcHz);
+        gap();
+        return true;
+    }
+
     void startTap(java.nio.file.Path file, double inRate, int maxSeconds) throws IOException { tap = new IqTap(file, inRate, freqHz - centerHz, maxSeconds); }
     boolean tapping() { return tap != null; }
     java.nio.file.Path stopTap() { IqTap t = tap; tap = null; if (t == null) return null; t.close(); return t.file; }
