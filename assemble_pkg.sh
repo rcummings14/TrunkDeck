@@ -11,7 +11,7 @@ for j in lib/*.jar; do [ "$(basename "$j")" = flatlaf-3.5.4.jar ] || cp "$j" "$P
 cp -r stage/icons "$P/app/icons"
 cp -r stage/native "$P/app/native"
 cp stage/talkgroups_template.csv "$P/app/" && cp stage/talkgroups_template.csv "$P/"
-cp stage/README.md stage/START-HERE.txt stage/NOTICE.txt "$P/"
+cp stage/README.md stage/START-HERE.txt stage/NOTICE.txt stage/TrunkDeck-1.7.5-changes.txt "$P/"
 cp -r stage/licenses "$P/licenses"
 cp -r stage/linux "$P/linux" && cp -r stage/windows "$P/windows"
 chmod +x "$P/linux/"*.sh "$P/linux/udev/setup-usb.sh"

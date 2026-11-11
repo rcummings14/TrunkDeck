@@ -5,6 +5,7 @@ WINDOWS:  open the "windows" folder and double-click Install.bat
 LINUX:    open a terminal in the "linux" folder and run:  ./install.sh
 
 Then start TrunkDeck from the Start Menu / app menu or the Desktop icon.
+What changed in this beta: TrunkDeck-1.7.5-changes.txt in this folder.
 Full step-by-step guide (drivers, first start, CSV import, streaming): README.md
 
 NEW IN 1.7.0: SDRPLAY, HACKRF ONE, LIMESDR AND ETTUS USRP - UNTESTED. These receivers now work through SoapySDR
