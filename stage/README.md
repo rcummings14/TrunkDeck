@@ -651,6 +651,7 @@ own CSV (see *Talkgroup CSV files*).
 | **Phase 2 calls are listed but silent** | The voice codec line on the Engine page says *IMBE only*: your JMBE jar is an old 1.x version without AMBE+2. Click **Build from source…** to build JMBE 2.x. |
 | Choppy audio, clicks, beeps | Set gain 15–30 dB and PPM as advised. Check that *Stream* shows 0 breaks and *IMBE voice frames* 0–1 corrected bits/frame. Avoid unpowered USB hubs. See *If the audio is bad, what to send*. |
 | Purple **ENC** calls | Encrypted. Nobody can listen to these without the key. That's normal. |
+| Display stays on **SCANNING** and the call log stops after several hours, until TrunkDeck is restarted | The RTL-SDR USB stream had stopped and 1.7.4 did not start it again. Current builds restart it, and say **USB STREAM STOPPED** if they cannot. The diagnostic log is `%APPDATA%\TrunkDeck\logs\trunkdeck.log` on Windows and `~/.trunkdeck/logs/trunkdeck.log` on Linux (rotated to `trunkdeck.1.log` and `trunkdeck.2.log`). It has no passwords, keys or IP addresses. *Show engine log* is only the last 800 lines and is not a file. |
 | Something else | *Setup & Help → Show engine log*, and *Engine → Copy diagnostics*. |
 
 ---

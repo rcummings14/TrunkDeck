@@ -21,6 +21,7 @@ public final class RtlHealTests {
         RtlSdr.Info info = new RtlSdr.Info(); info.index = 0;
         exceptionSurvived(info);
         stall(info);
+        usbQuiet(info);
         System.out.println();
         System.out.println("RtlHealTests: " + pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);
@@ -83,6 +84,39 @@ public final class RtlHealTests {
         String ev = String.join(" | ", r.guard.events);
         check(ev.contains("RTL-SDR sample processing made no progress for 2 s") && ev.contains("CountDownLatch.await"), "logged where it was stuck");
         check(r.droppedBlocks > 0 && r.guard.droppedWhileStopped > 0, "drops while stalled: " + r.guard.droppedWhileStopped + " of " + r.droppedBlocks + " counted as 'processing stopped'");
+        shutdown(r);
+    }
+
+    /** The USB read ended, or delivered nothing. The decoder thread is left running and the stream is started again. */
+    static void usbQuiet(RtlSdr.Info info) throws Exception {
+        System.out.println("3. RTL-SDR: a dead USB read is restarted, and five failures are reported");
+        RtlSdr r = new RtlSdr(info);
+        r.listener = new IqSource.Listener() { public void samples(float[] i, float[] q, int n) {} };
+        r.run = true;
+        r.usbWanted = true;
+        r.watch.wanted = true;
+        Thread dead = new Thread(() -> {});
+        dead.start(); dead.join();
+        r.usbThread = dead;
+        r.watch.lastSampleNanos = System.nanoTime() - 20_000_000_000L;
+        int[] n = {0};
+        r.usbRestartAction = () -> {
+            n[0]++;
+            Thread live = new Thread(() -> { try { Thread.sleep(60_000); } catch (InterruptedException ignored) {} });
+            live.setDaemon(true); live.start();
+            r.usbThread = live;
+        };
+        check(r.watchdog(5_000) && n[0] == 1 && r.error() == null, "no samples for 20 s: USB stream restarted");
+        check(!r.watchdog(5_000) && n[0] == 1, "a stream that just restarted is left alone");
+        r.usbRestartAction = () -> n[0]++;
+        r.usbThread = dead;
+        r.watch.restartsWithoutSamples = 0;
+        r.watch.gaveUpAt = 0;
+        r.watch.lastSampleNanos = System.nanoTime() - 20_000_000_000L;
+        int before = n[0];
+        for (int i = 0; i < 6; i++) r.watchdog(5_000);
+        check(n[0] == before + 5 && r.error() != null && r.error().contains("could not be restarted"), "after five restarts with no samples: " + r.error() + " (" + (n[0] - before) + " restarts)");
+        check(!r.watchdog(5_000) && n[0] == before + 5, "further restarts wait");
         shutdown(r);
     }
 }

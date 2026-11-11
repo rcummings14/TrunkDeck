@@ -227,7 +227,11 @@ public class HelpPage extends JPanel {
                 "<li>Encrypted talkgroups (shown purple) cannot be heard by any scanner software.</li>" +
                 "<li>P25 Phase 2 (TDMA) calls are decoded too: one Phase 2 channel carries two talkgroups (TS1 / TS2) and both are decoded. Phase 2 audio needs JMBE 2.x (the version <b>Build from source</b> makes). Phase 2 has been confirmed on one live Phase 2 system so far; please report problems with Copy diagnostics.</li>" +
                 "<li>Calls on a frequency no dongle can reach at that moment are listed as <b>MISSED (out of tuner range)</b> on the Engine page.</li>" +
-                "<li>Cheap dongles are often 20-60 PPM off: the Engine page measures it and suggests the value.</li></ul>" +
+                "<li>Cheap dongles are often 20-60 PPM off: the Engine page measures it and suggests the value.</li>" +
+                "<li>If the display stays on <b>SCANNING</b> and the call log stops after a long run, TrunkDeck restarts the RTL-SDR stream by itself. When it cannot, the status line says <b>USB STREAM STOPPED</b>. " +
+                "A diagnostic log is kept in the settings folder: <b>logs\\trunkdeck.log</b> on Windows (<b>%APPDATA%\\TrunkDeck\\logs\\trunkdeck.log</b>) and <b>logs/trunkdeck.log</b> on Linux (<b>~/.trunkdeck/logs/trunkdeck.log</b>). " +
+                "It rotates (trunkdeck.log, then trunkdeck.1.log and trunkdeck.2.log). Passwords, keys, home paths and IP addresses are not written. " +
+                "The on-screen engine log (Show engine log) is only the last 800 lines and is not saved.</li></ul>" +
                 "</body></html>";
     }
 }
