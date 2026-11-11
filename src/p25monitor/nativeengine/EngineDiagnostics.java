@@ -253,6 +253,36 @@ final class EngineDiagnostics {
         return String.join("  ", out);
     }
 
+    /** Stream, last sample, last frame, and watchdog state. Copy diagnostics appends this. */
+    String hangReport() {
+        StringBuilder sb = new StringBuilder();
+        long now = System.currentTimeMillis();
+        sb.append("State: ").append(e.state()).append('\n');
+        sb.append("Problem: ").append(e.problem == null || e.problem.isEmpty() ? "(none)" : e.problem).append('\n');
+        java.util.Set<Object> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (Tuner t : e.tuners) {
+            if (!seen.add(t.src)) continue;
+            String detail;
+            if (t.src instanceof RtlSdr d) detail = d.watchReport();
+            else detail = "streaming=" + t.src.running() + " error=" + (t.src.error() == null ? "(none)" : t.src.error());
+            p25monitor.sdr.ProcessingGuard g = t.src.guard();
+            if (g != null && !(t.src instanceof RtlSdr)) detail += " processingRestarts=" + g.restarts + " stallRestarts=" + g.stallRestarts;
+            sb.append("Receiver T").append(t.id).append(": ").append(detail).append('\n');
+        }
+        java.util.Set<ChannelDecoder> chans = new java.util.LinkedHashSet<>();
+        chans.addAll(e.ccDecoders);
+        for (Tuner t : e.tuners) chans.addAll(t.decoders);
+        for (ChannelDecoder d : chans) {
+            String ago = d.lastFrameAt <= 0 ? "never" : ((now - d.lastFrameAt) / 1000) + " s ago";
+            String sync = Double.isNaN(d.syncPower) ? "(none)" : String.format(Locale.ROOT, "%.1f dB", d.syncPower);
+            String sig = Double.isNaN(d.signalDb) ? "(none)" : String.format(Locale.ROOT, "%.1f dB", d.signalDb);
+            sb.append("Channel ").append(mhz(d.freqHz)).append(" MHz: lastFrame=").append(ago)
+                    .append(" signal=").append(sig).append(" atLastSync=").append(sync).append(" syncResets=").append(d.syncResets).append('\n');
+        }
+        if (e.tuners.isEmpty()) sb.append("Receiver: (none)\n");
+        return sb.toString();
+    }
+
     String ppmAdvice() {
         if (e.mode != NativeEngine.Mode.RTL) return "";
         List<String> out = new ArrayList<>();

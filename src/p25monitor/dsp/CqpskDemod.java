@@ -265,6 +265,7 @@ public final class CqpskDemod extends SymbolDemod {
         if (v >= 2) { dibit = 1; ideal = 3; } else if (v >= 0) { dibit = 0; ideal = 1; }
         else if (v >= -2) { dibit = 2; ideal = -1; } else { dibit = 3; ideal = -3; }
         rot += 0.01 * (v - ideal) * polarity * Math.PI / 4;
+        rot = Math.atan2(Math.sin(rot), Math.cos(rot));   // keep the tracker inside one turn so a long run cannot walk the number off
         freqErrorHz = rot * baud / (2 * Math.PI);
         evmSum += (v - ideal) * (v - ideal); evmN++;
         nextT = t + sps + adj;

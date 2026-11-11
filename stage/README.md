@@ -712,6 +712,7 @@ own CSV (see *Talkgroup CSV files*).
 | A **Motorola Type II** system never shows calls, but the Engine page shows P25 site details (NAC, WACN, system ID) | The control channel is P25, not Type II (common with old RadioReference listings). Systems → set **Kind** to *Trunked (control channel)* → **Save & monitor this system**. |
 | Analog **Hold** / **Scan** buttons are missing | They only appear while an **analog FM** system is running. For a P25 talkgroup use *Speaker → Hold one talkgroup*. |
 | Purple **ENC** calls | Encrypted. Nobody can listen to these without the key. That's normal. |
+| Display stays on **SCANNING** and the call log stops after several hours, until TrunkDeck is restarted | The RTL-SDR USB stream had stopped and 1.7.4 did not start it again. Current builds restart it, and say **USB STREAM STOPPED** if they cannot. The diagnostic log is `%APPDATA%\TrunkDeck\logs\trunkdeck.log` on Windows and `~/.trunkdeck/logs/trunkdeck.log` on Linux (rotated to `trunkdeck.1.log` and `trunkdeck.2.log`). It has no passwords, keys or IP addresses. *Show engine log* is only the last 800 lines and is not a file. |
 | Something else | *Setup & Help → Show engine log*, and *Engine → Copy diagnostics*. |
 
 ---
