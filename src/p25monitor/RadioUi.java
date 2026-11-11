@@ -28,9 +28,11 @@ final class RadioUi {
         JPanel p = new JPanel(new BorderLayout(0, 6));
         RadioAliases.Entry e = s.radios.entry(id);
         p.add(new JLabel("<html>Radio ID <b>" + id + "</b> on " + MonitorPage.esc(s.name)
-                + (e == null ? "" : e.source() == RadioAliases.Source.MANUAL ? "<br>Named by you." : "<br>Name from an import.") + "</html>"), BorderLayout.NORTH);
+                + (e == null ? "" : e.source() == RadioAliases.Source.MANUAL ? "<br>Named by you."
+                : e.source() == RadioAliases.Source.OTA ? "<br>Name received over the air."
+                : "<br>Name from an import.") + "</html>"), BorderLayout.NORTH);
         p.add(name, BorderLayout.CENTER);
-        JLabel hint = new JLabel("Leave empty (or press Clear name) to remove the name. Max " + RadioAliases.MAX_LEN + " characters.");
+        JLabel hint = new JLabel("Leave empty (or press Clear name) to remove the name. A name heard over the air replaces this. Max " + RadioAliases.MAX_LEN + " characters.");
         hint.setForeground(Theme.DIM);
         p.add(hint, BorderLayout.SOUTH);
         Object[] opts = old.isEmpty() ? new Object[]{"Save", "Cancel"} : new Object[]{"Save", "Clear name", "Cancel"};
@@ -220,7 +222,9 @@ final class RadioUi {
             public Class<?> getColumnClass(int c) { return c == 0 ? Integer.class : String.class; }
             public Object getValueAt(int r, int c) {
                 var e = rows.get(r);
-                return c == 0 ? e.getKey() : c == 1 ? e.getValue().alias() : e.getValue().source() == RadioAliases.Source.MANUAL ? "you" : "import";
+                return c == 0 ? e.getKey() : c == 1 ? e.getValue().alias() : switch (e.getValue().source()) {
+                    case MANUAL -> "you"; case OTA -> "over the air"; case IMPORT -> "import";
+                };
             }
         }
     }

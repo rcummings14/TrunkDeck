@@ -8,7 +8,7 @@ import java.util.*;
 /** Application state shared by all pages: profile folder, systems, streams, settings. */
 public class App {
     public static final String NAME = "TrunkDeck";
-    public static final String VERSION = "1.7.4";
+    public static final String VERSION = "1.7.5";
 
     public final Path home;      // install folder (contains app/ and runtime/)
     public final Path profile;   // per-user data
@@ -18,6 +18,10 @@ public class App {
     public RadioSystem current;
     /** This profile was new when loaded (1.6.0: TrunkDeck offers RadioReference setup). */
     public boolean firstRun;
+    /** Settings key: id of the one system that starts when TrunkDeck opens. */
+    public static final String AUTO_START_KEY = "autoStartSystem";
+    /** Seconds the Monitor page counts down before auto-start. */
+    public static final int AUTO_START_SECONDS = 10;
 
     public App(Path home) {
         this.home = home;
@@ -54,26 +58,201 @@ public class App {
         streams.clear();
         streams.addAll(StreamConfig.load(streamsFile()));
         LegacyMigration.run(this);
-        String rd = settings.getProperty("recordings.dir", "");
-        recordings = rd.isBlank() ? null : Paths.get(rd);
+        bindRecordingFolders();
+        TouchControls.applySaved(this);
     }
 
+    /** Saved folder for new recordings, or null when the usual home-folder location is in use. */
     private static volatile Path recordings;
+    /** Folders that still hold recordings from before a folder change. Newest first. */
+    private static volatile List<Path> recordingAlso = List.of();
+    /** Last writability check, so opening the Recordings page does not keep creating a test file. */
+    private static Path probePath;
+    private static long probeAt;
+    private static String probeWhy;
 
-    /** Folder for recorded calls: Settings "recordings.dir" (kept from earlier versions), else ~/TrunkDeck/recordings. */
+    void bindRecordingFolders() {
+        String rd = settings.getProperty("recordings.dir", "");
+        recordings = rd == null || rd.isBlank() ? null : Paths.get(rd.trim());
+        recordingAlso = List.copyOf(parseAlso(settings.getProperty("recordings.also", "")));
+    }
+
+    /**
+     * Folder new call recordings (and their I/Q files) are written to.
+     * A {@code -Dtrunkdeck.recordings} override wins, so tests stay in a temporary folder.
+     * Otherwise Settings {@code recordings.dir} when that folder is still there and writable,
+     * else the usual folder {@code ~/TrunkDeck/recordings} ({@code %USERPROFILE%\TrunkDeck\recordings} on Windows).
+     * Read at the moment a call is saved, so a folder chosen on the Recordings page applies without a restart.
+     * The home-network page cannot change this.
+     */
     public static Path recordingDir() {
         String o = System.getProperty("trunkdeck.recordings");
         if (o != null && !o.isBlank()) return Paths.get(o);
         Path r = recordings;
-        return r != null ? r : defaultRecordingDir();
+        if (r != null && whyUnusable(r) == null) return r;
+        return defaultRecordingDir();
     }
 
     static Path defaultRecordingDir() { return Paths.get(System.getProperty("user.home"), NAME, "recordings"); }
+
+    /**
+     * Plain-language reason new recordings are going to the usual folder instead of the one that was chosen,
+     * or null when the chosen folder (or the usual folder, if none was chosen) is being used.
+     */
+    public static String recordingFolderNote() {
+        String o = System.getProperty("trunkdeck.recordings");
+        if (o != null && !o.isBlank()) return null;
+        Path saved = recordings;
+        if (saved == null || whyUnusable(saved) == null) return null;
+        String usual = defaultRecordingDir().toString();
+        if (!Files.exists(saved)) return "The chosen recordings folder isn't there (" + saved + "). New recordings are being saved in " + usual + " instead.";
+        if (!Files.isDirectory(saved)) return "The chosen recordings folder isn't a folder (" + saved + "). New recordings are being saved in " + usual + " instead.";
+        return "TrunkDeck can't save files in the chosen recordings folder (" + saved + "). New recordings are being saved in " + usual + " instead.";
+    }
+
+    /**
+     * Where to look when listing or playing a saved call: the folder new recordings use, then any older folders.
+     * Nothing is moved. With {@code -Dtrunkdeck.recordings} set, only that folder is searched.
+     */
+    public static List<Path> recordingSearchDirs() {
+        String o = System.getProperty("trunkdeck.recordings");
+        if (o != null && !o.isBlank()) return List.of(Paths.get(o));
+        LinkedHashSet<Path> dirs = new LinkedHashSet<>();
+        dirs.add(recordingDir());
+        Path saved = recordings;
+        if (saved != null) dirs.add(saved.toAbsolutePath().normalize());
+        for (Path p : recordingAlso) if (p != null) dirs.add(p);
+        return List.copyOf(dirs);
+    }
+
+    /**
+     * Save {@code dir} as the folder for new recordings ({@code recordings.dir}) and use it immediately.
+     * Choosing the usual folder clears the choice. Returns a plain-language message when the folder
+     * cannot be used; the previous folder stays in place. Older recordings are left where they are.
+     * Desktop only — the home-network page does not call this.
+     */
+    public String chooseRecordingFolder(Path dir) {
+        forgetProbe();
+        if (dir == null) return "No folder was chosen. New recordings will stay in " + recordingDir() + ".";
+        Path next;
+        try { next = dir.toAbsolutePath().normalize(); }
+        catch (Exception e) { return "That folder can't be used. New recordings will stay in " + recordingDir() + "."; }
+        if (samePath(next, defaultRecordingDir())) { useDefaultRecordingFolder(); return null; }
+        String why = whyUnusable(next);
+        if (why != null) return why + " New recordings will stay in " + recordingDir() + ".";
+        Path writing = recordingDir();
+        Path saved = recordings;
+        List<Path> also = new ArrayList<>(recordingAlso);
+        remember(also, writing, next);
+        remember(also, saved, next);
+        recordingAlso = List.copyOf(also);
+        storeAlso(also);
+        settings.setProperty("recordings.dir", next.toString());
+        recordings = next;
+        saveSettings();
+        return null;
+    }
+
+    /** New recordings go back to the usual folder. Recordings already saved are left where they are. */
+    public void useDefaultRecordingFolder() {
+        forgetProbe();
+        Path writing = recordingDir();
+        Path saved = recordings;
+        Path usual = defaultRecordingDir();
+        List<Path> also = new ArrayList<>(recordingAlso);
+        remember(also, writing, usual);
+        remember(also, saved, usual);
+        recordingAlso = List.copyOf(also);
+        storeAlso(also);
+        settings.remove("recordings.dir");
+        recordings = null;
+        saveSettings();
+    }
+
+    static synchronized void forgetProbe() { probeAt = 0; probePath = null; }
+
+    /** Null when new recordings can be saved here. A recent check for the same folder is reused. */
+    static synchronized String whyUnusable(Path dir) {
+        if (dir == null) return "No folder was chosen.";
+        Path n;
+        try { n = dir.toAbsolutePath().normalize(); }
+        catch (Exception e) { return "That folder can't be used."; }
+        long now = System.currentTimeMillis();
+        if (n.equals(probePath) && now - probeAt < 3000) return probeWhy;
+        String why = probeFolder(n);
+        probePath = n;
+        probeAt = now;
+        probeWhy = why;
+        return why;
+    }
+
+    static String probeFolder(Path dir) {
+        Path probe = null;
+        try {
+            if (!Files.exists(dir)) return "That folder isn't there.";
+            if (!Files.isDirectory(dir)) return "That isn't a folder.";
+            probe = dir.resolve(".trunkdeck-write-check");
+            Files.writeString(probe, "ok");
+            return null;
+        } catch (Exception e) {
+            return "TrunkDeck can't save files in that folder.";
+        } finally {
+            if (probe != null) try { Files.deleteIfExists(probe); } catch (IOException ignored) {}
+        }
+    }
+
+    static boolean samePath(Path a, Path b) {
+        if (a == null || b == null) return false;
+        try {
+            if (Files.exists(a) && Files.exists(b)) return Files.isSameFile(a, b);
+        } catch (IOException ignored) {}
+        return a.toAbsolutePath().normalize().equals(b.toAbsolutePath().normalize());
+    }
+
+    /** Remember {@code folder} so calls saved there can still be played. {@code replacing} is the folder now in use. */
+    static void remember(List<Path> also, Path folder, Path replacing) {
+        if (folder == null) return;
+        Path kept = folder.toAbsolutePath().normalize();
+        Path now = replacing == null ? null : replacing.toAbsolutePath().normalize();
+        also.removeIf(p -> samePath(p, kept) || (now != null && samePath(p, now)));
+        if (now != null && samePath(kept, now)) return;
+        also.add(0, kept);
+        while (also.size() > 12) also.remove(also.size() - 1);
+    }
+
+    void storeAlso(List<Path> also) {
+        if (also.isEmpty()) settings.remove("recordings.also");
+        else {
+            StringBuilder b = new StringBuilder();
+            for (int i = 0; i < also.size(); i++) {
+                if (i > 0) b.append('\n');
+                b.append(also.get(i).toAbsolutePath().normalize());
+            }
+            settings.setProperty("recordings.also", b.toString());
+        }
+    }
+
+    static List<Path> parseAlso(String raw) {
+        List<Path> out = new ArrayList<>();
+        if (raw == null || raw.isBlank()) return out;
+        for (String line : raw.split("\\R")) {
+            String s = line.trim();
+            if (s.isEmpty()) continue;
+            try { out.add(Paths.get(s).toAbsolutePath().normalize()); } catch (Exception ignored) {}
+        }
+        return out;
+    }
 
     public void save(RadioSystem s) throws IOException {
         if (s.id == null || s.id.isBlank()) s.id = uniqueId(RadioSystem.safeId(s.name));
         s.save(systemsDir().resolve(s.id));
         shareTalkgroupFile(s);   // the same list is stored in every matching site's folder, so a later load cannot drift
+    }
+
+    /** Saves newly learned radio names without rewriting the system's talkgroup lists. */
+    public void saveRadioAliases(RadioSystem s) throws IOException {
+        if (s == null || s.id == null || s.id.isBlank()) return;
+        s.radios.save(systemsDir().resolve(s.id));
     }
 
     /**
@@ -123,6 +302,10 @@ public class App {
             w.sorted(Comparator.reverseOrder()).forEach(p -> { try { Files.delete(p); } catch (IOException ignored) {} });
         }
         systems.remove(s);
+        if (s != null && s.id != null && s.id.equals(settings.getProperty(AUTO_START_KEY, ""))) {
+            settings.remove(AUTO_START_KEY);
+            saveSettings();
+        }
     }
 
     public void saveStreams() throws IOException { StreamConfig.save(streamsFile(), streams); }
@@ -139,5 +322,32 @@ public class App {
 
     public ListenMode listenMode() {
         try { return ListenMode.valueOf(settings.getProperty("listenMode", "ALL")); } catch (Exception e) { return ListenMode.ALL; }
+    }
+
+    /** The system marked to start when TrunkDeck opens, or null if none is marked or that system was deleted. */
+    public RadioSystem autoStartSystem() {
+        String id = settings.getProperty(AUTO_START_KEY, "");
+        if (id == null || id.isBlank()) return null;
+        return systems.stream().filter(s -> id.equals(s.id)).findFirst().orElse(null);
+    }
+
+    public boolean isAutoStart(RadioSystem s) {
+        return s != null && s.id != null && !s.id.isBlank() && s.id.equals(settings.getProperty(AUTO_START_KEY, ""));
+    }
+
+    /**
+     * Mark this system to start when TrunkDeck opens. {@code null} (or a system with no id) clears it.
+     * Only one system can be marked: this replaces any earlier choice and is saved at once.
+     */
+    public void setAutoStart(RadioSystem s) {
+        if (s == null || s.id == null || s.id.isBlank()) settings.remove(AUTO_START_KEY);
+        else settings.setProperty(AUTO_START_KEY, s.id);
+        saveSettings();
+    }
+
+    /** The line shown on the Monitor page (and the home-network page) during the launch countdown. */
+    public static String autoStartMessage(String name, int seconds) {
+        String n = name == null || name.isBlank() ? "the system" : name;
+        return "Starting " + n + " in " + seconds + " second" + (seconds == 1 ? "" : "s");
     }
 }

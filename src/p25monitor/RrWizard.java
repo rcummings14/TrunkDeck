@@ -440,7 +440,7 @@ final class RrWizard extends JDialog {
             Map<Integer, List<Freq>> found = new LinkedHashMap<>();
             for (Subcat sc : ci.subcats()) {
                 List<Freq> freqs = rr.getSubcatFreqs(sc.scid());
-                if (!RrImport.p25Channels(freqs).isEmpty()) found.put(sc.scid(), freqs);
+                if (!RrImport.p25Channels(freqs).isEmpty() || !RrImport.dmrChannels(freqs).isEmpty()) found.put(sc.scid(), freqs);
             }
             return found;
         }, found -> {
@@ -462,7 +462,8 @@ final class RrWizard extends JDialog {
 
     void openConventional(TrsRef t) {
         List<Freq> freqs = convFreqs.get(-t.sid());
-        if (freqs == null || RrImport.p25Channels(freqs).isEmpty()) { error("Those channels are no longer available. Press P25 conventional channels again."); return; }
+        if (freqs == null || (RrImport.p25Channels(freqs).isEmpty() && RrImport.dmrChannels(freqs).isEmpty())) { error("Those channels are no longer available. Press P25 conventional channels again."); return; }
+        if (RrImport.p25Channels(freqs).isEmpty()) { pendingConv = RrImport.fromDmr(t.name(), freqs); fetched = null; prepareFinish(); go(4); info(pendingConv.channels.size() + " DMR channel" + (pendingConv.channels.size() == 1 ? "" : "s") + " (untested)."); return; }
         pendingConv = RrImport.fromConventional(t.name(), freqs);
         fetched = null;
         prepareFinish();
@@ -475,7 +476,8 @@ final class RrWizard extends JDialog {
         run("Downloading the system from RadioReference", () -> {
             TrsDetails d = rr.getTrsDetails(sid);
             String type = d.typeName().toLowerCase(Locale.ROOT);
-            if (!type.isEmpty() && !(type.contains("25") || type.contains("apco"))) throw new IllegalStateException(d.name() + " is a " + d.typeName() + " system. TrunkDeck decodes P25 (Phase 1 and 2) systems only.");
+            boolean dmrType = type.contains("dmr");
+            if (!type.isEmpty() && !dmrType && !(type.contains("25") || type.contains("apco"))) throw new IllegalStateException(d.name() + " is a " + d.typeName() + " system. TrunkDeck decodes P25 and DMR systems.");
             return new RrImport.Fetched(d, rr.getTrsSites(sid), rr.getTrsTalkgroupCats(sid), rr.getTrsTalkgroups(sid));
         }, fd -> {
             fetched = fd;

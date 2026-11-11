@@ -52,6 +52,8 @@ public final class LanServer {
         public boolean monitoring;
         /** {@code stopped}, {@code scanning}, or {@code call}. {@code hang} is the tail of a call (big text still scans). */
         public String activity = "stopped";
+        /** Desktop "Reduce motion": the home-network page keeps SCANNING still. */
+        public boolean reduceMotion;
         public boolean hang;
         public String system = "", site = "", control = "";
         /** Conventional system: the glass shows a channel, not a control channel. */
@@ -76,11 +78,16 @@ public final class LanServer {
         public final List<Active> active = new ArrayList<>();
         public final List<Group> groups = new ArrayList<>();
         public final List<Recent> recent = new ArrayList<>();
+        /** Seconds left on the launch auto-start countdown, or 0 if none. The page can show this; it cannot change the checkbox. */
+        public int autoStartIn;
+        public String autoStartName = "";
+        /** Colour of the live talkgroup name and number. Empty keeps the display theme. */
+        public String liveText = "";
     }
 
     /** Colours of the glass, so the page matches the display preset in use. Empty uses the cyan default. */
     public static final class Colors {
-        public String talkgroup = "", tgid = "", radio = "", freq = "", system = "", scan = "", dark = "", lit = "", idle = "", label = "";
+        public String talkgroup = "", tgid = "", radio = "", freq = "", event = "", calltime = "", system = "", scan = "", labels = "", dark = "", lit = "", idle = "", label = "", accent = "", glow = "", topbar = "", labelbar = "";
     }
 
     public static final class Active {
@@ -189,11 +196,12 @@ public final class LanServer {
             String method = ex.getRequestMethod();
             String path = ex.getRequestURI() == null || ex.getRequestURI().getPath() == null ? "/" : ex.getRequestURI().getPath();
             if ("GET".equals(method) && ("/".equals(path) || "/index.html".equals(path))) {
-                send(ex, 200, "text/html; charset=utf-8", LanPage.HTML);
+                send(ex, 200, "text/html; charset=utf-8", LanPage.page());
                 return;
             }
             if ("POST".equals(method) && "/api/login".equals(path)) { login(ex); return; }
             if (!signedIn(ex)) { sendJson(ex, 401, "{\"ok\":false,\"error\":\"Sign in first.\"}"); return; }
+            // The recordings folder is chosen on the desktop Recordings page only. This page cannot change it.
             switch (method + " " + path) {
                 case "POST /api/logout" -> { sessions.remove(token(ex)); sendJson(ex, 200, "{\"ok\":true}"); }
                 case "GET /api/state" -> sendJson(ex, 200, stateJson());
@@ -316,6 +324,7 @@ public final class LanServer {
         b.append("{\"ok\":true");
         b.append(",\"monitoring\":").append(s.monitoring);
         b.append(",\"activity\":").append(LanJson.quote(s.activity));
+        b.append(",\"reduceMotion\":").append(s.reduceMotion);
         b.append(",\"hang\":").append(s.hang);
         b.append(",\"system\":").append(LanJson.quote(s.system));
         b.append(",\"site\":").append(LanJson.quote(s.site));
@@ -357,12 +366,19 @@ public final class LanServer {
                     .append(",\"tgid\":").append(LanJson.quote(c.tgid))
                     .append(",\"radio\":").append(LanJson.quote(c.radio))
                     .append(",\"freq\":").append(LanJson.quote(c.freq))
+                    .append(",\"event\":").append(LanJson.quote(c.event))
+                    .append(",\"calltime\":").append(LanJson.quote(c.calltime))
                     .append(",\"system\":").append(LanJson.quote(c.system))
                     .append(",\"scan\":").append(LanJson.quote(c.scan))
+                    .append(",\"labels\":").append(LanJson.quote(c.labels))
                     .append(",\"dark\":").append(LanJson.quote(c.dark))
                     .append(",\"lit\":").append(LanJson.quote(c.lit))
                     .append(",\"idle\":").append(LanJson.quote(c.idle))
-                    .append(",\"label\":").append(LanJson.quote(c.label)).append('}');
+                    .append(",\"label\":").append(LanJson.quote(c.label))
+                    .append(",\"accent\":").append(LanJson.quote(c.accent))
+                    .append(",\"glow\":").append(LanJson.quote(c.glow))
+                    .append(",\"topbar\":").append(LanJson.quote(c.topbar))
+                    .append(",\"labelbar\":").append(LanJson.quote(c.labelbar)).append('}');
         }
         b.append(",\"active\":[");
         for (int i = 0; i < s.active.size(); i++) {
@@ -393,7 +409,10 @@ public final class LanServer {
             b.append("{\"time\":").append(LanJson.quote(r.time)).append(",\"id\":").append(r.id)
                     .append(",\"name\":").append(LanJson.quote(r.name)).append(",\"radio\":").append(LanJson.quote(r.radio)).append('}');
         }
-        return b.append("]}").toString();
+        b.append("],\"autoStartIn\":").append(s.autoStartIn);
+        b.append(",\"autoStartName\":").append(LanJson.quote(s.autoStartName));
+        b.append(",\"liveText\":").append(LanJson.quote(s.liveText));
+        return b.append("}").toString();
     }
 
     private boolean signedIn(HttpExchange ex) {

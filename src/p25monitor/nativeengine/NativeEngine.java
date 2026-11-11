@@ -57,8 +57,8 @@ public final class NativeEngine {
 
     /**
      * Per-Airspy settings ("native.tuner.airspy-SERIAL.*"): role (auto = control + every voice channel in its window),
-     * sample rate (10 or 2.5 MS/s), gain ("lin:N", "sens:N" N = 0-21, or "man:LNA,MIX,VGA"), bias-T (off by default),
-     * USB packing, and a fixed centre in MHz (blank = chosen automatically).
+     * sample rate (R2: 10 or 2.5 MS/s; Mini: 10, 6 or 3 MS/s — whatever that receiver offers), gain ("lin:N", "sens:N"
+     * N = 0-21, or "man:LNA,MIX,VGA"), bias-T (off by default), USB packing, and a fixed centre in MHz (blank = automatic).
      */
     public static final class AirspySettings {
         public String role = "auto", gain = "lin:16", center = "";
@@ -69,7 +69,7 @@ public final class NativeEngine {
             String k = "native.tuner." + key + ".";
             a.role = p.getProperty(k + "role", "auto");
             try { a.rate = Double.parseDouble(p.getProperty(k + "rate", "10000000")); } catch (Exception e) { a.rate = 10e6; }
-            if (a.rate != 2.5e6) a.rate = 10e6;
+            if (!(a.rate >= 1e6 && a.rate <= 20e6)) a.rate = 10e6;
             a.gain = AirspyR2.Gain.parse(p.getProperty(k + "gain", "lin:16")).toString();
             a.biasTee = Boolean.parseBoolean(p.getProperty(k + "bias", "false"));
             a.packing = Boolean.parseBoolean(p.getProperty(k + "packing", "false"));
@@ -257,7 +257,8 @@ public final class NativeEngine {
         undecodable.clear(); tdma.clear(); ambeMissingLogged.set(false); voiceOnCcLogged.clear(); retunes = 0; follows = 0; phase2Calls = 0; lastDiag = null; iqRecorded = 0;
         lsmPreferred = "lsm".equalsIgnoreCase(s.nativeModulation); ccDemodLogged = "";
         usage.clear(); missed.clear(); missedRecent.clear(); peakConcurrent = 0; tuners.clear(); huntCount = 0; fixedWideCenter = 0; widePlanned = false;
-        conventional = s.conventional(); parkedDecoders.clear(); scanTuner = null; scanGroups = List.of(); scanIndex = 0; lastScanAt = 0;
+        conventional = s.fixedChannels(); parkedDecoders.clear(); scanTuner = null; scanGroups = List.of(); scanIndex = 0; lastScanAt = 0;
+        if (s.dmr()) log("DMR " + (s.dmrTrunk() ? "trunked (" + s.dmrFlavor + ")" : "conventional") + " (untested). If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         SpeakerMode sm;
         try { sm = SpeakerMode.valueOf(app.settings.getProperty("native.speaker", "PRIORITY")); } catch (Exception e) { sm = SpeakerMode.PRIORITY; }
         int hold;
@@ -489,7 +490,7 @@ public final class NativeEngine {
     }
 
     /**
-     * Real receivers: every Airspy R2 and RTL-SDR dongle found, plus (1.7.0, untested with real hardware) SDRplay,
+     * Real receivers: every Airspy R2 or Mini and RTL-SDR dongle found, plus (1.7.0, untested with real hardware) SDRplay,
      * HackRF, LimeSDR and USRP receivers through SoapySDR. The control tuner is the one set to "control", else an
      * Airspy set to "auto" (it covers the control channel and the voice channels around it at once), else a SoapySDR
      * receiver set to "auto" (wideband like the Airspy), else an RTL dongle set to "auto". Every other receiver roams for voice.
@@ -627,10 +628,12 @@ public final class NativeEngine {
         AirspyR2 a = new AirspyR2(i);
         a.open();
         airspys.add(a);
-        try { a.configure(s.rate, AirspyR2.Gain.parse(s.gain), s.biasTee, s.packing); }
+        double rate = AirspyR2.chooseRate(s.rate, a.offeredRates());
+        if (Math.abs(rate - s.rate) >= 1) log(i.label() + ": " + AirspyR2.rateLabel(s.rate) + " is not one of its rates; using " + AirspyR2.rateLabel(rate));
+        try { a.configure(rate, AirspyR2.Gain.parse(s.gain), s.biasTee, s.packing); }
         catch (RuntimeException e) { a.stop(); airspys.remove(a); throw e; }
-        log("Opened " + i.label() + ": firmware " + (a.firmware.isBlank() ? "?" : a.firmware) + ", " + String.format(Locale.ROOT, "%.1f MS/s", s.rate / 1e6)
-                + ", gain " + a.gain().describe() + (s.biasTee ? ", bias-T ON" : ", bias-T off") + (s.packing ? ", USB packing on" : ""));
+        log("Opened " + i.label() + ": firmware " + (a.firmware.isBlank() ? "?" : a.firmware) + ", " + AirspyR2.rateLabel(rate)
+                + " (" + AirspyR2.coverageText(rate) + "), gain " + a.gain().describe() + (s.biasTee ? ", bias-T ON" : ", bias-T off") + (s.packing ? ", USB packing on" : ""));
         return a;
     }
 
@@ -731,13 +734,38 @@ public final class NativeEngine {
     }
 
     ChannelDecoder voiceDecoder(Tuner t, long f) {
+        if (sys != null && sys.dmr()) return dmrDecoder(t, f);
         int nac = sys == null ? -1 : sys.nacFor(f);
         ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {
             public void ldu(int n, int duid, byte[][] imbe, P25Framer.LinkControl lc, P25Framer.EncryptionSync ess) { voice.onConventional(f, n, imbe, lc, ess); }
+            public void tdulc(int n, P25Framer.LinkControl lc) { voice.onConventionalLc(f, lc); }
             public void terminator(int n, int duid) { voice.onConventionalEnd(f); }
         }, 0, modulation(), lsmPreferred, nac);
         if (nac >= 0) for (ChannelDecoder.Demod p : d.paths) p.framer.enforceNac = true;
         d.anchor = () -> tunerAnchor(t, d, f);
+        return d;
+    }
+
+    /** A channel decoder whose P25 framer is idle and whose samples feed the DMR receiver. */
+    ChannelDecoder dmrDecoder(Tuner t, long f) {
+        ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {}, 0);
+        int cc = sys == null ? -1 : sys.colorCodeFor(f);
+        int slot = sys == null ? 0 : sys.slotFor(f);
+        java.util.List<Long> chans = new java.util.ArrayList<>();
+        if (sys != null) for (double mhz : sys.frequencies()) chans.add(Math.round(mhz * 1e6));
+        long base = chans.isEmpty() ? f : chans.get(0);
+        p25monitor.dmr.DmrTrunk trunk = sys != null && sys.dmrTrunk() ? new p25monitor.dmr.DmrTrunk(p25monitor.dmr.DmrTrunk.flavor(sys.dmrFlavor)) : null;
+        final long freq = f;
+        d.dmr = new p25monitor.dmr.DmrReceiver(f, cc, slot, trunk, base, chans, new p25monitor.dmr.DmrReceiver.Listener() {
+            public void group(long hz, int sl, int color, int tg, int src, byte[][] ambe) { voice.onDmr(hz, sl, color, tg, src, true, ambe); d.lastFrameAt = System.currentTimeMillis(); }
+            public void unit(long hz, int sl, int color, int target, int src) { voice.onDmr(hz, sl, color, target, src, false, new byte[0][]); d.lastFrameAt = System.currentTimeMillis(); }
+            public void encrypted(long hz, int sl, int color) { voice.onDmrEncrypted(hz, sl, color); }
+            public void end(long hz, int sl) { voice.onDmrEnd(hz); }
+            public void grant(p25monitor.dmr.DmrTrunk.Grant g) { voice.onDmrGrant(g); d.lastFrameAt = System.currentTimeMillis(); }
+            public void rest(int repeater, int sl, long hz, boolean moved) { if (moved) log("DMR rest channel (untested) -> repeater " + repeater + " slot " + sl + (hz > 0 ? " " + mhz(hz) + " MHz" : "")); d.lastFrameAt = System.currentTimeMillis(); }
+            public void alias(int src, String text) { log("DMR talker alias " + src + " " + text); }
+        });
+        d.anchor = () -> tunerAnchor(t, d, freq);
         return d;
     }
 
@@ -980,10 +1008,18 @@ public final class NativeEngine {
     }
 
     // ------------------------------------------------------------------ public API for the UI
-    public void setSpeakerMode(SpeakerMode m, int tg) {
+    public void setSpeakerMode(SpeakerMode m, int tg) { setSpeakerMode(m, tg, true); }
+
+    /**
+     * @param save false for the Display only / home-network Hold button, which is temporary and must not be
+     *             remembered the next time TrunkDeck opens
+     */
+    public void setSpeakerMode(SpeakerMode m, int tg, boolean save) {
         speaker.setMode(m, tg);
-        app.settings.setProperty("native.speaker", m.name());
-        app.settings.setProperty("native.holdTg", String.valueOf(tg));
+        if (save) {
+            app.settings.setProperty("native.speaker", m.name());
+            app.settings.setProperty("native.holdTg", String.valueOf(tg));
+        }
         log("Speaker: " + (m == SpeakerMode.PRIORITY ? "one call at a time by priority" : m == SpeakerMode.MIX ? "mix all calls"
                 : m == SpeakerMode.QUEUE ? "queue - every call, one after another (max delay " + speaker.queueMaxDelay() / 1000 + " s)" : "hold TG " + tg));
     }

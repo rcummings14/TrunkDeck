@@ -100,6 +100,7 @@ final class ChannelDecoder {
                 public void tsbkError() { if (active == Demod.this) out.tsbkError(); }
                 public void ldu(int n, int duid, byte[][] imbe, P25Framer.LinkControl lc, P25Framer.EncryptionSync ess) { if (active == Demod.this) out.ldu(n, duid, imbe, lc, ess); }
                 public void hdu(int n) { if (active == Demod.this) out.hdu(n); }
+                public void tdulc(int n, P25Framer.LinkControl lc) { if (active == Demod.this) out.tdulc(n, lc); }
                 public void terminator(int n, int duid) { if (active == Demod.this) out.terminator(n, duid); }
                 public void nidError() { if (active == Demod.this) out.nidError(); }
             });
@@ -202,6 +203,8 @@ final class ChannelDecoder {
 
     /** Tests: run at the start of every block (fault injection). */
     volatile Runnable faultHook;
+    /** DMR demod on this same 48 kHz channel. Null on a P25 channel. */
+    p25monitor.dmr.DmrReceiver dmr;
 
     void process(float[] i, float[] q, int n) {
         if (!enabled) return;
@@ -247,6 +250,7 @@ final class ChannelDecoder {
             jumpSamples += m;
         } else if (m > 0) { jpi = oi[m - 1]; jpq = oq[m - 1]; }
         for (Demod pa : paths) pa.demod.process(oi, oq, m);
+        if (dmr != null && m > 0) dmr.baseband(oi, oq, m);
         samples += m;
         fll();
         if (samples - windowAt >= WINDOW) { windowAt = samples; compare(); }

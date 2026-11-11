@@ -8,17 +8,21 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Radio ID aliases of one system (radio / unit ID -> name), stored in systems/&lt;id&gt;/radios.csv next to
- * talkgroups.csv (columns radio_id,alias,source). Names the user typed (source "manual") win over imported ones
- * unless an import is told to overwrite. Thread-safe for readers (the engine looks names up while decoding).
+ * talkgroups.csv (columns radio_id,alias,source). An over-the-air name replaces a typed or imported one.
+ * A plain import leaves a typed name unless that import is told to overwrite. Thread-safe for readers.
  */
 public final class RadioAliases {
     public static final String FILE = "radios.csv";
     public static final int MAX_ID = 0xFFFFFF;   // P25 radio IDs are 24 bit
     public static final int MAX_LEN = 40;
 
-    public enum Source { MANUAL, IMPORT;
+    public enum Source { MANUAL, OTA, IMPORT;
         String key() { return name().toLowerCase(Locale.ROOT); }
-        static Source parse(String s) { return "manual".equalsIgnoreCase(s == null ? "" : s.trim()) ? MANUAL : IMPORT; }
+        static Source parse(String s) {
+            if ("manual".equalsIgnoreCase(s == null ? "" : s.trim())) return MANUAL;
+            if ("ota".equalsIgnoreCase(s == null ? "" : s.trim())) return OTA;
+            return IMPORT;
+        }
     }
 
     public record Entry(String alias, Source source) {}
@@ -39,14 +43,26 @@ public final class RadioAliases {
     }
 
     /** Sets (or with a blank name clears) the name the user typed. */
-    public void setManual(int id, String alias) {
+    public synchronized void setManual(int id, String alias) {
         if (!validId(id)) throw new IllegalArgumentException("radio ID must be 1-" + MAX_ID);
         String a = clean(alias);
         if (a.isEmpty()) map.remove(id); else map.put(id, new Entry(a, Source.MANUAL));
         dirty = true;
     }
 
-    public void clear() { map.clear(); dirty = true; }
+    /** Learns an over-the-air name and replaces a typed or imported one. Returns true when the stored name changed. */
+    public synchronized boolean setOverTheAir(int id, String alias) {
+        if (!validId(id)) return false;
+        String a = clean(alias);
+        if (a.isEmpty()) return false;
+        Entry old = map.get(id);
+        if (old != null && old.source == Source.OTA && old.alias.equals(a)) return false;
+        map.put(id, new Entry(a, Source.OTA));
+        dirty = true;
+        return true;
+    }
+
+    public synchronized void clear() { map.clear(); dirty = true; }
 
     /** A copy (names and sources) for a duplicated system. */
     public RadioAliases copy() { RadioAliases r = new RadioAliases(); r.map.putAll(map); r.dirty = !map.isEmpty(); return r; }
@@ -77,7 +93,7 @@ public final class RadioAliases {
     }
 
     /** Writes radios.csv if anything changed (or it is missing); never leaves a half-written file. */
-    public void save(Path dir) throws IOException {
+    public synchronized void save(Path dir) throws IOException {
         Path p = dir.resolve(FILE);
         if (!dirty && (Files.exists(p) || map.isEmpty())) return;
         Files.createDirectories(dir);
@@ -125,9 +141,9 @@ public final class RadioAliases {
     /**
      * Reads a DSD+ "radios" file. Line format: protocol, networkID, group, radio, priority, override, hits,
      * timestamp, "radio alias" [, "P25 talker alias", checksum]. Only P25 records of {@code wacnSys} (e.g.
-     * "A4321.2D5", hex WACN.SysID, compared numerically) are kept; the radio alias wins over the talker alias.
-     * Group -1 (private calls only) / -2 (group unknown) are normal records here. A null {@code wacnSys} only
-     * counts the networks (to ask which one to import).
+     * "A4321.2D5", hex WACN.SysID, compared numerically) are kept, and only the P25 talker alias (the name
+     * heard over the air). A typed radio alias with no talker alias is skipped. Group -1 (private calls only)
+     * and -2 (group unknown) are normal records here. A null {@code wacnSys} only counts the networks.
      */
     public static ParseResult parseDsdPlus(String text, String wacnSys) {
         ParseResult r = new ParseResult();
@@ -150,10 +166,9 @@ public final class RadioAliases {
             long id;
             try { id = Long.parseLong(f.get(3).trim()); } catch (NumberFormatException e) { r.badId++; continue; }
             if (!validId(id)) { r.badId++; continue; }
-            String user = f.size() > 8 ? clean(f.get(8)) : "", talker = f.size() > 9 ? clean(f.get(9)) : "";
-            String a = !user.isEmpty() ? user : talker;
-            if (a.isEmpty()) { r.noAlias++; continue; }
-            r.entries.add(new Parsed((int) id, a, Source.IMPORT));
+            String talker = f.size() > 9 ? clean(f.get(9)) : "";
+            if (talker.isEmpty()) { r.noAlias++; continue; }
+            r.entries.add(new Parsed((int) id, talker, Source.OTA));
         }
         return r;
     }
@@ -242,8 +257,8 @@ public final class RadioAliases {
     }
 
     /**
-     * Merges imported names. A name the user typed (manual) is kept unless {@code overwrite}; "manual" rows of an
-     * exported TrunkDeck file stay manual. Duplicate IDs in one file: the last one wins.
+     * Merges imported names. An over-the-air name replaces a typed one. Any other import leaves a typed name
+     * unless {@code overwrite}. "manual" rows of an exported TrunkDeck file stay manual. Duplicate IDs: the last wins.
      */
     public MergeResult merge(List<Parsed> in, boolean overwrite) {
         MergeResult m = new MergeResult();
@@ -252,12 +267,17 @@ public final class RadioAliases {
         for (Parsed p : last.values()) {
             Entry old = map.get(p.id);
             if (old == null) { map.put(p.id, new Entry(p.alias, p.source)); m.added++; }
-            else if (old.alias.equals(p.alias)) {
+            else if (old.alias.equals(p.alias) && !(p.source == Source.OTA && old.source != Source.OTA)) {
                 if (old.source != p.source && p.source == Source.MANUAL) map.put(p.id, new Entry(p.alias, Source.MANUAL));
                 m.unchanged++;
             }
-            else if (old.source == Source.MANUAL && p.source != Source.MANUAL && !overwrite) m.keptManual++;
-            else { map.put(p.id, new Entry(p.alias, p.source == Source.MANUAL || old.source == Source.MANUAL && !overwrite ? Source.MANUAL : p.source)); m.updated++; }
+            else if (old.source == Source.MANUAL && p.source != Source.MANUAL && p.source != Source.OTA && !overwrite) m.keptManual++;
+            else {
+                Source src = p.source == Source.OTA ? Source.OTA
+                        : p.source == Source.MANUAL || old.source == Source.MANUAL && !overwrite ? Source.MANUAL : p.source;
+                map.put(p.id, new Entry(p.alias, src));
+                m.updated++;
+            }
         }
         if (m.added + m.updated > 0) dirty = true;
         return m;
@@ -269,7 +289,7 @@ public final class RadioAliases {
         int n = 0;
         for (Parsed p : in) {
             Entry old = map.get(p.id);
-            if (old != null && old.source == Source.MANUAL && !old.alias.equals(p.alias) && seen.add(p.id)) n++;
+            if (old != null && old.source == Source.MANUAL && p.source != Source.OTA && !old.alias.equals(p.alias) && seen.add(p.id)) n++;
         }
         return n;
     }

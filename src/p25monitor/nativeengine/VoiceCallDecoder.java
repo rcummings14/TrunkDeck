@@ -2,6 +2,8 @@ package p25monitor.nativeengine;
 
 import p25monitor.App;
 import p25monitor.CallEvent;
+import p25monitor.RadioSystem;
+import p25monitor.p25.MotorolaAlias;
 import p25monitor.p25.P25Framer;
 import p25monitor.p25.P2Mac;
 import java.util.*;
@@ -21,7 +23,13 @@ final class VoiceCallDecoder {
     static final int AMBE_NOISE = 5;
 
     final NativeEngine e;
+    /** One Motorola alias train per frequency. A conventional terminator ends the call before the next block arrives. */
+    final Map<Long, MotorolaAlias> motorola = new HashMap<>();
     VoiceCallDecoder(NativeEngine e) { this.e = e; }
+
+    MotorolaAlias motorola(long freq) {
+        synchronized (motorola) { return motorola.computeIfAbsent(freq, k -> new MotorolaAlias()); }
+    }
 
     void start(ActiveCall c, Tuner t) {
         long now = System.currentTimeMillis();
@@ -43,6 +51,7 @@ final class VoiceCallDecoder {
             e.phase2Calls++;
         } else vd = new ChannelDecoder(t.decoderRate(), t.decoderCenter(c.freq), c.freq, new P25Framer.Listener() {
             public void ldu(int nac, int duid, byte[][] imbe, P25Framer.LinkControl lc, P25Framer.EncryptionSync ess) { onVoice(call, imbe, lc, ess); }
+            public void tdulc(int nac, P25Framer.LinkControl lc) { onTrunkTdulc(call, lc); }
             public void terminator(int nac, int duid) { onVoiceEnd(call); }
             public void nidError() { onVoiceLost(call); }
         }, afc, e.modulation(), e.preferLsm(), NativeEngine.parseNac(e.sys.nac));
@@ -78,6 +87,7 @@ final class VoiceCallDecoder {
         if (c.ended) return;
         long now = System.currentTimeMillis();
         c.ldus++;
+        acceptAlias(c, c.freq, lc);
         if (lc != null && lc.isGroupVoice() && !c.unitToUnit && !c.conventional) {
             c.lastLcTg = lc.talkgroup();
             if (lc.talkgroup() != c.tg && !c.patch) {
@@ -96,17 +106,22 @@ final class VoiceCallDecoder {
                 return;
             }
             c.mismatchRun = 0;
-            if (lc.source() > 0 && lc.source() != c.src) { c.src = lc.source(); c.ev.from = String.valueOf(c.src); c.ev.radioId = c.src; e.listener.callUpdated(c.ev); e.logTalker(c); }
+            if (lc.source() > 0 && lc.source() != c.src) {
+                if (c.src > 0) resetP25AliasParts(c);
+                c.src = lc.source(); c.ev.from = String.valueOf(c.src); c.ev.radioId = c.src;
+                publishP25Alias(c); e.listener.callUpdated(c.ev); e.logTalker(c);
+            }
             if (lc.encrypted()) markEncrypted(c, "LC");
         }
         if (c.mismatchRun > 0) return;
         if (lc != null && c.conventional && lc.isGroupVoice()) {
             c.lastLcTg = lc.talkgroup();
             if (c.tg != lc.talkgroup() || c.src != lc.source()) {
+                if (c.src > 0 && c.src != lc.source()) resetP25AliasParts(c);
                 c.tg = lc.talkgroup(); c.src = lc.source(); c.t = e.tg(c.tg);
                 if (c.t != null) c.priority = c.t.priority;
                 c.ev.to = String.valueOf(c.tg); c.ev.talkgroup = c.tg; c.ev.from = String.valueOf(c.src); c.ev.radioId = c.src;
-                e.listener.callUpdated(c.ev); e.logTalker(c);
+                publishP25Alias(c); e.listener.callUpdated(c.ev); e.logTalker(c);
             } else if (c.t == null) { c.t = e.tg(c.tg); if (c.t != null) c.priority = c.t.priority; }
             if (lc.encrypted()) markEncrypted(c, "LC");
             if (e.conventional) applyListenPolicy(c);
@@ -132,6 +147,99 @@ final class VoiceCallDecoder {
         }
         while (!c.unconfirmed.isEmpty()) playFrames(c, c.unconfirmed.poll());
         playFrames(c, imbe);
+    }
+
+    /** Motorola talker alias (MFID 0x90) and the standard P25 user-alias pair. An on-air name replaces a typed one. */
+    private void acceptAlias(ActiveCall c, long freq, P25Framer.LinkControl lc) {
+        if (lc == null) return;
+        MotorolaAlias.Decoded mot = motorola(freq).feed(lc);
+        if (mot != null) publishOta(c, mot);
+        if (c != null) learnP25Alias(c, lc);
+    }
+
+    /** Link control from a trunked voice channel's TDULC. The terminator callback still ends the transmission. */
+    void onTrunkTdulc(ActiveCall c, P25Framer.LinkControl lc) {
+        if (c != null) acceptAlias(c, c.freq, lc);
+    }
+
+    /** Link control from a conventional channel. The call may already be gone; the radio ID is in the payload. */
+    void onConventionalLc(long f, P25Framer.LinkControl lc) {
+        ActiveCall c;
+        synchronized (e) { c = e.callMap.get("C" + f); }
+        acceptAlias(c, f, lc);
+    }
+
+    private void publishOta(ActiveCall c, MotorolaAlias.Decoded d) {
+        RadioSystem system = e.sys;
+        if (system == null || d == null) return;
+        int radio = d.radioId();
+        String clean = p25monitor.RadioAliases.clean(d.alias());
+        if (!p25monitor.RadioAliases.validId(radio) || clean.isEmpty()) return;
+        String before = system.radios.alias(radio);
+        if (!system.radios.setOverTheAir(radio, clean)) return;
+        String after = system.radios.alias(radio);
+        try { e.app.saveRadioAliases(system); }
+        catch (Exception ex) { e.log("Could not save learned radio alias for " + radio + ": " + ex.getMessage()); }
+        if (before.equals(after)) return;
+        e.log("Learned P25 over-the-air radio alias " + after + " for radio " + radio);
+        if (c == null || c.ended || c.ev == null || (c.src > 0 && c.src != radio)) return;
+        if (c.src <= 0) { c.src = radio; c.ev.from = String.valueOf(radio); c.ev.radioId = radio; }
+        c.loggedSrc = -1;
+        e.listener.callUpdated(c.ev);
+        e.logTalker(c);
+    }
+
+    /** Reassembles the standard P25 FDMA User Alias A/B pair for the current talker. */
+    private void learnP25Alias(ActiveCall c, P25Framer.LinkControl lc) {
+        if (c.phase2) return;
+        int op = lc.opcode();
+        if (op < 0x32 || op > 0x35) return;
+        if (lc.mfid != 0xA4) {
+            e.log(String.format(Locale.ROOT, "P25 alias opcode 0x%02X seen with MFID 0x%02X; this format is not supported", op, lc.mfid));
+            return;
+        }
+        String part = lc.userAliasPart();
+        if (part.isEmpty()) {
+            e.log(String.format(Locale.ROOT, "P25 alias part 0x%02X received but its ASCII payload was invalid", op));
+            return;
+        }
+        e.log(String.format(Locale.ROOT, "P25 alias part 0x%02X received%s", op, c.src > 0 ? " for radio " + c.src : " before a talker radio ID was available"));
+        String alias = null;
+        switch (op) {
+            case 0x32 -> { c.p25AliasOddA = part; c.p25AliasOddB = null; }
+            case 0x33 -> { c.p25AliasOddB = part; if (c.p25AliasOddA != null) alias = c.p25AliasOddA + part; }
+            case 0x34 -> { c.p25AliasEvenA = part; c.p25AliasEvenB = null; }
+            case 0x35 -> { c.p25AliasEvenB = part; if (c.p25AliasEvenA != null) alias = c.p25AliasEvenA + part; }
+            default -> { return; }
+        }
+        if (alias == null) return;
+        c.p25AliasComplete = alias;
+        publishP25Alias(c);
+    }
+
+    private void publishP25Alias(ActiveCall c) {
+        if (c.src <= 0 || c.p25AliasComplete == null) return;
+        RadioSystem system = e.sys;
+        if (system == null) return;
+        String clean = p25monitor.RadioAliases.clean(c.p25AliasComplete);
+        if (clean.isEmpty()) return;
+        c.p25AliasComplete = null;
+        String before = system.radios.alias(c.src);
+        if (!system.radios.setOverTheAir(c.src, clean)) return;
+        try { e.app.saveRadioAliases(system); }
+        catch (Exception ex) { e.log("Could not save learned radio alias for " + c.src + ": " + ex.getMessage()); }
+        String after = system.radios.alias(c.src);
+        if (!after.equals(before)) {
+            c.loggedSrc = -1;
+            e.listener.callUpdated(c.ev);
+            e.log("Learned P25 over-the-air radio alias " + after + " for radio " + c.src);
+            e.logTalker(c);
+        }
+    }
+
+    private static void resetP25AliasParts(ActiveCall c) {
+        c.p25AliasOddA = c.p25AliasOddB = c.p25AliasEvenA = c.p25AliasEvenB = null;
+        c.p25AliasComplete = null;
     }
 
     void playFrames(ActiveCall c, byte[][] imbe) {
@@ -323,4 +431,56 @@ final class VoiceCallDecoder {
     }
 
     void onConventionalEnd(long f) { synchronized (e) { ActiveCall c = e.callMap.get("C" + f); if (c != null) e.calls.endCall(c, "end of transmission"); } }
+
+    /** A DMR group or private call. Encrypted calls are not started. Audio uses the Phase 2 AMBE+2 codec when it is installed. */
+    void onDmr(long f, int slot, int color, int tg, int src, boolean group, byte[][] ambe) {
+        ActiveCall c;
+        synchronized (e) {
+            c = e.callMap.get("D" + f + "/" + slot);
+            if (c == null) {
+                c = new ActiveCall();
+                c.conventional = true; c.phase2 = true; c.freq = f; c.slot = slot - 1;
+                c.start = System.currentTimeMillis(); c.lastSeen = c.start; c.followStart = c.start; c.lastVoice = c.start;
+                c.tg = tg; c.src = src; c.t = e.tg(tg); c.followed = true; c.eligible = true; c.tuner = e.tunerFor(f);
+                c.imbe = EngineLibs.newAmbe();
+                if (c.imbe == null && e.ambeMissingLogged.compareAndSet(false, true))
+                    e.log("DMR call TG " + tg + ": the AMBE+2 voice codec is not available (it needs JMBE 2.x) - the call is followed but silent. DMR is untested.");
+                CallEvent ev = new CallEvent();
+                ev.timestamp = e.ts.format(new Date()); ev.protocol = "DMR"; ev.event = group ? "Group Call" : "Private Call";
+                ev.to = String.valueOf(tg); ev.talkgroup = tg; ev.from = src > 0 ? String.valueOf(src) : ""; ev.radioId = src;
+                ev.frequencyMHz = f / 1e6; ev.timeslot = "TS" + slot + (color >= 0 ? "  CC " + color : "");
+                ev.details = "DMR (untested) " + ev.timeslot;
+                c.ev = ev;
+                e.callMap.put("D" + f + "/" + slot, c);
+                e.listener.callStarted(ev);
+                e.log("DMR (untested) TG " + tg + " slot " + slot + " colour code " + color + " on " + NativeEngine.mhz(f) + " MHz");
+            }
+        }
+        if (ambe != null && ambe.length > 0) onVoice(c, codecFrames(ambe), null, null);
+    }
+
+    /** Each DMR frame is rewritten as the 9-byte AMBE word JMBE's getAudio(byte[]) decodes. */
+    private static byte[][] codecFrames(byte[][] ambe) {
+        byte[][] out = new byte[ambe.length][];
+        for (int i = 0; i < ambe.length; i++) out[i] = p25monitor.dmr.DmrAmbe.forCodec(ambe[i]);
+        return out;
+    }
+
+    void onDmrEncrypted(long f, int slot, int color) {
+        e.log("DMR encrypted call on " + NativeEngine.mhz(f) + " MHz slot " + slot + " colour code " + color + " - skipped");
+    }
+
+    void onDmrEnd(long f) {
+        synchronized (e) {
+            java.util.List<ActiveCall> end = new java.util.ArrayList<>();
+            for (var en : e.callMap.entrySet()) if (en.getKey().startsWith("D" + f + "/")) end.add(en.getValue());
+            for (ActiveCall c : end) e.calls.endCall(c, "end of transmission");
+        }
+    }
+
+    void onDmrGrant(p25monitor.dmr.DmrTrunk.Grant g) {
+        if (g == null) return;
+        e.log("DMR grant (untested) TG " + g.talkgroup + " -> " + NativeEngine.mhz(g.hz) + " MHz slot " + g.slot);
+        onDmr(g.hz, g.slot, -1, g.talkgroup, g.source, true, new byte[0][]);
+    }
 }

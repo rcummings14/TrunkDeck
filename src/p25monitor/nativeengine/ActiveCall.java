@@ -20,6 +20,9 @@ final class ActiveCall {
     // voice diagnostics
     long ldus, lostLdus, imbeFrames, imbeBad, imbeRepeat, imbeErrSum, lcMismatch, tdus, ptts = 1, syncBase, nidBadBase, nidOkBase;
     int mismatchRun, lastLcTg = -1;
+    /** The two seven-character P25 FDMA alias parts, kept separately for odd/even conveyances. */
+    String p25AliasOddA, p25AliasOddB, p25AliasEvenA, p25AliasEvenB;
+    String p25AliasComplete;
     /** Phase 2: TDMA time slot (0 = TS1, 1 = TS2) and AMBE+2 frames received (20 ms each). */
     int slot = -1;
     long p2Frames;

@@ -1,12 +1,12 @@
-# TrunkDeck 1.7.4 — P25 Phase 1 and Phase 2 trunking monitor (Windows & Linux)
+# TrunkDeck 1.7.5 — P25 Phase 1 and Phase 2 trunking monitor (Windows & Linux)
 
 TrunkDeck is a scanner-style dashboard for **P25 trunked radio systems** (Phase 1 control channel; Phase 1 and Phase 2 voice). Type in a control channel, load your
-talkgroups from a CSV file, plug in an Airspy R2 or one or two RTL-SDR dongles (or, new and untested, an SDRplay, HackRF One, LimeSDR or Ettus USRP), press **START MONITORING**, and watch (and hear) the system
+talkgroups from a CSV file, plug in an Airspy R2, an Airspy Mini or one or two RTL-SDR dongles (or, new and untested, an SDRplay, HackRF One, LimeSDR or Ettus USRP), press **START MONITORING**, and watch (and hear) the system
 live: talkgroup, name, frequency, radio ID, call timer, encryption and emergency flags, a control-channel decode meter, an
 activity graph, and a table of **every call that is on the air right now**.
 
 TrunkDeck decodes everything itself with the **TrunkDeck engine**, its own P25 decoder written in Java from the TIA-102 standard.
-It talks to your Airspy R2 and RTL-SDR dongles directly. No other radio program is needed. SDRplay, HackRF, LimeSDR and USRP
+It talks to your Airspy R2, Airspy Mini and RTL-SDR dongles directly. No other radio program is needed. SDRplay, HackRF, LimeSDR and USRP
 receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *Supported receivers*.
 
 **New in 1.7.0 – SDRplay, HackRF One, LimeSDR and Ettus USRP (UNTESTED)**
@@ -78,12 +78,18 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
 **New in 1.5.0 – Display only, close / minimize choices, display border colour**
 * **Display only** (header button **Display only**, or **Ctrl+D**): the same window shrinks to just the big scanner
   display (top bar, talkgroup name, TG line, label bar), with its colours, glow, scan lines, dark-while-scanning /
-  lit-by-a-call backlight and the SCANNING ticker. Resize it and the display scales with it; drag it by the display.
-  Back to the full window: **double-click** the display, **Esc** or **Ctrl+D**. **Right-click** the display:
-  *Full window*, *Always on top* (check box), *Mute speaker* (the Monitor page's mute, kept in sync), *Minimize to
-  tray* (greyed out without a tray) and *Quit*. Size, position and Always on top are remembered
+  lit-by-a-call backlight and the SCANNING ticker. The title bar is gone. Drag the panel to move the window, and drag
+  an edge or a corner to resize it; the display scales with the window.
+  Back to the full window: **double-click** the panel (not a touch button). **Esc** and **Ctrl+D** do the same.
+  **Right-click** the panel: *Exit Display-Only*, *Always on top* (check box), *Mute speaker* (the Monitor page's mute,
+  kept in sync), *Minimize to tray* (greyed out without a tray) and *Close TrunkDeck*. Size, position and Always on top are remembered
   (`ui.displayOnly.bounds`, `ui.displayOnly.onTop`); if that place is no longer on a screen it is put back on one.
   Monitoring, the speaker, recordings, feeds and uploads keep running — nothing restarts or reconnects.
+  Inside the display, along the bottom, large buttons: **Mute all** (silence what you hear; decoding, the log, recordings and streams
+  keep going), **Mute talkgroup** (the talkgroup on the display, or the latest call if the display is idle; muted
+  everywhere, and only those show in **Muted list** — tap one to unmute), and **Hold** (stay on the talkgroup that
+  is on the air until you tap again; forgotten when TrunkDeck closes). These buttons are only on Display only.
+  The home-network page and the main Monitor window do not show them.
 * Monitor page → Listening: **Close (X)** and **Minimize** each offer *Quit (normal)* / *Taskbar (normal)*,
   *System tray* and *Display only*. Defaults are as before (X → System tray, Minimize → Taskbar); settings from
   1.4.7–1.4.9 carry over (`ui.trayClose` / `ui.trayMinimize` are still written for older versions). The tray icon's
@@ -99,14 +105,14 @@ Older release notes are in the GitHub release history.
 
 | | |
 |---|---|
-| **Receiver(s)** | **Either** one **Airspy R2** (about 8.8 MHz at 10 MS/s, which covers a whole site on many systems - control channel and every voice channel at once), **or** one or two **RTL-SDR** dongles (RTL2832U, e.g. RTL-SDR Blog V3/V4; about 2 MHz each: one for the control channel, one that moves to where the other calls are). Both can be mixed: the Airspy takes the site, RTL dongles roam for anything outside its window. |
+| **Receiver(s)** | **Either** one **Airspy R2** or **Airspy Mini** (about 8.8 MHz at 10 MS/s, which covers a whole site on many systems - control channel and every voice channel at once; the Mini also offers 6 MS/s, about 5.3 MHz, and 3 MS/s, about 2.6 MHz; the R2 also offers 2.5 MS/s, about 2.2 MHz), **or** one or two **RTL-SDR** dongles (RTL2832U, e.g. RTL-SDR Blog V3/V4; about 2 MHz each: one for the control channel, one that moves to where the other calls are). Both can be mixed: the Airspy takes the site, RTL dongles roam for anything outside its window. |
 | **Antenna** | One that suits your system's band (e.g. UHF 450–470 MHz or 800 MHz). |
 | **Computer** | 64-bit Windows 10/11, or 64-bit Linux (Fedora, Ubuntu, Mint, Debian, Arch, Raspberry Pi OS 64-bit). 4 GB RAM or more. In testing, 8 calls at once used under half of one CPU core. |
 | **Java** | Nothing to install. The installer downloads the Eclipse Temurin Java 25 JDK into TrunkDeck's own folder (it doesn't touch any Java you already have). |
 | **Internet** | During install (about 140 MB on Linux, 200 MB on Windows), and once on first start to fetch the voice codec's source code. |
 
-**Airspy R2:** supported natively since 1.4.0 (TrunkDeck's own driver, no SDRTrunk or Airspy tools needed) - see *Airspy R2*
-below. The Airspy Mini has the same USB ID and should work at its own rates but is untested. **SDRplay, HackRF, LimeSDR,
+**Airspy R2:** supported natively since 1.4.0 (TrunkDeck's own driver, no SDRTrunk or Airspy tools needed). **Airspy Mini:** the same driver - see *Airspy R2 and Airspy Mini*
+below. The Mini uses the same USB ID as the R2; TrunkDeck reads the receiver's sample rates and names it in the list. **SDRplay, HackRF, LimeSDR,
 USRP:** new in 1.7.0 and untested - see *Supported receivers*.
 
 ### Supported receivers
@@ -114,7 +120,8 @@ USRP:** new in 1.7.0 and untested - see *Supported receivers*.
 | Receiver | Status | Driver | Bundled with TrunkDeck? | What you install |
 |---|---|---|---|---|
 | **RTL-SDR** (RTL2832U dongles) | **Tested** | TrunkDeck + librtlsdr | Yes (`app/native`) | Windows: WinUSB via Zadig. Linux: the installer's USB setup |
-| **Airspy R2** (Mini: should work) | **Tested** | TrunkDeck's own driver | Yes (libusb on Windows) | Windows: WinUSB via Zadig. Linux: USB setup + `libusb1` |
+| **Airspy R2** | **Tested** | TrunkDeck's own driver | Yes (libusb on Windows) | Windows: WinUSB via Zadig. Linux: USB setup + `libusb1`. Rates: 10 and 2.5 MS/s |
+| **Airspy Mini** | **Tested** | TrunkDeck's own driver (same USB ID as the R2) | Yes (libusb on Windows) | Windows: WinUSB via Zadig. Linux: USB setup + `libusb1`. Rates: 10, 6 and 3 MS/s |
 | **SDRplay** RSP1A / RSP2 / RSPdx / RSPduo / RSP1B | **UNTESTED** (1.7.0) | SoapySDR + SoapySDRPlay3 + SDRplay API 3.x | **No** (SDRplay's licence forbids it) | SDRplay API **and** SoapySDR + SDRplay module (below) |
 | **HackRF One** | **UNTESTED** (1.7.0) | SoapySDR + SoapyHackRF | No | SoapySDR + HackRF module; Windows: WinUSB via Zadig |
 | **LimeSDR** (USB, Mini) | **UNTESTED** (1.7.0) | SoapySDR + LimeSuite (lms7) | No | SoapySDR + LimeSuite module |
@@ -155,7 +162,7 @@ from the Engine page and which receiver, driver versions and operating system yo
 
 ## Pick your system
 
-Download **TrunkDeck-1.7.4-windows.zip** (Windows) or **TrunkDeck-1.7.4-linux.tar.gz** (Linux) from the GitHub
+Download **TrunkDeck-1.7.5-windows.zip** (Windows) or **TrunkDeck-1.7.5-linux.tar.gz** (Linux) from the GitHub
 Release and unpack it. Inside the `TrunkDeck` folder you'll find (each download has only its own installer folder):
 
 ```
@@ -183,7 +190,7 @@ TrunkDeck/
 3. **USB driver (one time, for each receiver):** Windows needs the *WinUSB* driver for SDRs.
    1. Download **Zadig** from <https://zadig.akeo.ie> and run it.
    2. Plug in each **RTL-SDR**. Click *Options → List All Devices*, pick **Bulk-In, Interface (Interface 0)** (it might be named *RTL2838UHIDIR*; the USB ID shows **0BDA 2838**), choose **WinUSB**, and click *Replace Driver*. With two dongles, do this for each one. They may show up with the same name, so install it on each entry, and repeat if you plug a dongle into a different USB port.
-   3. **Airspy R2:** plug it in; in Zadig pick **AIRSPY** (USB ID **1D50 60A1**), choose **WinUSB**, *Replace Driver* (or
+   3. **Airspy R2 or Airspy Mini:** plug it in; in Zadig pick **AIRSPY** (USB ID **1D50 60A1** — both models), choose **WinUSB**, *Replace Driver* (or
       *Install Driver*). If you already used the Airspy with SDR# on this PC it usually has WinUSB already - check that Zadig shows
       *Driver: WinUSB* for it.
    4. Unplug the receivers and plug them back in.
@@ -207,7 +214,7 @@ To uninstall: use **Settings → Apps → TrunkDeck → Uninstall**, or *Start M
    It installs for your user only, into `~/.local/share/trunkdeck`.
    *No internet on that PC?* Download the Temurin file the installer prints (`OpenJDK25U-jdk_…_linux_hotspot_25.0.5_8.tar.gz`) elsewhere and put it next to `install.sh` or in `~/Downloads`; the installer uses it (and still checks the checksum).
 3. **USB permissions (one time):** the installer asks *"Set this up now? [Y/n]"*. Press Enter and type your password.
-   This installs a **udev rule** so your user can open **RTL-SDR** dongles (`0bda:2838` / `0bda:2832`) and the **Airspy R2**
+   This installs a **udev rule** so your user can open **RTL-SDR** dongles (`0bda:2838` / `0bda:2832`) and the **Airspy R2 or Mini**
    (`1d50:60a1`), and it **blocks the
    DVB-T TV driver** (`dvb_usb_rtl28xxu`) that otherwise grabs RTL-SDR dongles. Afterwards, unplug the dongles and plug them back in.
    Skipped it? Run `sudo ~/.local/share/trunkdeck/udev/setup-usb.sh` later.
@@ -219,17 +226,24 @@ To uninstall, run `~/.local/share/trunkdeck/uninstall.sh`. It asks before deleti
 
 ---
 
-## Airspy R2
+## Airspy R2 and Airspy Mini
 
-One Airspy R2 at **10 MS/s** receives about **8.8 MHz** at once. TrunkDeck splits it into 312.5 kHz sub-bands (a polyphase filter
+One Airspy at **10 MS/s** receives about **8.8 MHz** at once (R2 or Mini). TrunkDeck splits that into sub-bands (a polyphase filter
 bank) and runs the control channel and **every voice channel inside the window at the same time** - no roaming, no missed calls
 inside the window. If a site's control and voice channels all fit within about 8.8 MHz, one Airspy covers the whole site.
 
-* **Setup:** Windows - Zadig step 3.3 above (WinUSB for *AIRSPY*). Fedora/Linux - the USB setup (udev rule for `1d50:60a1`) and
+The two models do not offer the same sample rates. TrunkDeck asks the receiver which rates it supports and shows
+**Airspy R2** or **Airspy Mini** in the receiver list:
+
+* **Airspy R2:** 10 MS/s (about 8.8 MHz) or 2.5 MS/s (about 2.2 MHz).
+* **Airspy Mini:** 10 MS/s (about 8.8 MHz), 6 MS/s (about 5.3 MHz) or 3 MS/s (about 2.6 MHz). A saved rate the Mini does not
+  offer (for example 2.5 MS/s) is not sent to it; TrunkDeck picks 10 MS/s instead, or a lower rate you choose.
+
+* **Setup:** Windows - Zadig step 3.3 above (WinUSB for *AIRSPY*; the R2 and the Mini share USB ID `1d50:60a1`). Fedora/Linux - the USB setup (udev rule for `1d50:60a1`) and
   `libusb1`. No other Airspy software is needed.
-* **Engine → Tuners** lists each Airspy with its serial number: **Role** (*auto*/*control*: it takes the control channel and the
-  whole window; *voice*: a second wideband receiver that roams for calls outside the first; *off*), **sample rate** (10 MS/s, or
-  2.5 MS/s for slower PCs), **gain** (*Linearity 0-21* - recommended, resists strong nearby signals - or *Sensitivity 0-21*; higher =
+* **Engine → Tuners** lists each Airspy with its model and serial number: **Role** (*auto*/*control*: it takes the control channel and the
+  whole window; *voice*: a second wideband receiver that roams for calls outside the first; *off*), **sample rate** (only rates
+  that receiver supports), **gain** (*Linearity 0-21* - recommended, resists strong nearby signals - or *Sensitivity 0-21*; higher =
   more gain; default Linearity 16), **Bias** (4.5 V on the antenna jack for an LNA - off by default; only turn it on if your
   antenna system needs it), and an optional fixed **centre MHz** (leave empty: automatic).
 * **Automatic centre:** TrunkDeck starts centred on the control channels, re-centres as soon as the site's channel plan
@@ -294,10 +308,10 @@ in a few seconds - your feeds stay connected (listeners hear silence for that mo
 | Page | What it does |
 |---|---|
 | **Monitor** | The scanner display (the call on the speaker: big alpha tag, talkgroup, category/tag, frequency, radio ID, call timer, ENC / EMERGENCY / FAV / MUTED badges; a dimmed SCANNING when no call is playing), control-channel meter, activity graph). Below it: the **Active calls** table, the live call log (double-click a call, or **Play**, to hear its recording), **Hot talkgroups**, the **Speaker** choice, and quick buttons for the selected talkgroup (**Favorite, Mute, Add to list, Replay last**). **What to play:** *Everything*, *Only talkgroups in my list*, or *Favorites only*. |
-| **Talkgroups** | Your list for the selected system. **Import CSV**, **Export CSV**, **Save CSV template**, search box, category filter, *Favorites* / *Heard* filters. Tick ★ (favorite), **Mute** and **Rec** (record) per talkgroup. Edit names, categories and **Priority** (1 = most important, 100 = normal) in the table. Select rows (Ctrl/Shift-click or Ctrl+A) to favorite, mute, record or assign streams in bulk. |
-| **Systems** | Add or edit systems: name, site, **control channel(s) in MHz**, demodulator (Auto / C4FM / LSM for simulcast), optional NAC/WACN/System ID/RFSS/Site, **Max simultaneous calls**, and *Record every call*. **Add preset** brings back the fictional example presets. |
+| **Talkgroups** | Your list for the selected system. **Import CSV**, **Export CSV**, **Save CSV template**, search box, category filter, *Favorites* / *Heard* filters. Tick ★ (favorite), **Mute** and **Rec** (record) per talkgroup. Edit names, categories and **Priority** (1 = most important, 100 = normal) in the table. The **Color** column sets the colour of that talkgroup's name and number while it is on the air (or Default, which keeps the display theme). The list itself stays the usual colours. The Monitor, Display only, and the home-network page use that text colour. Sites of the same system share it. Select rows (Ctrl/Shift-click or Ctrl+A) to favorite, mute, record or assign streams in bulk. |
+| **Systems** | Add or edit systems: name, site, **control channel(s) in MHz**, demodulator (Auto / C4FM / LSM for simulcast), optional NAC/WACN/System ID/RFSS/Site, **Max simultaneous calls**, *Record every call*, and *Auto-start when TrunkDeck opens* (only one system; the next time TrunkDeck opens it starts after a short countdown on the Monitor page, with Cancel). The home-network page can show the countdown but cannot change this checkbox. **Add preset** brings back the fictional example presets. |
 | **Streams** | Broadcastify Calls, Broadcastify Feeds and Icecast. See below. |
-| **Recordings** | Recorded calls, one file per call (talkgroups with **Rec** ticked, or every call). Double-click a recording (or **Play** / **Pause**) to hear it in TrunkDeck. The talkgroup name and time stay on screen while it plays. A live call on the speaker pauses it. Volume slider and *Open folder* button. |
+| **Recordings** | Recorded calls, one file per call (talkgroups with **Rec** ticked, or every call). Double-click a recording (or **Play** / **Pause**) to hear it in TrunkDeck. The talkgroup name and time stay on screen while it plays. A live call on the speaker pauses it. Volume slider, *Open folder*, *Choose folder...* and *Use default*. *Choose folder...* sets where new recordings are saved (used right away, no restart). *Use default* returns to the usual folder in your home directory. Recordings already saved are left in place and can still be played. If the folder is missing or can't be written, TrunkDeck explains and uses the usual folder. The home-network page cannot change it. |
 | **Engine** | Dongles (role, PPM, gain, bias-T), live site info and tuner windows, voice codec, voice-call diagnostics, decoded control-channel messages, and *Test with an I/Q recording*. See *Engine page*. |
 | **Setup & Help** | Checklist (dongles, voice codec, system chosen), detected dongles, engine log, and a **60-second demo** that shows the display with made-up calls, so you can try it without a radio. |
 
@@ -376,8 +390,8 @@ Without premium, you can copy the talkgroup table from the RadioReference system
 **Import** and **Export CSV**. A name is shown as `NAME (ID)`; radios without a name show just their ID.
 
 * **DSD+ `.radios` files** (DSD+ 2.x "radio records"): only `P25` lines whose network ID matches the system's WACN and
-  System ID (Systems page; the example presets are `A4321.2D5`) are imported. If a line has a *radio alias* it is used, otherwise
-  its *P25 talker alias*. A leading `*` is removed. DMR, NXDN, Fusion and other P25 systems are skipped and counted. If the system
+  System ID (Systems page; the example presets are `A4321.2D5`) are imported. Only the *P25 talker alias* is used
+  (the name heard over the air). A typed radio alias with no talker alias is skipped. A leading `*` is removed. DMR, NXDN, Fusion and other P25 systems are skipped and counted. If the system
   has no WACN / System ID set, TrunkDeck asks which network in the file to import.
 * **CSV:** `radio_id,alias` with or without a header row (also `Radio ID`, `RID`, `Unit`, `Name`, `Alias`, `Alpha Tag`;
   comma, semicolon or tab). TrunkDeck's own export adds a `source` column (`manual` = typed by you, `import`), which is read back.
@@ -597,9 +611,7 @@ the RadioReference database lists them) and delete the examples if you like. No 
 own CSV (see *Talkgroup CSV files*).
 
 ## Limitations (please read)
-* **Radio names come from you or an import, not from the air.** TrunkDeck 1.4.1 does not decode Motorola talker aliases
-  (Phase 1 link control / Phase 2 MAC): the encoding is an undocumented Motorola scheme (known only from third-party reverse
-  engineering) and none of the recordings available for testing contain one, so a decoder could not be checked. Import a DSD+ file (DSD+ does decode them) or type names instead.
+* **Phase 1 learns a radio name from the air.** A standard P25 user-alias link-control word, or a Motorola talker alias in a voice frame or a terminator, is saved and used. It replaces a name you typed or imported. Phase 2 talker aliases are not decoded. A DSD+ import uses only the heard-name column.
 * **Phase 2 has been confirmed on few live calls so far.** Phase 2 needs a Phase 1 control
   channel (as on most Phase 2 systems); Phase 2 TDMA control channels, Phase 2 data and the encryption-sync field are not decoded.
 * Phase 2 audio needs JMBE 2.x (it contains the AMBE+2 codec). With an old JMBE 1.x jar Phase 2 calls are followed but silent.
@@ -610,7 +622,7 @@ own CSV (see *Talkgroup CSV files*).
   their frequency). See *How two dongles cover a site*.
 * **Mix all calls** plays everything, but the big display doesn't follow individual calls in that mode (the Active calls table does).
 * The LSM/CQPSK (simulcast) demodulator has been tested on public recordings and simulated simulcast, not on a live simulcast site.
-* Unit-to-unit (private) calls, data (PDU) and the HDU/TDULC contents are logged but not followed or decoded.
+* Unit-to-unit (private) calls, data (PDU) and the HDU are logged but not followed. A terminator's link control is read for a radio name, and the transmission still ends.
 * **Encrypted talkgroups can't be heard.** They're still listed, in purple, so you can see the activity.
 * Expect it to decode somewhat worse than mature decoders on weak or fringe signals.
 * Monitoring public-safety radio is legal in most of the US, but some states restrict scanners in vehicles or using what you
@@ -624,7 +636,7 @@ own CSV (see *Talkgroup CSV files*).
 |---|---|
 | Display says **NO TUNER FOUND** / "No RTL-SDR dongles found" / "usb_claim_interface error" | Plug in the dongle(s). Windows: do the Zadig step, and close any other SDR program (only one program can use a dongle). Linux: run the USB setup, then unplug and replug. Press STOP and START. |
 | **Airspy** not listed, or "No Airspy found" / "permission" / "in use" next to it | Windows: do the Zadig step for **AIRSPY (1D50 60A1)** and close SDR# / other SDR programs. Linux: run the USB setup (`sudo ~/.local/share/trunkdeck/udev/setup-usb.sh`), unplug and replug, and make sure `airspy_rx` or another program isn't running. "libusb not available": `sudo dnf install libusb1`. |
-| Engine → Diagnostics shows **"THE PC IS NOT KEEPING UP"** on the Wideband line (dropped USB samples) | The PC can't process 10 MS/s: close other heavy programs, plug the Airspy straight into a USB 2.0/3.0 port (not a hub), or set the Airspy to **2.5 MS/s** (covers about 2.2 MHz). |
+| Engine → Diagnostics shows **"THE PC IS NOT KEEPING UP"** on the Wideband line (dropped USB samples) | The PC can't process 10 MS/s: close other heavy programs, plug the Airspy straight into a USB 2.0/3.0 port (not a hub), or pick a lower sample rate (R2: **2.5 MS/s**, about 2.2 MHz; Mini: **6** or **3 MS/s**, about 5.3 or 2.6 MHz). |
 | Engine → Diagnostics shows **"Processing T1: … processing restarts"** or **"… decoder errors contained"**, or dropped blocks "while sample processing was stopped/restarting" (1.4.3) | TrunkDeck caught an internal error and recovered by itself (decoding continues). Please send the *Processing* line and the engine log lines around it (they contain the error and where it happened) so it can be fixed. |
 | Airspy: **ADC clipping** in Diagnostics, or calls break up near strong transmitters | Lower the gain (Engine → Tuners: a lower *Linearity* number). If levels are very low, raise it or try a *Sensitivity* preset. |
 | "RTL-SDR driver library not available" | Windows: the `app\native` folder is missing; run Install.bat again. Linux: `sudo dnf install rtl-sdr libusb1` (or `sudo apt install rtl-sdr libusb-1.0-0`). |

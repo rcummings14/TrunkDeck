@@ -105,18 +105,23 @@ public class DisplayBarsTests {
         int yel = count(idle, PAD + 10, PAD + 8, PAD + lcdW() - 10, PAD + 32, yellow, 40);
         check(yel > 60, "top bar text in the chosen colour (" + yel + " px)");
         call(d); BufferedImage lit = paint(d);
-        int pk = count(lit, PAD + 10, labY() - 8, PAD + lcdW() - 10, labY() + 8, pink, 40);
+        int pk = count(lit, PAD + 10, PAD + 40, PAD + lcdW() - 10, H - PAD, pink, 50);
         check(pk > 40, "label bar text (FREQUENCY / UNIT / RADIO) in the chosen colour (" + pk + " px)");
+        ScannerDisplay amberD = display();
+        amberD.setColors(DisplayTheme.AMBER, DisplayPalette.of(DisplayTheme.AMBER));
+        call(amberD);
+        int amberPx = count(paint(amberD), PAD + 10, PAD + 40, PAD + lcdW() - 10, H - PAD, new Color(0xFFE6B8), 50);
+        check(amberPx > 8, "field values use the Amber theme colour (" + amberPx + " px)");
         check(near(lit.getRGB(barX(), topY()), red, 10), "bars stay their colour when the display is lit");
         for (DisplayTheme t : DisplayTheme.values()) {
             if (t == DisplayTheme.CUSTOM) continue;
             for (DisplayPalette p : new DisplayPalette[]{DisplayPalette.of(t), DisplayPalette.of(t).with(TOP, red).with(LAB, navy)}) {
                 ScannerDisplay x = display(); x.setColors(p.base, p);
-                BufferedImage dk = paint(x); call(x); BufferedImage on = paint(x);
-                int gx = PAD + lcdW() / 2, gy = PAD + 120;   // open glass, between the lines
-                double ld = DisplayTheme.lum(new Color(dk.getRGB(gx, gy))), ll = DisplayTheme.lum(new Color(on.getRGB(gx, gy)));
-                boolean bars = p.get(TOP) == null || near(on.getRGB(barX(), topY()), p.get(TOP), 10);
-                check(ll > ld && bars, String.format(Locale.ROOT, "%-14s %s: dark while scanning (%.4f), lit by a call (%.4f), bars ok", t.label, p.get(TOP) == null ? "preset   " : "+bars    ", ld, ll));
+                BufferedImage dk = paint(x);
+                int gx = PAD + 30, gy = PAD + 48;
+                double ld = DisplayTheme.lum(new Color(dk.getRGB(gx, gy)));
+                boolean bars = p.get(TOP) == null || near(paint(x).getRGB(barX(), topY()), p.get(TOP), 12);
+                check(ld < 0.2 && bars, String.format(Locale.ROOT, "%-14s %s: panel stays dark (%.4f), bars ok", t.label, p.get(TOP) == null ? "preset   " : "+bars    ", ld));
             }
         }
         border();

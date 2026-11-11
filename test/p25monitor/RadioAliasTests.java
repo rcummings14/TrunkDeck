@@ -1,5 +1,7 @@
 package p25monitor;
 
+import p25monitor.p25.MotorolaAlias;
+import p25monitor.p25.P25Framer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
@@ -25,6 +27,7 @@ public final class RadioAliasTests {
         roundTrip(tmp);
         persistence(tmp);
         labelsAndUploads();
+        otaAlias();
         System.out.println("RadioAliasTests: " + pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);
     }
@@ -73,15 +76,16 @@ public final class RadioAliasTests {
         RadioAliases.ParseResult r = RadioAliases.parseDsdPlus(t, "A4321.2D5");
         Map<Integer, String> m = new HashMap<>();
         for (RadioAliases.Parsed p : r.entries) m.put(p.id(), p.alias());
-        check("TEST UNIT 02".equals(m.get(2000)), "talker alias used when the radio alias is empty (group -2)");
-        check("My name".equals(m.get(2001)), "radio alias preferred over the talker alias");
-        check("Starred".equals(m.get(2002)), "'*' prefix removed (group -1, 9-column line)");
+        check("TEST UNIT 02".equals(m.get(2000)) && r.entries.stream().anyMatch(p -> p.id() == 2000 && p.source() == RadioAliases.Source.OTA),
+                "talker alias used (group -2) and stored as over the air");
+        check("OTA NAME".equals(m.get(2001)) && !m.containsValue("My name"), "the heard name is used and the typed radio alias is ignored");
+        check(!m.containsKey(2002), "a typed radio alias with no talker alias is skipped");
         check("Comma, inside".equals(m.get(2003)), "quoted comma kept; network matched case-insensitively with leading zeros (a4321.02d5)");
-        check(!m.containsKey(2004) && r.noAlias == 1, "record without a name skipped and counted");
+        check(!m.containsKey(2004) && r.noAlias == 2, "records without a talker alias are skipped and counted");
         check(r.badId == 1, "radio ID above 24 bits skipped as invalid");
         check(r.otherNetwork == 2 && !m.containsKey(2005) && !m.containsKey(2006), "other SysID and SysID-without-WACN skipped (2)");
         check(r.notP25 == 1, "DMR record skipped");
-        check("spaced out".equals(m.get(2008)), "whitespace / tab in a name collapsed");
+        check("x".equals(m.get(2008)), "talker alias used; a leading '*' on a typed alias is not the name");
         check(r.records == 10 && r.comments == 3, "10 records, 3 comment lines (" + r.records + ", " + r.comments + ")");
         check(RadioAliases.clean("x".repeat(60)).length() == RadioAliases.MAX_LEN, "names are capped at 40 characters");
     }
@@ -185,5 +189,63 @@ public final class RadioAliasTests {
         check(p25monitor.nativeengine.MockOpenMhz.parseJsonList(named).size() == 3, "the mock OpenMHz server still parses the list");
         StreamConfig c = new StreamConfig();
         check(!c.sendRadioNames, "sending names to OpenMHz is off unless ticked");
+    }
+
+    /** sdrtrunk issue 2092's Motorola train, plus a TDULC build/decode round trip. The log's "*ALIAS 319439*" is that
+     *  program's alias-list label; the CRC-checked payload is the 11-character name. */
+    static void otaAlias() {
+        System.out.println("8. Motorola over-the-air talker alias");
+        byte[][] train = {
+                {(byte) 0x15, (byte) 0x90, 0x2D, 0x2A, 0x06, 0x01, 0x00, (byte) 0xE4, (byte) 0xAF},
+                {(byte) 0x17, (byte) 0x90, 0x01, (byte) 0xEB, (byte) 0xEE, 0x07, 0x40, (byte) 0xF0, 0x4D},
+                {(byte) 0x17, (byte) 0x90, 0x02, (byte) 0xEF, (byte) 0xCF, 0x2D, 0x21, 0x68, 0x1A},
+                {(byte) 0x17, (byte) 0x90, 0x03, (byte) 0xE1, (byte) 0xB5, 0x2F, (byte) 0xFB, (byte) 0xFB, (byte) 0xFE},
+                {(byte) 0x17, (byte) 0x90, 0x04, (byte) 0xEE, 0x53, (byte) 0xBD, 0x50, 0x6F, (byte) 0xA3},
+                {(byte) 0x17, (byte) 0x90, 0x05, (byte) 0xE1, 0x23, 0x44, 0x5C, 0x7C, 0x35},
+                {(byte) 0x17, (byte) 0x90, 0x06, (byte) 0xE0, (byte) 0x8A, (byte) 0xDD, 0x33, 0x00, 0x00}
+        };
+        MotorolaAlias mot = new MotorolaAlias();
+        MotorolaAlias.Decoded early = null;
+        for (int i = 0; i < train.length - 1; i++) early = mot.feed(word(train[i]));
+        check(early == null, "an unfinished train is not published");
+        MotorolaAlias.Decoded d = mot.feed(word(train[train.length - 1]));
+        check(d != null && "SPPD-706813".equals(d.alias()) && d.radioId() == 319439 && d.wacn() == 0xBEE07 && d.systemId() == 0x40F,
+                "CRC-checked alias SPPD-706813 for radio 319439, WACN BEE07, system 40F" + (d == null ? "" : " (got " + d.alias() + " radio " + d.radioId() + ")"));
+        check(mot.feed(word(train[train.length - 1])) == null, "the same data block does not publish again without a new header");
+        if (d == null) return;
+        MotorolaAlias bad = new MotorolaAlias();
+        byte[] flipped = train[6].clone();
+        flipped[4] ^= 0x01;
+        for (int i = 0; i < 6; i++) bad.feed(word(train[i]));
+        check(bad.feed(word(flipped)) == null, "a train that fails CRC is not published");
+        RadioAliases learned = new RadioAliases();
+        learned.setOverTheAir(d.radioId(), d.alias());
+        check("SPPD-706813".equals(learned.alias(319439)) && learned.entry(319439).source() == RadioAliases.Source.OTA, "OTA name stored");
+        RadioAliases typed = new RadioAliases();
+        typed.setManual(319439, "TYPED");
+        typed.setOverTheAir(319439, d.alias());
+        check("SPPD-706813".equals(typed.alias(319439)) && typed.entry(319439).source() == RadioAliases.Source.OTA, "an over-the-air name replaces a typed name");
+        check(typed.conflictsWithManual(List.of(new RadioAliases.Parsed(319439, "HAR SWFD BASE", RadioAliases.Source.OTA))) == 0, "an over-the-air import does not ask to keep a typed name");
+        typed.merge(List.of(new RadioAliases.Parsed(319439, "HAR SWFD BASE", RadioAliases.Source.OTA)), false);
+        check("HAR SWFD BASE".equals(typed.alias(319439)) && typed.entry(319439).source() == RadioAliases.Source.OTA, "a DSD+ talker alias replaces the stored name");
+
+        for (byte[] msg : new byte[][] {train[0], train[1]}) {
+            P25Framer.LinkControl[] got = {null};
+            int[] terms = {0};
+            int[] nacGot = {-1};
+            P25Framer fr = new P25Framer(new P25Framer.Listener() {
+                public void tdulc(int nac, P25Framer.LinkControl lc) { got[0] = lc; nacGot[0] = nac; }
+                public void terminator(int nac, int duid) { terms[0]++; }
+            });
+            fr.sync(1f);
+            int[] dibits = P25Framer.buildTdulc(0x40D, msg);
+            for (int i = 24; i < dibits.length; i++) fr.symbol(dibits[i], 1f);
+            check(got[0] != null && Arrays.equals(msg, got[0].b) && nacGot[0] == 0x40D && terms[0] == 1,
+                    "TDULC " + String.format("%02X %02X", msg[0], msg[2]) + " round-trips and still ends the transmission");
+        }
+    }
+
+    static P25Framer.LinkControl word(byte[] b) {
+        return new P25Framer.LinkControl(P25Framer.hexbits(b, 12));
     }
 }

@@ -37,7 +37,7 @@ public final class TalkgroupLists {
      */
     public static boolean sameSystem(RadioSystem a, RadioSystem b) {
         if (a == null || b == null || a == b) return false;
-        if (a.conventional() || b.conventional()) return false;
+        if (a.conventional() || b.conventional() || a.dmr() || b.dmr()) return false;
         String pa = p25Key(a), pb = p25Key(b);
         if (!pa.isEmpty() && pa.equals(pb)) return true;
         return a.rrSid > 0 && a.rrSid == b.rrSid;
@@ -131,6 +131,7 @@ public final class TalkgroupLists {
                 old.muted |= n.muted;
                 old.record |= n.record;
                 if (n.priority != 100) old.priority = n.priority;
+                if (n.color != null && !n.color.isBlank()) old.color = TalkgroupColors.store(n.color);
                 if (n.streams != null) old.streams.addAll(n.streams);
                 if (n.lastHeard > old.lastHeard) old.lastHeard = n.lastHeard;
                 if (n.calls > old.calls) old.calls = n.calls;

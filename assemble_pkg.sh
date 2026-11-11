@@ -15,7 +15,7 @@ cp stage/README.md stage/START-HERE.txt stage/NOTICE.txt "$P/"
 cp -r stage/licenses "$P/licenses"
 cp -r stage/linux "$P/linux" && cp -r stage/windows "$P/windows"
 chmod +x "$P/linux/"*.sh "$P/linux/udev/setup-usb.sh"
-cp -r src test lib build.sh assemble_pkg.sh make_zip.py "$P/source/"
+cp -r src test lib fonts build.sh assemble_pkg.sh make_zip.py "$P/source/"
 cp stage/third-party/* "$P/source/third-party/"
 # never ship user data (radio-name files, settings) even if one was left in the tree
 find "$P" \( -name "*.radios" -o -name "settings.properties" -o -name "rr-app-key.txt" -o -name "rr-login.properties" \) -delete

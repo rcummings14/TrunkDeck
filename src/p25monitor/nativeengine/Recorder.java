@@ -3,7 +3,8 @@ package p25monitor.nativeengine;
 import java.io.*;
 import java.nio.file.*;
 
-/** Writes finished calls to the shared recordings folder (MP3 when the LAME encoder is available, else WAV). */
+/** Writes finished calls to the recordings folder (MP3 when the LAME encoder is available, else WAV).
+ * The folder is read when the call ends, so a folder chosen on the Recordings page applies to the next saved call. */
 final class Recorder {
     static Path write(float[] pcm, int n, String stamp, int tg, int src) throws IOException {
         Path dir = p25monitor.App.recordingDir();

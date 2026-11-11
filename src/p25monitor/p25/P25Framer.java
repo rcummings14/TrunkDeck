@@ -5,7 +5,8 @@ import p25monitor.dsp.C4fmDemod;
 /**
  * Assembles P25 Phase 1 data units from demodulated symbols: removes status symbols (every 36th dibit counted from
  * the start of frame sync), decodes the NID (BCH) with NAC check, then TSDU (up to 3 trellis-coded TSBKs), LDU1/LDU2
- * (9 IMBE voice frames + RS/Hamming protected link control / encryption sync), HDU, TDU and TDULC.
+ * (9 IMBE voice frames + RS/Hamming protected link control / encryption sync), HDU, TDU, and TDULC
+ * (12 sequential Golay(24,12) words over an RS(24,12) link-control word).
  */
 public final class P25Framer implements C4fmDemod.Sink {
     public static final int DUID_HDU = 0x0, DUID_TDU = 0x3, DUID_LDU1 = 0x5, DUID_TSDU = 0x7, DUID_LDU2 = 0xA,
@@ -18,6 +19,8 @@ public final class P25Framer implements C4fmDemod.Sink {
         /** imbe: 9 frames x 18 bytes (raw 144 channel bits, JMBE deinterleaves/decodes). lc: LDU1 link control or null. */
         default void ldu(int nac, int duid, byte[][] imbe, LinkControl lc, EncryptionSync ess) {}
         default void hdu(int nac) {}
+        /** TDULC link control, or null when its Reed-Solomon word did not check. {@link #terminator} still follows. */
+        default void tdulc(int nac, LinkControl lc) {}
         default void terminator(int nac, int duid) {}
         /** A frame sync whose NID could not be decoded (a lost data unit). */
         default void nidError() {}
@@ -87,7 +90,8 @@ public final class P25Framer implements C4fmDemod.Sink {
                 case DUID_TSDU -> need = 112 + 196;
                 case DUID_LDU1, DUID_LDU2 -> need = 1680;
                 case DUID_HDU -> need = 112 + 648;
-                case DUID_TDU, DUID_TDULC -> { listener.terminator(nac, duid); active = false; }
+                case DUID_TDU -> { listener.terminator(nac, duid); active = false; }
+                case DUID_TDULC -> need = 112 + 288; // 12 Golay(24,12) words, status symbols already removed
                 default -> active = false; // PDU etc. not decoded
             }
             return;
@@ -112,6 +116,7 @@ public final class P25Framer implements C4fmDemod.Sink {
             }
             case DUID_LDU1, DUID_LDU2 -> { ldu(); active = false; }
             case DUID_HDU -> { listener.hdu(nac); active = false; }
+            case DUID_TDULC -> { tdulc(); active = false; }
             default -> active = false;
         }
     }
@@ -144,6 +149,25 @@ public final class P25Framer implements C4fmDemod.Sink {
         listener.ldu(nac, duid, frames, lc, ess);
     }
 
+    /** TDULC: 12 sequential Golay(24,12) words. A failed Golay word keeps its raw data bits; the RS word still has to check. */
+    void tdulc() {
+        int[] hex = new int[24];
+        int[] err = new int[1];
+        for (int w = 0; w < 12; w++) {
+            int cw = 0, o = 112 + w * 24;
+            for (int i = 0; i < 24; i++) cw = (cw << 1) | bits[o + i];
+            int data = Fec.golay24Decode(cw, err);
+            fecBits += 24;
+            if (err[0] >= 0) fecErrors += err[0];
+            hex[w * 2] = (data >>> 6) & 0x3f;
+            hex[w * 2 + 1] = data & 0x3f;
+        }
+        int[] c = hex.clone();
+        LinkControl lc = rs2412.decode(c) >= 0 ? new LinkControl(c) : null;
+        listener.tdulc(nac, lc);
+        listener.terminator(nac, duid);
+    }
+
     /** Packs hexbits (6 bits each) into bytes, MSB first. */
     static byte[] pack(int[] hex, int count) {
         byte[] b = new byte[(count * 6 + 7) / 8];
@@ -167,6 +191,19 @@ public final class P25Framer implements C4fmDemod.Sink {
         public int talkgroup() { return (u(4) << 8) | u(5); }
         public int target() { return (u(3) << 16) | (u(4) << 8) | u(5); }
         public int source() { return (u(6) << 16) | (u(7) << 8) | u(8); }
+        /** Seven ASCII characters in the P25 FDMA User Alias Part A/B link-control messages, or empty otherwise. */
+        public String userAliasPart() {
+            int op = opcode();
+            if (mfid != 0xA4 || (op < 0x32 || op > 0x35) || (lcf & 0xC0) != 0) return "";
+            StringBuilder s = new StringBuilder(7);
+            for (int i = 2; i <= 8; i++) {
+                int ch = u(i);
+                if (ch == 0) break;
+                if (ch < 0x20 || ch > 0x7e) return "";
+                s.append((char) ch);
+            }
+            return s.toString();
+        }
         public String toString() {
             if (isGroupVoice()) return "LC GROUP VOICE TG:" + talkgroup() + " SRC:" + source() + (encrypted() ? " ENCRYPTED" : "") + (emergency() ? " EMERGENCY" : "");
             if (isUnitToUnit()) return "LC UNIT-TO-UNIT TO:" + target() + " SRC:" + source();
@@ -246,6 +283,18 @@ public final class P25Framer implements C4fmDemod.Sink {
     public static int[] buildTdu(int nac) {
         byte[] b = header(nac, DUID_TDU);
         return toDibitsWithStatus(b, 112 + 28, 2);
+    }
+
+    /** TDULC whose 9-byte link-control word is protected by RS(24,12) and 12 sequential Golay(24,12) words. */
+    public static int[] buildTdulc(int nac, byte[] lc9) {
+        byte[] b = header(nac, DUID_TDULC);
+        int[] cw = new ReedSolomon(24, 12).encode(hexbits(lc9, 12));
+        int n = 112;
+        for (int i = 0; i < 12; i++) {
+            int g = Fec.golay24Encode((cw[i * 2] << 6) | cw[i * 2 + 1]);
+            for (int bit = 0; bit < 24; bit++) b[n++] = (byte) ((g >>> (23 - bit)) & 1);
+        }
+        return toDibitsWithStatus(b, n, 2);
     }
 
     /** Splits bytes into hexbits (MSB first). */

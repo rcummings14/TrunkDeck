@@ -123,6 +123,45 @@ public final class RrImport {
         return m.equals("P25") || m.equals("APCO") || m.equals("APCOP25") || m.startsWith("P25");
     }
 
+    public static boolean dmrMode(String mode) {
+        return mode != null && mode.toUpperCase(Locale.ROOT).contains("DMR");
+    }
+
+    /** DMR channels RadioReference listed. A tone of 0-15 is kept as the colour code. */
+    public static List<RadioSystem.Channel> dmrChannels(List<Freq> freqs) {
+        List<RadioSystem.Channel> l = new ArrayList<>();
+        if (freqs == null) return l;
+        for (Freq f : freqs) {
+            if (f == null || !dmrMode(f.mode()) || f.outMhz() < 25) continue;
+            String name = !f.alpha().isBlank() ? f.alpha().trim() : f.descr().trim();
+            boolean seen = false;
+            for (RadioSystem.Channel c : l) if (Math.abs(c.mhz - f.outMhz()) < 1e-6) seen = true;
+            if (seen) continue;
+            String cc = "";
+            String tone = f.tone() == null ? "" : f.tone().trim();
+            if (tone.matches("\\d{1,2}")) {
+                int n = Integer.parseInt(tone);
+                if (n <= 15) cc = String.valueOf(n);
+            }
+            l.add(new RadioSystem.Channel(f.outMhz(), cc, name));
+        }
+        return l;
+    }
+
+    public static RadioSystem fromDmr(String name, List<Freq> freqs) {
+        RadioSystem s = new RadioSystem();
+        s.kind = RadioSystem.DMR;
+        s.name = name == null || name.isBlank() ? "DMR conventional" : name.trim();
+        s.channels = dmrChannels(freqs);
+        s.notes = "From RadioReference. DMR conventional (untested).";
+        for (RadioSystem.Channel c : s.channels) if (c.nac != null && !c.nac.isBlank()) { try { s.colorCode = Integer.parseInt(c.nac); } catch (NumberFormatException ignored) {} break; }
+        return s;
+    }
+
+    public static boolean dmrSystem(String typeName, String flavorName) {
+        return ((typeName == null ? "" : typeName) + " " + (flavorName == null ? "" : flavorName)).toLowerCase(Locale.ROOT).contains("dmr");
+    }
+
     public static String nacFromTone(String tone) {
         if (tone == null) return "";
         String t = tone.trim();
@@ -222,8 +261,9 @@ public final class RrImport {
     }
 
     static void applySystem(RadioSystem s, Fetched f, List<Site> sites) {
-        boolean conv = conventionalSystem(f.details());
-        s.kind = conv ? RadioSystem.CONVENTIONAL : RadioSystem.TRUNKED;
+        boolean dmr = dmrSystem(f.details().typeName(), f.details().flavorName());
+        boolean conv = conventionalSystem(f.details()) || (dmr && (f.details().typeName() + " " + f.details().flavorName()).toLowerCase(Locale.ROOT).contains("conventional"));
+        s.kind = dmr ? (conv ? RadioSystem.DMR : RadioSystem.DMR_TRUNK) : conv ? RadioSystem.CONVENTIONAL : RadioSystem.TRUNKED;
         if (conv) {
             s.channels = conventionalChannels(sites);
             s.controlChannelsMHz = new ArrayList<>();
