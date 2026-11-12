@@ -175,6 +175,12 @@ Tests that need them are skipped when they are missing.
 * Broadcastify, OpenMHz, Rdio Scanner, RadioReference, Airspy, RTL-SDR, SDRplay, HackRF, LimeSDR, Ettus and USRP are names of their respective owners;
   TrunkDeck is not affiliated with or endorsed by any of them.
 
+## Credits
+
+Built by Ray Cummings.  
+Thanks to @phillydjdan for the Display-Only button idea ([Discussion #15](https://github.com/rcummings14/TrunkDeck/discussions/15)) and DMR testing,  
+and @kd8bxp for SDRplay testing, the auto-start idea and the Linux line-ending catch.
+
 ## License
 
 TrunkDeck is released under the [MIT License](LICENSE) - Copyright (c) 2026 TrunkDeck contributors.
