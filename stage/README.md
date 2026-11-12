@@ -1,4 +1,4 @@
-# TrunkDeck 1.7.4 — P25 Phase 1 and Phase 2 trunking monitor (Windows & Linux)
+# TrunkDeck 1.7.4.1 — P25 Phase 1 and Phase 2 trunking monitor (Windows & Linux)
 
 TrunkDeck is a scanner-style dashboard for **P25 trunked radio systems** (Phase 1 control channel; Phase 1 and Phase 2 voice). Type in a control channel, load your
 talkgroups from a CSV file, plug in an Airspy R2 or one or two RTL-SDR dongles (or, new and untested, an SDRplay, HackRF One, LimeSDR or Ettus USRP), press **START MONITORING**, and watch (and hear) the system
@@ -155,7 +155,7 @@ from the Engine page and which receiver, driver versions and operating system yo
 
 ## Pick your system
 
-Download **TrunkDeck-1.7.4-windows.zip** (Windows) or **TrunkDeck-1.7.4-linux.tar.gz** (Linux) from the GitHub
+Download **TrunkDeck-1.7.4.1-windows.zip** (Windows) or **TrunkDeck-1.7.4.1-linux.tar.gz** (Linux) from the GitHub
 Release and unpack it. Inside the `TrunkDeck` folder you'll find (each download has only its own installer folder):
 
 ```
