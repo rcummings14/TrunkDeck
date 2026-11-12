@@ -2,9 +2,10 @@ package p25monitor.dmr;
 
 /**
  * Collects dibits and reports a burst when the 48-bit sync word is found in the middle of a 264-bit window.
- * <p>While acquiring, at most {@link #ACQUIRE_ERRORS} wrong sync bits are accepted. After two syncs land on the
- * 144-dibit burst grid, the receiver is locked and will take up to {@link #TRACK_ERRORS} errors, but only within
- * {@link #BOUNDARY} dibits of that grid. Missing the next grid point drops the lock and the tight rule returns.
+ * <p>While acquiring, at most {@link #ACQUIRE_ERRORS} wrong sync bits are accepted (tight enough that noise does
+ * not lock, loose enough for a moderate signal). After two syncs land on the 144-dibit burst grid, the receiver
+ * is locked and will take up to {@link #TRACK_ERRORS} errors, but only within {@link #BOUNDARY} dibits of that
+ * grid. One missed burst is kept. A second missed grid point drops the lock and the tight rule returns.
  * An inverted pattern (every sync bit flipped) is accepted, and that polarity is kept after three inverted syncs
  * in a row until three normal ones replace it.
  */
@@ -12,9 +13,9 @@ public final class DmrFramer {
     public interface Sink { void burst(DmrBurst burst, DmrCach cach); }
 
     /** Kept for callers that still name the acquire limit. */
-    public static final int MAX_ERRORS = 4;
-    /** Bit errors allowed before the burst grid is known. */
-    public static final int ACQUIRE_ERRORS = 4;
+    public static final int MAX_ERRORS = 6;
+    /** Bit errors allowed before the burst grid is known. Looser than a perfect sync, still under the false hits in a clean burst. */
+    public static final int ACQUIRE_ERRORS = 6;
     /** Bit errors allowed once locked, and only on the burst grid. */
     /** Looser than acquire, and still tight enough that an all-zero window is not an inverted sync. */
     public static final int TRACK_ERRORS = 8;
@@ -50,9 +51,9 @@ public final class DmrFramer {
     public void dibit(int dibit) {
         hist[n % hist.length] = dibit & 3;
         n++;
-        // The next burst was due and did not arrive: back to the tight acquire rule.
-        // A voice superframe is still being stepped by position, so that gap is not a loss.
-        if (locked && follow == 0 && haveSync && n > lastSync + BURST_GAP + BOUNDARY) {
+        // Two burst periods with no sync: back to the tight acquire rule. One missed burst is not a loss.
+        // A voice superframe is still being stepped by position, so that gap is not a loss either.
+        if (locked && follow == 0 && haveSync && n > lastSync + 2L * BURST_GAP + BOUNDARY) {
             locked = false;
             streak = 0;
         }

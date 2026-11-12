@@ -123,6 +123,16 @@ public final class DmrBurst {
         return d;
     }
 
+    /** Connect Plus voice grant body: source, talkgroup, 4-bit repeater (LCN from 1), then the timeslot bit. */
+    public static boolean[] connectVoice(int source, int target, int lcn, int slot) {
+        boolean[] d = new boolean[64];
+        DmrBits.write(d, 0, source, 24);
+        DmrBits.write(d, 24, target, 24);
+        DmrBits.write(d, 48, lcn, 4);
+        if (slot == 2) d[52] = true;
+        return d;
+    }
+
     public static boolean[] restData(int repeater, int slot) {
         boolean[] d = new boolean[64];
         DmrBits.write(d, 0, repeater, 8);

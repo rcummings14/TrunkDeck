@@ -247,13 +247,14 @@ final class CallManager {
             ChannelDecoder v = c.vd;
             boolean stopping = why.equals("engine stopped");
             if (v != null) {
-                if (c.tuner != null && c.tuner != e.ccTuner && c.voiceFrames > 3) e.voice.learnPpm(c.tuner, v);
-                if (c.imbeFrames > 0)
+                boolean dmrDec = v.dmr != null;
+                if (!dmrDec && c.tuner != null && c.tuner != e.ccTuner && c.voiceFrames > 3) e.voice.learnPpm(c.tuner, v);
+                if (!dmrDec && c.imbeFrames > 0)
                     e.log(String.format(Locale.ROOT, "TG %d call (T%d %s%s): %d voice frames, %.2f corrected bits/frame, %.0f%% muted, %.0f%% repeated; %s; level %s; offset %+.0f Hz; %s; %s errors %s",
                             c.tg, c.tuner == null ? 0 : c.tuner.id, NativeEngine.mhz(c.freq), c.phase2 ? " slot " + (c.slot + 1) : "", c.imbeFrames, (double) c.imbeErrSum / c.imbeFrames, 100.0 * c.imbeBad / c.imbeFrames, 100.0 * c.imbeRepeat / c.imbeFrames,
                             v.demodSummary(), Double.isNaN(v.syncPower) ? "-" : String.format(Locale.ROOT, "%.1f dB", v.syncPower), v.frequencyError(), TunerAdvice.streamSummary(v), c.phase2 ? "AMBE+2" : "IMBE", TunerAdvice.histSummary(c)));
-                if (ChannelDecoder.TRACE) e.log("TG " + c.tg + " trace: " + v.traceText());
-                if (c.voiceFrames == 0 && !c.encrypted && !c.conventional && !stopping) {
+                if (!dmrDec && ChannelDecoder.TRACE) e.log("TG " + c.tg + " trace: " + v.traceText());
+                if (!dmrDec && c.voiceFrames == 0 && !c.encrypted && !c.conventional && !stopping) {
                     boolean sync = v.syncs() > c.syncBase;
                     String ph = c.phase2 ? "PHASE 2" : "PHASE 1";
                     c.ev.details = (sync ? ph + " SYNC BUT NO VOICE FRAMES ON " : "NO " + ph + " SIGNAL ON ") + NativeEngine.mhz(c.freq) + (sync || c.tuner == null ? "" : " - CHECK PPM/GAIN OF T" + c.tuner.id);
@@ -261,10 +262,14 @@ final class CallManager {
                     countMissed(c.phase2 ? "no Phase 2 voice decoded" : "no Phase 1 voice decoded", c);
                     e.log("TG " + c.tg + ": " + c.ev.details.toLowerCase() + " (offset " + String.format(Locale.ROOT, "%+.0f Hz", v.frequencyError()) + ", level " + String.format(Locale.ROOT, "%.1f dB", v.power) + ")");
                 }
-                if (c == e.speaker.speaker || c == e.speaker.last) { String[][] d = e.diag.callRows(c, v, why); if (d != null) e.lastDiag = d; }
-                boolean last = !c.phase2 || e.tdma.detach(c);    // a TDMA channel stays while the other slot has a call
+                if (!dmrDec && (c == e.speaker.speaker || c == e.speaker.last)) { String[][] d = e.diag.callRows(c, v, why); if (d != null) e.lastDiag = d; }
+                boolean shared = false;
+                if (dmrDec) for (ActiveCall o : e.callMap.values()) if (o != c && !o.ended && o.vd == v) shared = true;
+                boolean ccDec = false;
+                if (dmrDec) for (ChannelDecoder d : e.ccDecoders) if (d == v) ccDec = true;
+                boolean last = !shared && !ccDec && (dmrDec || !c.phase2 || e.tdma.detach(c));    // a TDMA channel stays while the other slot has a call
                 if (last) { Path p = v.stopTap(); if (p != null) e.log("Saved voice-channel I/Q: " + p); }
-                if (c.tuner != null && !c.phase2) c.tuner.decoders.remove(v);
+                if (!shared && !ccDec && c.tuner != null && (dmrDec || !c.phase2)) c.tuner.decoders.remove(v);
                 c.vd = null;
             } else if (c.eligible && c.waiting && !stopping) {
                 String reason = c.ev.details != null && c.ev.details.startsWith("CALL LIMIT") ? "call limit reached" : "out of tuner range";

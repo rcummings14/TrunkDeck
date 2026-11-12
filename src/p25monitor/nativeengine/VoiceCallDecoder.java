@@ -347,6 +347,10 @@ final class VoiceCallDecoder {
                 e.listener.callStarted(ev);
                 e.log("DMR (untested) TG " + tg + " slot " + slot + " colour code " + color + " on " + NativeEngine.mhz(f) + " MHz");
             }
+            if (c.vd == null) {
+                ChannelDecoder have = e.findDmr(f);
+                if (have != null) { c.vd = have; c.tuner = e.tunerOf(have); c.followed = true; }
+            }
         }
         if (ambe != null && ambe.length > 0) onVoice(c, codecFrames(ambe), null, null);
     }
@@ -362,17 +366,44 @@ final class VoiceCallDecoder {
         e.log("DMR encrypted call on " + NativeEngine.mhz(f) + " MHz slot " + slot + " colour code " + color + " - skipped");
     }
 
-    void onDmrEnd(long f) {
+    void onDmrEnd(long f, int slot) {
         synchronized (e) {
-            java.util.List<ActiveCall> end = new java.util.ArrayList<>();
-            for (var en : e.callMap.entrySet()) if (en.getKey().startsWith("D" + f + "/")) end.add(en.getValue());
-            for (ActiveCall c : end) e.calls.endCall(c, "end of transmission");
+            ActiveCall c = e.callMap.get("D" + f + "/" + slot);
+            if (c != null) e.calls.endCall(c, "end of transmission");
         }
     }
 
     void onDmrGrant(p25monitor.dmr.DmrTrunk.Grant g) {
         if (g == null) return;
-        e.log("DMR grant (untested) TG " + g.talkgroup + " -> " + NativeEngine.mhz(g.hz) + " MHz slot " + g.slot);
+        if (g.hz <= 0) {
+            if (e.dmrLogged.add("nofreq " + g.lcn))
+                e.log("DMR grant (untested) TG " + g.talkgroup + " LCN " + g.lcn + " slot " + g.slot
+                        + " has no frequency. List every repeater in LCN order (LCN 1 first) on the Systems page.");
+            CallEvent ev = new CallEvent();
+            ev.timestamp = e.ts.format(new Date());
+            ev.protocol = "DMR";
+            ev.event = "Group Call";
+            ev.to = String.valueOf(g.talkgroup);
+            ev.talkgroup = g.talkgroup;
+            ev.from = g.source > 0 ? String.valueOf(g.source) : "";
+            ev.radioId = g.source;
+            ev.timeslot = "TS" + g.slot;
+            ev.details = "NO FREQUENCY FOR LCN " + g.lcn + " (untested)";
+            ev.background = true;
+            e.listener.callStarted(ev);
+            return;
+        }
+        e.primeDmr(g);
+        e.log("DMR grant (untested) TG " + g.talkgroup + " LCN " + g.lcn + " -> " + NativeEngine.mhz(g.hz) + " MHz slot " + g.slot);
         onDmr(g.hz, g.slot, -1, g.talkgroup, g.source, true, new byte[0][]);
+        ActiveCall c;
+        synchronized (e) { c = e.callMap.get("D" + g.hz + "/" + g.slot); }
+        if (c == null) return;
+        long now = System.currentTimeMillis();
+        c.lastSeen = now;
+        c.lastVoice = now;
+        c.lastLcTg = g.talkgroup;
+        if (g.source > 0 && c.src <= 0) { c.src = g.source; if (c.ev != null) { c.ev.from = String.valueOf(g.source); c.ev.radioId = g.source; } }
+        e.followDmr(c);
     }
 }

@@ -41,6 +41,7 @@ public class NativePage extends JPanel {
     final JLabel rrKeyStatus = new JLabel();
     final JPasswordField rrKeyField = new JPasswordField(24);
     final JCheckBox recordIq = new JCheckBox("Record voice-channel I/Q (next 5 calls, 30 s each)");
+    final JButton rawIq = MainFrame.button("Record raw I/Q\u2026", null, Theme.DIM);
     static final int[] GAINS = {-1, 0, 9, 14, 27, 37, 77, 87, 125, 144, 157, 166, 197, 207, 229, 254, 280, 297, 328, 338, 364, 372, 386, 402, 421, 434, 439, 445, 480, 496};
 
     NativePage(MainFrame f) {
@@ -289,6 +290,8 @@ public class NativePage extends JPanel {
         recordIq.setSelected(Boolean.parseBoolean(f.app.settings.getProperty("native.recordIq", "false")));
         recordIq.setToolTipText("Saves the followed voice channel as a 48 kS/s I/Q .wav (about 11 MB per 30 s) in the recordings folder's 'iq' sub-folder, so it can be analysed or sent for troubleshooting. Applies from the next followed call.");
         recordIq.addActionListener(e -> { f.app.settings.setProperty("native.recordIq", String.valueOf(recordIq.isSelected())); f.app.saveSettings(); });
+        rawIq.setToolTipText("Records the control receiver's raw I/Q (16-bit .cs16) to a folder you choose, for a number of minutes, then stops. The size is shown before it starts.");
+        rawIq.addActionListener(e -> recordRawIq());
         JLabel hl = Jargon.explain(new JLabel("Hang time"), "Hang time");
         hl.setForeground(Theme.DIM);
         JSpinner hangSp = new JSpinner(new SpinnerNumberModel(Math.round(Integer.parseInt(f.app.settings.getProperty("native.hangMs", "2500")) / 100.0) / 10.0, 0.5, 15.0, 0.5));
@@ -301,7 +304,7 @@ public class NativePage extends JPanel {
         JPanel hang = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0)); hang.setOpaque(false);
         hang.add(hl); hang.add(hangSp); hang.add(new JLabel("s"));
         JPanel vb = Layouts.wrapRow(FlowLayout.LEFT, 6, 2);
-        vb.add(copyDiag); vb.add(hang); vb.add(recordIq); vb.add(openIq);
+        vb.add(copyDiag); vb.add(hang); vb.add(recordIq); vb.add(rawIq); vb.add(openIq);
         vp.add(vb, BorderLayout.SOUTH);
         voice.add(vp, BorderLayout.CENTER);
 
@@ -702,6 +705,44 @@ public class NativePage extends JPanel {
         updateCodec();
     }
 
+    // ---------------------------------------------------------------- raw I/Q
+    void recordRawIq() {
+        NativeEngine ne = f.nativeEngine;
+        if (ne.rawIqActive()) { ne.stopRawIq(); f.toast("Raw I/Q recording stopped."); return; }
+        if (!ne.isRunning() || ne.mode() == NativeEngine.Mode.SIMULATED) {
+            JOptionPane.showMessageDialog(this, "Start monitoring on a receiver (or an I/Q file) first. The built-in test signal is not recorded.", App.NAME, JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        JSpinner minutes = new JSpinner(new SpinnerNumberModel(1, 1, 10, 1));
+        JLabel warn = new JLabel(" ");
+        Runnable refreshWarn = () -> {
+            double rate = 0;
+            try { rate = ne.controlSampleRate(); } catch (Exception ignored) {}
+            int m = ((Number) minutes.getValue()).intValue();
+            warn.setText("<html><body style='width:420px'>" + (rate > 0 ? RawIqCapture.warning(rate, m) : "The sample rate is not known yet.") + "</body></html>");
+        };
+        minutes.addChangeListener(e -> refreshWarn.run());
+        refreshWarn.run();
+        JPanel box = new JPanel(new BorderLayout(0, 8));
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        row.add(new JLabel("Minutes"));
+        row.add(minutes);
+        box.add(row, BorderLayout.NORTH);
+        box.add(warn, BorderLayout.CENTER);
+        if (JOptionPane.showConfirmDialog(this, box, "Record raw I/Q", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.OK_OPTION) return;
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("Folder for the raw I/Q file");
+        fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        if (fc.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        try {
+            int m = ((Number) minutes.getValue()).intValue();
+            String path = ne.startRawIq(fc.getSelectedFile().toPath(), m);
+            f.toast("Recording raw I/Q for " + m + " min: " + path);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), App.NAME, JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
     // ---------------------------------------------------------------- I/Q file
     void browse() {
         JFileChooser fc = new JFileChooser(file.getText().isBlank() ? null : Paths.get(file.getText()).getParent().toFile());
@@ -766,6 +807,7 @@ public class NativePage extends JPanel {
         if (!pause.isSelected() && msgModel.update(ne.recentMessages(), filter.getText().trim().toUpperCase())) msgTable.fitColumns(150);
         String now = run ? ne.nowFollowing() : "";
         hearing.setText(now.isEmpty() ? (run ? "Not following a call" : " ") : now);
+        rawIq.setText(run && ne.rawIqActive() ? "Stop raw I/Q" : "Record raw I/Q\u2026");
         hearing.setForeground(now.startsWith("NOW") ? Theme.GREEN : now.startsWith("HANG") ? Theme.AMBER : now.startsWith("ENC") ? Theme.VIOLET : Theme.DIM);
         String[][] d = run ? ne.voiceDiagnostics() : null;
         if (d == null) { if (diagModel.getRowCount() != 1) { diagModel.setRowCount(0); diagModel.addRow(new Object[]{"", run ? "No call followed yet" : "Engine stopped"}); } }

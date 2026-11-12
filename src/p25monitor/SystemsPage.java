@@ -229,14 +229,17 @@ public class SystemsPage extends JPanel {
     void showKind(int kind) {
         boolean fixed = kind == 1 || kind == 2;
         boolean dmr = kind == 2 || kind == 3;
-        freqLabel.setText(fixed ? "Channels MHz" : "Control channel(s) MHz");
-        Jargon.explain(freqLabel, fixed ? "Channels MHz" : "Control channel(s) MHz");
+        boolean conPlus = kind == 3 && dmrFlavor.getSelectedIndex() == 2;
+        freqLabel.setText(fixed ? "Channels MHz" : conPlus ? "Repeaters MHz (LCN order)" : "Control channel(s) MHz");
+        Jargon.explain(freqLabel, fixed ? "Channels MHz" : conPlus ? "Repeaters MHz (LCN order)" : "Control channel(s) MHz");
         cc.setToolTipText(freqLabel.getToolTipText());
-        cc.putClientProperty("JTextField.placeholderText", kind == 2 ? "e.g. 450.0000:1/1 Sample" : fixed ? "e.g. 155.2500, 155.3700:2D5" : "e.g. 851.0125, 851.5125");
+        cc.putClientProperty("JTextField.placeholderText", kind == 2 ? "e.g. 450.0000:1/1 Sample" : fixed ? "e.g. 155.2500, 155.3700:2D5" : conPlus ? "e.g. 451.0000, 451.0125" : "e.g. 851.0125, 851.5125");
         freqHelp.setText(helpHtml(kind == 2
                 ? "DMR channels, separated by commas. Colour code and timeslot after a colon: 450.0000:1/2. The colour code below applies when a channel does not set its own. (untested)"
                 : fixed
                 ? "The frequencies to listen on, separated by commas. Add a NAC after a colon when one channel uses its own, for example 155.2500:2D5. The NAC below applies to every channel without its own."
+                : conPlus
+                ? "Every Connect Plus repeater, in LCN order, LCN 1 first, separated by commas. A grant names the repeater number, not a frequency. (untested)"
                 : "Primary first; add alternate control channels separated by commas. TrunkDeck rotates through them until one locks."));
         boolean tier3 = kind == 3 && dmrFlavor.getSelectedIndex() == 0;
         demodLabel.setVisible(!dmr);
@@ -267,7 +270,7 @@ public class SystemsPage extends JPanel {
         dmrHelp.setVisible(dmr);
         dmrHelp.setText(helpHtml(kind == 2
                 ? "Listen to timeslot 1, timeslot 2, or both. (untested)"
-                : "Tier III follows a control-channel grant. Capacity Plus and XPT follow the rest channel. Connect Plus follows a voice grant. (untested)"));
+                : "Tier III follows a control-channel grant. Capacity Plus and XPT follow the rest channel. Connect Plus follows a voice grant: list every repeater in LCN order, LCN 1 first. Both timeslots are decoded. (untested)"));
         String note = kind == 1 ? "P25 conventional has not been tested on a real radio system yet."
                 : kind == 2 ? "DMR conventional has not been tested on a real radio system yet."
                 : kind == 3 ? "DMR trunking (Tier III, Capacity Plus, Connect Plus and XPT) has not been tested on a real radio system yet."

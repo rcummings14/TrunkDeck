@@ -230,8 +230,33 @@ public final class DmrFec {
 
     public static boolean csbkOk(boolean[] info96) {
         if (info96 == null || info96.length < 96) return false;
+        return csbkResidual(info96) == 0;
+    }
+
+    /** Received CRC XOR the CRC the standard mask expects. Zero means the CSBK checks. */
+    public static int csbkResidual(boolean[] info96) {
         int got = DmrBits.read(info96, 80, 16) ^ MASK_CSBK;
-        return got == crcCcitt(info96, 0, 80);
+        return (got ^ crcCcitt(info96, 0, 80)) & 0xFFFF;
+    }
+
+    /**
+     * The CSBK as received when its CRC matches, or a copy with the one body bit flipped that makes the CRC match.
+     * The opcode is read from the result, so a corrected bit can change which message it is. Null when nothing fits.
+     */
+    public static boolean[] repairCsbk(boolean[] info96) {
+        if (info96 == null || info96.length < 96) return null;
+        if (csbkOk(info96)) return info96;
+        boolean[] trial = info96.clone();
+        boolean[] found = null;
+        for (int i = 0; i < 80; i++) {
+            trial[i] = !trial[i];
+            if (csbkOk(trial)) {
+                if (found != null) return null;
+                found = trial.clone();
+            }
+            trial[i] = !trial[i];
+        }
+        return found;
     }
 
     /**

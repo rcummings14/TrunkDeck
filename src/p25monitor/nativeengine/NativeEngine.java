@@ -4,6 +4,7 @@ import p25monitor.*;
 import p25monitor.dsp.PolyphaseBank;
 import p25monitor.p25.*;
 import p25monitor.sdr.*;
+import java.io.IOException;
 import java.nio.file.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
@@ -189,6 +190,10 @@ public final class NativeEngine {
     final TdmaChannels tdma = new TdmaChannels(this);
     final Map<String, Long> undecodable = new ConcurrentHashMap<>();
     final Set<Long> voiceOnCcLogged = ConcurrentHashMap.newKeySet();
+    /** First sighting of each unparsed DMR opcode, and of each missing Connect Plus frequency. */
+    final Set<String> dmrLogged = ConcurrentHashMap.newKeySet();
+    volatile RawIqCapture rawIq;
+    volatile String rawIqDone;
     volatile String[][] lastDiag;
     int iqRecorded;
     /** Voice channel usage seen in grants (frequency -> decayed count): where tuners are placed. */
@@ -258,7 +263,8 @@ public final class NativeEngine {
         lsmPreferred = "lsm".equalsIgnoreCase(s.nativeModulation); ccDemodLogged = "";
         usage.clear(); missed.clear(); missedRecent.clear(); peakConcurrent = 0; tuners.clear(); huntCount = 0; fixedWideCenter = 0; widePlanned = false;
         conventional = s.fixedChannels(); parkedDecoders.clear(); scanTuner = null; scanGroups = List.of(); scanIndex = 0; lastScanAt = 0;
-        capPlusAll = false; siteTrunk = null;
+        capPlusAll = false; siteTrunk = null; dmrLogged.clear();
+        RawIqCapture oldRaw = rawIq; rawIq = null; rawIqDone = null; if (oldRaw != null) oldRaw.close();
         if (s.dmr()) log("DMR " + (s.dmrTrunk() ? "trunked (" + s.dmrFlavor + ")" : "conventional") + " (untested). If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         SpeakerMode sm;
         try { sm = SpeakerMode.valueOf(app.settings.getProperty("native.speaker", "PRIORITY")); } catch (Exception e) { sm = SpeakerMode.PRIORITY; }
@@ -367,6 +373,7 @@ public final class NativeEngine {
         if (t.wideband()) { startWideTuner(t, isCc); return; }
         t.src.start(new IqSource.Listener() {
             public void samples(float[] i, float[] q, int n) {
+                if (isCc) tapRaw(i, q, n);
                 if (isCc) for (ChannelDecoder d : ccDecoders) runDecoder(t, d, i, q, n);
                 for (ChannelDecoder d : t.decoders) runDecoder(t, d, i, q, n);
             }
@@ -492,6 +499,7 @@ public final class NativeEngine {
         final int threads = Integer.getInteger("trunkdeck.wideThreads", Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() / 2)));
         t.src.start(new IqSource.Listener() {
             public void samples(float[] i, float[] q, int n) {
+                if (isCc) tapRaw(i, q, n);
                 long t0 = System.nanoTime();
                 ChannelDecoder[] cc = isCc ? ccDecoders.toArray(new ChannelDecoder[0]) : new ChannelDecoder[0];
                 ChannelDecoder[] vd = t.decoders.toArray(new ChannelDecoder[0]);
@@ -790,25 +798,31 @@ public final class NativeEngine {
     /** One rest-channel tracker shared by every repeater of this DMR site. */
     p25monitor.dmr.DmrTrunk siteTrunk;
 
-    /** Capacity Plus (untested): decode every repeater at once when they fit; otherwise keep the group-at-a-time hunt. */
+    /** Capacity Plus and Connect Plus (untested): decode every repeater at once when they fit. */
     void noteCapPlus() {
         capPlusAll = false;
         siteTrunk = null;
         if (sys == null || !sys.dmrTrunk() || ccTuner == null) return;
         siteTrunk = new p25monitor.dmr.DmrTrunk(p25monitor.dmr.DmrTrunk.flavor(sys.dmrFlavor));
-        if (siteTrunk.flavor != p25monitor.dmr.DmrTrunk.Flavor.CAPACITY_PLUS) return;
         long window = (long) (2 * ccTuner.halfSpan());
+        boolean wide = siteTrunk.flavor == p25monitor.dmr.DmrTrunk.Flavor.CAPACITY_PLUS
+                || siteTrunk.flavor == p25monitor.dmr.DmrTrunk.Flavor.CONNECT_PLUS;
+        if (!wide) return;
         capPlusAll = p25monitor.dmr.DmrTrunk.watchAll(sys.dmrFlavor, ccFreqs, window);
+        String kind = siteTrunk.flavor == p25monitor.dmr.DmrTrunk.Flavor.CONNECT_PLUS ? "Connect Plus" : "Capacity Plus";
         log(capPlusAll
-                ? "Capacity Plus (untested): all " + ccFreqs.size() + " repeaters fit in this window, so each repeater is decoded on both timeslots."
-                : "Capacity Plus (untested): the repeaters do not fit in one window, so they are followed one group at a time.");
+                ? kind + " (untested): all " + ccFreqs.size() + " repeaters fit in this window, so each repeater is decoded on both timeslots."
+                : kind + " (untested): the repeaters do not fit in one window, so voice outside it is followed when a tuner is free.");
+        if (siteTrunk.flavor == p25monitor.dmr.DmrTrunk.Flavor.CONNECT_PLUS && ccFreqs.size() < 2)
+            log("Connect Plus (untested): only one frequency is listed. List every repeater in LCN order (LCN 1 first) or grants to the other repeaters have no frequency.");
     }
 
     /** A channel decoder whose P25 framer is idle and whose samples feed the DMR receiver. */
     ChannelDecoder dmrDecoder(Tuner t, long f) {
         ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {}, 0);
         int color = sys == null ? -1 : sys.colorCodeFor(f);
-        int slot = capPlusAll ? 0 : (sys == null ? 0 : sys.slotFor(f));
+        // Trunked DMR uses both timeslots. A saved "timeslot 1" would otherwise drop about half the calls.
+        int slot = sys != null && sys.dmrTrunk() ? 0 : (sys == null ? 0 : sys.slotFor(f));
         java.util.List<Long> chans = new java.util.ArrayList<>();
         if (sys != null) for (double mhz : sys.frequencies()) chans.add(Math.round(mhz * 1e6));
         long base = chans.isEmpty() ? f : chans.get(0);
@@ -819,7 +833,8 @@ public final class NativeEngine {
             public void group(long hz, int sl, int color, int tg, int src, byte[][] ambe) { voice.onDmr(hz, sl, color, tg, src, true, ambe); d.lastFrameAt = System.currentTimeMillis(); }
             public void unit(long hz, int sl, int color, int target, int src) { voice.onDmr(hz, sl, color, target, src, false, new byte[0][]); d.lastFrameAt = System.currentTimeMillis(); }
             public void encrypted(long hz, int sl, int color) { voice.onDmrEncrypted(hz, sl, color); }
-            public void end(long hz, int sl) { voice.onDmrEnd(hz); }
+            public void end(long hz, int sl) { voice.onDmrEnd(hz, sl); }
+            public void control(String text) { noteDmrControl(freq, text); d.lastFrameAt = System.currentTimeMillis(); }
             public void grant(p25monitor.dmr.DmrTrunk.Grant g) { voice.onDmrGrant(g); d.lastFrameAt = System.currentTimeMillis(); }
             public void rest(int repeater, int sl, long hz, boolean moved) {
                 if (moved) log("DMR rest channel (untested) -> repeater " + repeater + " slot " + sl + (hz > 0 ? " " + mhz(hz) + " MHz" : ""));
@@ -830,6 +845,122 @@ public final class NativeEngine {
         });
         d.anchor = () -> tunerAnchor(t, d, freq);
         return d;
+    }
+
+    /** A decoded DMR control block counts the same way a P25 TSBK does, so the status can go LIVE. */
+    void noteDmrControl(long freq, String text) {
+        if (text == null || text.isEmpty()) return;
+        long now = System.currentTimeMillis();
+        synchronized (this) {
+            lastTsbkAt = now;
+            ccFreqHz = freq;
+            msgTotal++;
+            pendingMsgs++;
+            lastMsg = text;
+            msgs.add(new Msg(now, freq / 1e6, text));
+            while (msgs.size() > 3000) msgs.pollFirst();
+        }
+        if (text.startsWith("DMR CSBK") && dmrLogged.add(text.substring(0, Math.min(text.length(), 32))))
+            log("DMR (untested) unparsed message " + text);
+    }
+
+    void primeDmr(p25monitor.dmr.DmrTrunk.Grant g) {
+        if (g == null || g.hz <= 0) return;
+        for (ChannelDecoder d : ccDecoders) primeOne(d, g);
+        for (Tuner t : tuners) for (ChannelDecoder d : t.decoders) primeOne(d, g);
+    }
+
+    private static void primeOne(ChannelDecoder d, p25monitor.dmr.DmrTrunk.Grant g) {
+        if (d.dmr != null && Math.abs(d.freqHz - g.hz) < 1500) d.dmr.prime(g.slot, g.talkgroup, g.source);
+    }
+
+    /** A DMR decoder already running on this frequency, or null. */
+    ChannelDecoder findDmr(long hz) {
+        for (ChannelDecoder d : ccDecoders) if (d.dmr != null && Math.abs(d.freqHz - hz) < 1500) return d;
+        for (Tuner t : tuners) for (ChannelDecoder d : t.decoders) if (d.dmr != null && Math.abs(d.freqHz - hz) < 1500) return d;
+        return null;
+    }
+
+    Tuner tunerOf(ChannelDecoder d) {
+        if (d == null) return null;
+        for (ChannelDecoder c : ccDecoders) if (c == d) return ccTuner;
+        for (Tuner t : tuners) if (t.decoders.contains(d)) return t;
+        return null;
+    }
+
+    /**
+     * The grant's repeater is not already being decoded. Use a tuner that already covers it, or a free roaming tuner.
+     * Both timeslots of that repeater share the one decoder.
+     */
+    void followDmr(ActiveCall c) {
+        synchronized (this) {
+            if (c.vd != null) return;
+            ChannelDecoder have = findDmr(c.freq);
+            if (have != null) { c.vd = have; c.tuner = tunerOf(have); c.followed = true; return; }
+            Tuner t = calls.covering(c.freq);
+            if (t == null) {
+                Tuner r = calls.freeRoamer();
+                if (r != null) {
+                    long cen = calls.planRoamer(r, c);
+                    if (cen > 0 && calls.retuneRoamer(r, cen, "DMR TG " + c.tg + " on " + mhz(c.freq))) t = r;
+                }
+            }
+            if (t == null) {
+                if (dmrLogged.add("out " + c.freq))
+                    log("DMR (untested) TG " + c.tg + " on " + mhz(c.freq) + " MHz is outside this receiver's window.");
+                if (c.ev != null && (c.ev.details == null || c.ev.details.isEmpty())) {
+                    c.ev.details = "OUTSIDE THE RECEIVER WINDOW (untested)";
+                    listener.callUpdated(c.ev);
+                }
+                c.waiting = true;
+                if (c.waitingSince == 0) c.waitingSince = System.currentTimeMillis();
+                return;
+            }
+            ChannelDecoder d = dmrDecoder(t, c.freq);
+            t.decoders.add(d);
+            c.vd = d;
+            c.tuner = t;
+            c.followed = true;
+            c.waiting = false;
+            log("DMR (untested) following TG " + c.tg + " on " + mhz(c.freq) + " MHz slot " + (c.slot + 1) + ", tuner T" + t.id);
+        }
+    }
+
+    /** Records the control receiver's raw I/Q. Throws when monitoring is not running. */
+    public synchronized String startRawIq(Path dir, int minutes) throws IOException {
+        if (!running || ccTuner == null || ccTuner.src == null) throw new IllegalStateException("Start monitoring first.");
+        int m = Math.max(1, Math.min(10, minutes));
+        stopRawIq();
+        double rate = ccTuner.src.sampleRate();
+        long center = ccTuner.center;
+        String name = fileTs.format(new Date()) + "_TrunkDeck_raw_" + (long) rate + "Hz_" + center + "Hz.cs16";
+        Path file = dir.resolve(name);
+        rawIq = new RawIqCapture(file, rate, m);
+        log("Recording raw I/Q for " + m + " min (" + RawIqCapture.warning(rate, m) + ") to " + file.getFileName());
+        return file.toString();
+    }
+
+    public synchronized void stopRawIq() {
+        RawIqCapture c = rawIq;
+        rawIq = null;
+        if (c != null) { c.close(); log("Raw I/Q recording stopped: " + c.file.getFileName()); }
+    }
+
+    public boolean rawIqActive() { return rawIq != null; }
+
+    /** Sample rate of the receiver being recorded, or 0 when monitoring is stopped. */
+    public double controlSampleRate() {
+        Tuner t = ccTuner;
+        return t == null || t.src == null ? 0 : t.src.sampleRate();
+    }
+
+    void tapRaw(float[] i, float[] q, int n) {
+        RawIqCapture c = rawIq;
+        if (c == null) return;
+        if (c.write(i, q, n)) {
+            rawIq = null;
+            rawIqDone = c.file.getFileName().toString();
+        }
     }
 
     Tuner tunerFor(long f) {
@@ -985,6 +1116,7 @@ public final class NativeEngine {
             return;
         }
         running = false;
+        RawIqCapture closing = rawIq; rawIq = null; if (closing != null) closing.close();
         if (house != null) house.shutdownNow();
         for (ActiveCall a : new ArrayList<>(callMap.values())) calls.endCall(a, "engine stopped");
         for (Tuner t : tuners) t.src.stop();
@@ -1040,6 +1172,8 @@ public final class NativeEngine {
             int n; String last;
             synchronized (this) { n = pendingMsgs; pendingMsgs = 0; last = lastMsg; }
             if (n > 0) listener.messages(n, last);
+            String done = rawIqDone; rawIqDone = null;
+            if (done != null) log("Raw I/Q recording finished: " + done);
             calls.housekeep(now);
             tdma.refreshScrambler();
             watchSync(now);

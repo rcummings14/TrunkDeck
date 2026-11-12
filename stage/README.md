@@ -568,6 +568,11 @@ replies; lower it if you want the speaker to move on faster.
 and optionally tick **Record voice-channel I/Q** (the next 5 calls, up to 30 s each, saved as `.wav` I/Q under `iq/` in your
 recordings folder; zip one or two). Say what you heard: choppy, clicks, beeps, robot voice, or talkgroups mixed.
 
+**Record raw I/Q…** (same Voice call box) saves the control receiver's whole window, not one voice channel: 16-bit `.cs16`
+(I then Q) for 1–10 minutes, in a folder you choose. The dialog states the size before it starts (about 550 MB per minute
+at 2.4 million samples/s, much more on a wideband receiver) and the recording stops by itself. The file name contains the
+sample rate and centre frequency. This is for a test build; send a short file with Copy diagnostics when a system will not lock.
+
 ### Voice audio (IMBE and AMBE+2 codecs — please read)
 P25 Phase 1 voice uses the **IMBE** vocoder and Phase 2 voice the **AMBE+2** (half-rate) vocoder; both are covered by patents
 held by DVSI. **TrunkDeck doesn't include a compiled vocoder.** It uses **JMBE**, an open-source codec library (GPLv3) that is created **on your own computer**:

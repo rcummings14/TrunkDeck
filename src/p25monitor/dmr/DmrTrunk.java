@@ -4,9 +4,9 @@ import java.util.List;
 
 /**
  * Follows a voice grant the way a trunked receiver does, and tracks a Capacity Plus / XPT rest channel.
- * Tier III and Connect Plus grants carry a logical channel number, turned into a frequency as
- * {@code base + lcn × 12.5 kHz}. Capacity Plus and XPT name a repeater in the channel list.
- * All of this is untested on a real system.
+ * Tier III grants carry a logical channel number, turned into a frequency as {@code base + lcn × 12.5 kHz}.
+ * Connect Plus has no frequency on the air: repeater N (LCN, counting from 1) is the Nth listed frequency.
+ * Capacity Plus and XPT name a repeater in the channel list. All of this is untested on a real system.
  */
 public final class DmrTrunk {
     public enum Flavor { TIER3, CAPACITY_PLUS, CONNECT_PLUS, XPT }
@@ -22,6 +22,7 @@ public final class DmrTrunk {
     }
 
     public final Flavor flavor;
+    public final DmrCsbk.Masks masks = new DmrCsbk.Masks();
     public int restRepeater = -1, restSlot = -1;
     public long restHz;
     public boolean restMoved;
@@ -46,9 +47,20 @@ public final class DmrTrunk {
         return n > 0 && max - min <= (long) (windowHz * 0.8);
     }
 
-    /** Capacity Plus, and the repeaters all fit, so every repeater can be decoded at once. */
+    /**
+     * Capacity Plus or Connect Plus, and the repeaters all fit, so every repeater can be decoded at once.
+     * Tier III stays on its control channel.
+     */
     public static boolean watchAll(String flavorName, java.util.List<Long> hz, long windowHz) {
-        return flavor(flavorName) == Flavor.CAPACITY_PLUS && repeatersFit(hz, windowHz);
+        Flavor f = flavor(flavorName);
+        return (f == Flavor.CAPACITY_PLUS || f == Flavor.CONNECT_PLUS) && repeatersFit(hz, windowHz);
+    }
+
+    /** Connect Plus LCN, counting from 1. Zero when that repeater was not listed. */
+    public static long lcnFrequency(int lcn, List<Long> channels) {
+        if (lcn <= 0 || channels == null || lcn > channels.size()) return 0;
+        long hz = channels.get(lcn - 1);
+        return hz > 0 ? hz : 0;
     }
 
     public static final class Grant {
@@ -63,7 +75,12 @@ public final class DmrTrunk {
     public Grant onCsbk(DmrCsbk csbk, long baseHz, List<Long> channels) {
         restMoved = false;
         if (csbk == null || !csbk.ok) return null;
-        if (csbk.grant() && (flavor == Flavor.TIER3 || flavor == Flavor.CONNECT_PLUS)) {
+        if (csbk.connectVoice && flavor == Flavor.CONNECT_PLUS) {
+            long hz = lcnFrequency(csbk.lcn, channels);
+            lastGrant = new Grant(csbk.target, csbk.source, csbk.lcn, csbk.slot, hz);
+            return lastGrant;
+        }
+        if (csbk.grant() && flavor == Flavor.TIER3) {
             long hz = baseHz + (long) csbk.lcn * 12_500L;
             lastGrant = new Grant(csbk.target, csbk.source, csbk.lcn, csbk.slot, hz);
             return lastGrant;

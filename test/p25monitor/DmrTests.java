@@ -1,6 +1,7 @@
 package p25monitor;
 
 import p25monitor.dmr.*;
+import p25monitor.nativeengine.RawIqCapture;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,6 +24,8 @@ public class DmrTests {
         voiceOrder();
         demod();
         ambe();
+        slots();
+        rawIq();
         ui();
         check(HelpPage.guideHtml().contains("DMR conventional and DMR trunking") && HelpPage.guideHtml().contains("(untested)")
                 && HelpPage.guideHtml().contains("https://github.com/rcummings14/TrunkDeck/issues"),
@@ -49,8 +52,14 @@ public class DmrTests {
         boolean[] clean = DmrBurst.build(DmrSync.Kind.BS_DATA, 1, DmrBurst.IDLE, null);
         boolean[] noisy = clean.clone();
         for (int i = 0; i < 6; i++) noisy[108 + i] = !noisy[108 + i];
-        fr.bits(noisy);
-        check(n[0] == 0 && !fr.locked(), "six sync-bit errors are rejected while acquiring");
+        boolean[] tooNoisy = clean.clone();
+        for (int i = 0; i < 9; i++) tooNoisy[108 + i] = !tooNoisy[108 + i];
+        fr.bits(tooNoisy);
+        check(n[0] == 0 && !fr.locked(), "nine sync-bit errors are rejected while acquiring");
+        int[] earlyN = {0};
+        DmrFramer early = new DmrFramer((b, c) -> earlyN[0]++);
+        early.bits(noisy);
+        check(earlyN[0] == 1, "six sync-bit errors are kept while acquiring at a moderate signal");
         fr.bits(DmrCach.encode(1));
         fr.bits(clean);
         check(n[0] == 1 && !fr.locked(), "the first clean sync is not locked yet");
@@ -63,8 +72,17 @@ public class DmrTests {
         for (int i = 0; i < 40; i++) fr.dibit(0);
         fr.bits(noisy);
         check(n[0] == 3, "the same noisy sync off the grid is not taken");
+        DmrFramer hold = new DmrFramer((b, c) -> {});
+        hold.bits(DmrCach.encode(1));
+        hold.bits(clean);
+        hold.bits(DmrCach.encode(1));
+        hold.bits(clean);
+        for (int i = 0; i < DmrFramer.BURST_GAP + DmrFramer.BOUNDARY + 5; i++) hold.dibit(0);
+        check(hold.locked(), "one missed burst keeps the lock");
+        for (int i = 0; i < DmrFramer.BURST_GAP; i++) hold.dibit(0);
+        check(!hold.locked(), "a second missed burst drops the lock");
         for (int i = 0; i < DmrFramer.BURST_GAP + DmrFramer.BOUNDARY + 5; i++) fr.dibit(0);
-        check(!fr.locked(), "missing the next burst boundary drops the lock");
+        check(!fr.locked(), "a long gap with no sync drops the lock");
         int[] colors = {0};
         DmrFramer pol = new DmrFramer((b, c) -> { if (b != null && b.colorCode == 1) colors[0]++; });
         boolean[] flipped = clean.clone();
@@ -79,8 +97,10 @@ public class DmrTests {
         List<Long> near = List.of(450_000_000L, 450_012_500L, 450_025_000L);
         List<Long> far = List.of(450_000_000L, 455_000_000L);
         check(DmrTrunk.watchAll("capplus", near, 2_000_000L), "Capacity Plus repeaters inside a 2 MHz window are all decoded");
+        check(DmrTrunk.watchAll("conplus", near, 2_000_000L), "Connect Plus repeaters inside a 2 MHz window are all decoded");
         check(!DmrTrunk.watchAll("capplus", far, 2_000_000L), "Capacity Plus repeaters that do not fit stay on the group-at-a-time path");
-        check(!DmrTrunk.watchAll("tier3", near, 2_000_000L), "a Tier III system is not the all-repeater Capacity Plus path");
+        check(!DmrTrunk.watchAll("conplus", far, 2_000_000L), "Connect Plus repeaters that do not fit are not all decoded at once");
+        check(!DmrTrunk.watchAll("tier3", near, 2_000_000L), "a Tier III system is not the all-repeater path");
         DmrTrunk shared = new DmrTrunk(DmrTrunk.Flavor.CAPACITY_PLUS);
         DmrCsbk rest = DmrCsbk.parse(DmrBurst.csbk(DmrCsbk.CAPACITY_REST, 16, DmrBurst.restData(1, 2)));
         shared.onCsbk(rest, 450_000_000L, near);
@@ -180,6 +200,9 @@ public class DmrTests {
         DmrBits.write(alias, 48, (int) (packed & 0xFFFFFF), 24);
         DmrBurst.sealLc(alias, DmrFec.MASK_VOICE_LC);
         check("SAM".equals(DmrLc.parse(alias).alias()), "talker alias letters");
+        alias[17] = true;
+        DmrBurst.sealLc(alias, DmrFec.MASK_VOICE_LC);
+        check(!DmrLc.parse(alias).encrypted && "SAM".equals(DmrLc.parse(alias).alias()), "a talker alias is not treated as encrypted");
     }
 
     static void embedded() {
@@ -279,6 +302,77 @@ public class DmrTests {
         DmrCsbk xr = DmrCsbk.parse(DmrBurst.csbk(DmrCsbk.XPT_REST, 0, DmrBurst.restData(0, 1)));
         xpt.onCsbk(xr, 0, chans);
         check(xpt.restHz == 450_000_000L && xpt.restSlot == 1, "XPT rest channel uses the same repeater list");
+        boolean[] voice = DmrBurst.csbk(DmrCsbk.CONNECT_VOICE, DmrCsbk.FID_CONNECT, DmrBurst.connectVoice(42, 100, 2, 2));
+        DmrCsbk cg = DmrCsbk.parse(voice);
+        check(cg.ok && cg.connectVoice && cg.grant() && cg.source == 42 && cg.target == 100 && cg.lcn == 2 && cg.slot == 2,
+                "Connect Plus voice grant is source, talkgroup, LCN and timeslot");
+        check(cg.text.contains("TG:100") && !cg.text.startsWith("DMR CSBK"), "a Connect Plus voice grant is labelled, not left unknown");
+        DmrTrunk con = new DmrTrunk(DmrTrunk.Flavor.CONNECT_PLUS);
+        DmrTrunk.Grant followed = con.onCsbk(cg, 451_000_000L, List.of(451_000_000L, 451_025_000L));
+        check(followed != null && followed.hz == 451_025_000L && followed.slot == 2, "Connect Plus LCN 2 is the second listed repeater");
+        DmrCsbk missing = DmrCsbk.parse(DmrBurst.csbk(DmrCsbk.CONNECT_VOICE, DmrCsbk.FID_CONNECT, DmrBurst.connectVoice(1, 8, 4, 1)));
+        DmrTrunk.Grant none = con.onCsbk(missing, 451_000_000L, List.of(451_000_000L, 451_025_000L));
+        check(none != null && none.hz == 0 && none.lcn == 4, "a Connect Plus LCN with no listed repeater is reported with no frequency");
+        boolean[] neighbor = DmrBurst.csbk(DmrCsbk.CONNECT_NEIGHBOR, DmrCsbk.FID_CONNECT, new boolean[64]);
+        DmrCsbk nb = DmrCsbk.parse(neighbor);
+        check(nb.ok && nb.known && nb.text.startsWith("CONNECT PLUS NEIGHBORS"), "a Connect Plus neighbour report counts as control");
+        boolean[] unknown = DmrBurst.csbk(9, DmrCsbk.FID_CONNECT, new boolean[64]);
+        DmrCsbk un = DmrCsbk.parse(unknown);
+        check(un.ok && !un.known && un.text.startsWith("DMR CSBK FID:06 OPCODE:9"), "an unknown Connect Plus opcode is kept for the log");
+        boolean[] flipped = voice.clone();
+        flipped[30] = !flipped[30];
+        boolean[] repaired = DmrFec.repairCsbk(flipped);
+        check(repaired != null && DmrFec.csbkOk(repaired) && DmrCsbk.parse(repaired).target == 100, "one bad CSBK bit is corrected before the opcode is read");
+        boolean[] masked = voice.clone();
+        for (int i = 0; i < 8; i++) masked[88 + i] = !masked[88 + i];
+        DmrCsbk.Masks masks = new DmrCsbk.Masks();
+        check(masks.accept(masked) == null && masks.accept(masked.clone()) == null, "one odd CRC leftover is not trusted");
+        check(masks.accept(masked.clone()) != null, "the same CRC leftover three times is learned for that opcode");
+    }
+
+    /** One slot's terminator must not wipe the other slot's talkgroup. */
+    static void slots() throws Exception {
+        List<int[]> got = new ArrayList<>();
+        DmrReceiver rx = new DmrReceiver(451_000_000L, -1, 0, null, 0, List.of(), new DmrReceiver.Listener() {
+            public void group(long hz, int slot, int color, int tg, int src, byte[][] ambe) { if (ambe != null && ambe.length > 0) got.add(new int[]{slot, tg}); }
+            public void unit(long hz, int slot, int color, int target, int source) {}
+            public void encrypted(long hz, int slot, int color) {}
+            public void end(long hz, int slot) {}
+            public void grant(DmrTrunk.Grant grant) {}
+            public void rest(int repeater, int slot, long hz, boolean moved) {}
+            public void alias(int source, String text) {}
+        });
+        var m = DmrReceiver.class.getDeclaredMethod("onBurst", DmrBurst.class, DmrCach.class);
+        m.setAccessible(true);
+        boolean[] a = DmrBurst.build(DmrSync.Kind.BS_DATA, 1, DmrBurst.VOICE_LC, DmrBurst.linkControl(0, 0, 10, 1, false));
+        boolean[] b = DmrBurst.build(DmrSync.Kind.BS_DATA, 1, DmrBurst.VOICE_LC, DmrBurst.linkControl(0, 0, 20, 2, false));
+        boolean[] end = DmrBurst.build(DmrSync.Kind.BS_DATA, 1, DmrBurst.TERMINATOR, DmrBurst.terminator(0, 0, 10, 1, false));
+        m.invoke(rx, DmrBurst.parse(a), DmrCach.parse(DmrCach.encode(1)));
+        m.invoke(rx, DmrBurst.parse(b), DmrCach.parse(DmrCach.encode(2)));
+        m.invoke(rx, DmrBurst.parse(end), DmrCach.parse(DmrCach.encode(1)));
+        byte[] frame = new byte[] {(byte) 0x80, 0, 0, 0, 0, 0, 0, 0, 0};
+        boolean[] voice = DmrVoice.burst(frame, frame, frame, true, DmrSync.Kind.BS_VOICE, 0, null);
+        m.invoke(rx, DmrBurst.parse(voice, DmrSync.Kind.BS_VOICE), DmrCach.parse(DmrCach.encode(2)));
+        boolean slot2 = false;
+        for (int[] g : got) if (g[0] == 2 && g[1] == 20) slot2 = true;
+        check(slot2, "timeslot 2 still has its talkgroup after timeslot 1 ends");
+    }
+
+    static void rawIq() throws Exception {
+        check(RawIqCapture.bytes(2_400_000, 1) == 576_000_000L, "2.4 MS/s raw I/Q is 576 MB per minute");
+        check(RawIqCapture.warning(2_400_000, 1).contains("576 MB") && RawIqCapture.warning(2_400_000, 1).contains("stops by itself"),
+                "the raw I/Q warning states the size");
+        var dir = Files.createTempDirectory("raw-iq");
+        RawIqCapture cap = new RawIqCapture(dir.resolve("t_48000Hz_0Hz.cs16"), 48_000, 1);
+        float[] i = {0.5f, -0.25f}, q = {0.25f, 0.5f};
+        check(!cap.write(i, q, 2), "a short write does not finish a one-minute file");
+        cap.close();
+        p25monitor.sdr.IqFileSource src = new p25monitor.sdr.IqFileSource(dir.resolve("t_48000Hz_0Hz.cs16"), 0, 0);
+        float[] oi = new float[4], oq = new float[4];
+        int[] n = {0};
+        src.readAll((ii, qq, nn) -> { System.arraycopy(ii, 0, oi, 0, nn); System.arraycopy(qq, 0, oq, 0, nn); n[0] = nn; });
+        check(n[0] == 2 && Math.abs(oi[0] - 0.5f) < 0.001 && Math.abs(oq[1] - 0.5f) < 0.001 && src.sampleRate() == 48_000,
+                "a raw I/Q file round-trips and its name carries the sample rate");
     }
 
     static void demod() {
