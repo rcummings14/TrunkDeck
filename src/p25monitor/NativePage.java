@@ -795,7 +795,9 @@ public class NativePage extends JPanel {
 
     void copyDiagnostics() {
         StringBuilder sb = new StringBuilder(App.NAME + " " + App.VERSION + " engine diagnostics\n");
+        sb.append("Copied: ").append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date())).append('\n');
         NativeEngine ne = f.nativeEngine;
+        sb.append(ne.hangReport());
         sb.append(ne.siteSummary()).append('\n');
         for (String[] r : ne.tunerRows()) sb.append("Tuner: ").append(String.join(" | ", r)).append('\n');
         for (String d : ne.dongleRows()) sb.append(d).append('\n');
@@ -806,8 +808,11 @@ public class NativePage extends JPanel {
         List<String> lg = ne.recentLog();
         sb.append("--- recent engine log\n");
         for (String l : lg.subList(Math.max(0, lg.size() - 40), lg.size())) sb.append(l).append('\n');
-        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new java.awt.datatransfer.StringSelection(sb.toString()), null);
-        f.toast("Diagnostics copied to the clipboard (no passwords or keys are included).");
+        sb.append("--- diagnostic log\n");
+        sb.append(DiagLog.tail(40));
+        String text = DiagLog.scrub(sb.toString());
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new java.awt.datatransfer.StringSelection(text), null);
+        f.toast("Diagnostics copied. Passwords, keys, serial numbers, addresses and home paths are removed.");
     }
 
     void copyLog() {

@@ -26,7 +26,8 @@ public final class C4fmDemod extends SymbolDemod {
         }
     }
 
-    static final int RING = 1024, MASK = RING - 1;
+    public static final int RING = 1024;
+    static final int MASK = RING - 1;
     final float[] y = new float[RING];   // boxcar output history (Hz)
     final float[] rr = new float[RING];  // sync correlation history
     final float[] box = new float[SPS];
@@ -48,6 +49,20 @@ public final class C4fmDemod extends SymbolDemod {
 
     /** Samples since the last frame sync (large before the first sync). */
     @Override public long samplesSinceSync() { return (long) (n - lastSyncAt); }
+
+    /**
+     * Moves the sample clock forward by whole ring lengths, the same positions the ring already holds.
+     * A soak test uses this to stand in for hours of samples without generating them.
+     */
+    public void skipRings(long rings) {
+        long s = rings * RING;
+        n += s;
+        if (lastSyncAt > -1e8) lastSyncAt += s;
+        if (locked) nextT += s;
+        if (cand) candN += s;
+    }
+
+    public long samplesSeen() { return n; }
 
     public C4fmDemod(Sink sink) { super(sink); }
 

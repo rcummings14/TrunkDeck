@@ -319,6 +319,7 @@ public final class NativeEngine {
         StringBuilder w = new StringBuilder();
         for (Tuner t : tuners) w.append(w.length() > 0 ? "; " : "").append("T").append(t.id).append(t == ccTuner ? (conventional ? " channels " : " control ") : " voice ").append(t.window());
         log("TrunkDeck engine started (" + m + (conventional ? ", conventional" : "") + "), " + tuners.size() + " tuner(s): " + w);
+        p25monitor.DiagLog.event("sdr", "engine started (" + m + (conventional ? ", conventional" : "") + "), " + tuners.size() + " tuner(s)");
     }
 
     void startFile(List<Long> ccs) throws Exception {
@@ -439,6 +440,44 @@ public final class NativeEngine {
                 if (g != null) for (String m; (m = g.events.poll()) != null; ) log("Tuner T" + t.id + ": " + m);
             } catch (Throwable x) { log("Tuner T" + t.id + " watchdog: " + x); }
         }
+    }
+
+    /** A carrier with no frames: reset the demodulator, and restart an RTL-SDR stream that stays that way. */
+    void watchSync(long now) {
+        for (Tuner t : tuners) {
+            java.util.LinkedHashSet<ChannelDecoder> ds = new java.util.LinkedHashSet<>();
+            if (t == ccTuner) ds.addAll(ccDecoders);
+            for (ChannelDecoder d : t.decoders) ds.add(d);
+            for (ChannelDecoder d : ds) {
+                if (d.locked(now)) { d.syncResets = 0; if ("NO SYNC".equals(problem)) problem = null; continue; }
+                if (!d.resyncCarrier(now)) continue;
+                String msg = "Tuner T" + t.id + " " + mhz(d.freqHz) + " MHz: signal present, no frame sync - demodulator reset #" + d.syncResets;
+                log(msg);
+                p25monitor.DiagLog.event("sync", msg);
+                if (d.syncResets >= 8) { if (problem == null) problem = "NO SYNC"; }
+                else if (t.src instanceof p25monitor.sdr.RtlSdr rtl) rtl.requestUsbRestart("no frame sync while a signal is present on " + mhz(d.freqHz) + " MHz");
+            }
+        }
+    }
+
+    /** Shows a tuner failure on the display, and clears it once the stream is delivering again. */
+    void noteTunerProblems() {
+        boolean bad = false;
+        String failed = null;
+        boolean usb = false;
+        for (Tuner t : tuners) {
+            String err = t.src.error();
+            if (err == null) continue;
+            bad = true;
+            if (failed == null) { failed = "Tuner T" + t.id + " error: " + err; usb = err.toLowerCase(java.util.Locale.ROOT).contains("could not be restarted"); }
+        }
+        if (bad) {
+            if (problem == null || "NO SYNC".equals(problem)) {
+                problem = usb ? "USB STREAM STOPPED" : "TUNER ERROR";
+                log(failed);
+                p25monitor.DiagLog.event("sdr", failed);
+            }
+        } else if ("TUNER ERROR".equals(problem) || "USB STREAM STOPPED".equals(problem)) problem = null;
     }
 
     /**
@@ -767,7 +806,6 @@ public final class NativeEngine {
                 tunePark(scanTuner, ConventionalPlan.center(g, scanTuner.halfSpan(), scanTuner.dcGuard), "next channels (" + mhzList(g) + ")");
             }
         }
-        for (Tuner t : tuners) if (t.src.error() != null && problem == null) { problem = "TUNER ERROR"; log("Tuner T" + t.id + " error: " + t.src.error()); }
         if (mode == Mode.FILE && ccSource != null && !ccSource.running()) {
             if (!"FILE FINISHED".equals(state)) log("End of I/Q file.");
             state = "FILE FINISHED";
@@ -915,6 +953,7 @@ public final class NativeEngine {
         audio.close();
         state = "STOPPED";
         log("Engine stopped");
+        p25monitor.DiagLog.event("sdr", "engine stopped");
     }
 
     static int parseNac(String s) {
@@ -951,6 +990,8 @@ public final class NativeEngine {
             if (n > 0) listener.messages(n, last);
             calls.housekeep(now);
             tdma.refreshScrambler();
+            watchSync(now);
+            noteTunerProblems();
             if (conventional) { conventionalHousekeeping(now); return; }
             synchronized (this) { cc.plan(now); }
             boolean anyLock = false;
@@ -965,7 +1006,6 @@ public final class NativeEngine {
                 }
                 break;
             }
-            for (Tuner t : tuners) if (t.src.error() != null && problem == null) { problem = t == ccTuner ? "TUNER ERROR" : "VOICE TUNER ERROR"; log("Tuner T" + t.id + " error: " + t.src.error()); }
             if (mode == Mode.FILE && ccSource != null && !ccSource.running()) { if (!"FILE FINISHED".equals(state)) log("End of I/Q file. Decoded " + msgTotal + " control messages (" + tsbkBad + " failed CRC)."); state = "FILE FINISHED"; return; }
             ActiveCall cur = speaker.speaker;
             int dec = calls.decoding();
@@ -1100,6 +1140,8 @@ public final class NativeEngine {
         for (Tuner t : tuners) r.add(new long[]{t.id, t.center, (long) t.halfSpan(), calls.callsOn(t), t.retunes});
         return r;
     }
+
+    public String hangReport() { return diag.hangReport(); }
 
     public String siteSummary() {
         if (conventional) {

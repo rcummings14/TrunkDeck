@@ -255,6 +255,14 @@ public final class RtlSdr implements IqSource {
     volatile int workGen;
     Listener listener;
     long watchBufs;
+    /** Set while the engine wants samples. Distinct from {@link #run}, which the decoder thread uses. */
+    volatile boolean usbWanted;
+    volatile int usbGen;
+    volatile long lastBufferNanos = System.nanoTime();
+    volatile String usbRestartReason;
+    /** Test stand-in for closing and reopening the native USB read. Null on a real dongle. */
+    public volatile Runnable usbRestartAction;
+    public final StreamWatch watch = new StreamWatch();
 
     @Override public ProcessingGuard guard() { return guard; }
 
@@ -267,8 +275,15 @@ public final class RtlSdr implements IqSource {
         t.start();
     }
 
-    /** Stall watchdog: the decoder thread ended, or processed nothing for stallMs while USB delivered: a new one takes over. */
+    /** Asks the next watchdog pass to restart the USB read (sync lost while a carrier is still present). */
+    public void requestUsbRestart(String why) { if (usbWanted && usbRestartReason == null) usbRestartReason = why; }
+
+    /**
+     * Stall watchdog. Restarts the USB read when it has returned or delivered nothing for a few seconds, and
+     * restarts the decoder thread when that thread dies or stops making progress while samples are still arriving.
+     */
     @Override public boolean watchdog(long stallMs) {
+        if (listener != null && restartUsbIfNeeded()) return true;
         Thread t = thread;
         if (!run || t == null || listener == null) return false;
         long b = buffers; boolean delivering = b > watchBufs; watchBufs = b;
@@ -287,6 +302,87 @@ public final class RtlSdr implements IqSource {
         startWork(true);
         return true;
     }
+
+    /** True when it restarted the USB read, or when restarts are paused after repeated failures. */
+    boolean restartUsbIfNeeded() {
+        if (!usbWanted) return false;
+        long now = System.nanoTime();
+        String why = usbRestartReason;
+        Thread u = usbThread;
+        boolean alive = u != null && u.isAlive();
+        boolean quiet = watch.sampleQuiet(now, alive);
+        if (why == null && !quiet) return false;
+        if (watch.givenUp(now)) {
+            if (error == null) error = "USB stream stopped and could not be restarted";
+            return false;
+        }
+        if (!watch.allowRestart(now)) {
+            error = "USB stream stopped and could not be restarted";
+            String msg = "RTL-SDR #" + index + " " + error;
+            p25monitor.DiagLog.event("sdr", msg);
+            guard.events.add(msg);
+            return false;
+        }
+        usbRestartReason = null;
+        if (why == null) why = alive ? "no samples for " + watch.quietSeconds(now) + " s" : (error != null ? error : "USB read returned");
+        return restartUsb(why);
+    }
+
+    boolean restartUsb(String why) {
+        String msg = "RTL-SDR #" + index + " USB stream restart (" + why + ") #" + watch.restartsWithoutSamples;
+        p25monitor.DiagLog.event("sdr", msg);
+        guard.events.add(msg);
+        gap = true;
+        if (usbRestartAction != null) {
+            try { usbRestartAction.run(); }
+            catch (Throwable t) { error = "USB stream restart failed: " + t; p25monitor.DiagLog.event("sdr", "RTL-SDR #" + index + " " + error); return true; }
+            error = null;
+            watch.lastSampleNanos = System.nanoTime();
+            return true;
+        }
+        int gen = ++usbGen;
+        Thread old = usbThread;
+        if (l.cancelAsync != null && dev.address() != 0) {
+            try { call(l.cancelAsync, dev); }
+            catch (Throwable t) { error = "USB stream restart failed: " + t; p25monitor.DiagLog.event("sdr", "RTL-SDR #" + index + " " + error); return true; }
+        }
+        if (old != null && old != Thread.currentThread()) {
+            try { old.join(2000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            if (old.isAlive()) {
+                error = "USB stream stopped and could not be restarted";
+                watch.gaveUpAt = System.nanoTime();
+                p25monitor.DiagLog.event("sdr", "RTL-SDR #" + index + " " + error + " (the USB thread did not stop)");
+                guard.events.add("RTL-SDR #" + index + " " + error);
+                return true;
+            }
+        }
+        try { if (dev.address() != 0) call(l.reset, dev); }
+        catch (Throwable t) { error = "USB stream restart failed: " + t; p25monitor.DiagLog.event("sdr", "RTL-SDR #" + index + " " + error); return true; }
+        error = null;
+        watch.lastSampleNanos = System.nanoTime();
+        launchUsb(gen);
+        return true;
+    }
+
+    /** One line for Copy diagnostics: stream, USB thread, last real sample, and watchdog counts. */
+    public String watchReport() {
+        Thread u = usbThread;
+        boolean alive = usbWanted && u != null && u.isAlive();
+        long ageMs = Math.max(0, (System.nanoTime() - lastBufferNanos) / 1_000_000L);
+        return String.format(java.util.Locale.ROOT,
+                "streaming=%s usbThread=%s lastSample=%d s ago blocks=%d dropped=%d queuePeak=%d watchdogRestarts=%d processingRestarts=%d gaveUp=%s error=%s",
+                run && usbWanted, alive ? "alive" : "stopped", ageMs / 1000, buffers, droppedBlocks, queuePeak,
+                watch.restartsWithoutSamples, guard.restarts, watch.givenUp(System.nanoTime()), error == null ? "(none)" : error);
+    }
+
+    void launchUsb(int gen) {
+        Thread t = new Thread(() -> usbLoop(gen), "rtl-usb-" + index + (gen > 1 ? "-r" + (gen - 1) : ""));
+        t.setDaemon(true);
+        t.setPriority(Thread.MAX_PRIORITY);
+        usbThread = t;
+        t.start();
+    }
+
     static final byte[] END = new byte[0];
 
     /**
@@ -303,14 +399,19 @@ public final class RtlSdr implements IqSource {
         this.listener = listener;
         guard.progress(); watchBufs = buffers;
         startWork(false);
-        usbThread = new Thread(this::usbLoop, "rtl-usb-" + index);
-        usbThread.setDaemon(true);
-        usbThread.setPriority(Thread.MAX_PRIORITY);
-        usbThread.start();
+        usbWanted = true;
+        watch.wanted = true;
+        watch.restartsWithoutSamples = 0;
+        watch.gaveUpAt = 0;
+        usbGen = 1;
+        lastBufferNanos = System.nanoTime();
+        watch.lastSampleNanos = lastBufferNanos;
+        p25monitor.DiagLog.event("sdr", "RTL-SDR #" + index + " stream started (" + String.format(java.util.Locale.ROOT, "%.3f MS/s", rate / 1e6) + ")");
+        launchUsb(usbGen);
     }
 
-    /** USB side: as little work as possible, never blocks. */
-    void usbLoop() {
+    /** USB side: as little work as possible, never blocks. An ended read does not stop the decoder thread. */
+    void usbLoop(int gen) {
         try {
             call(l.reset, dev);
             if (l.readAsync != null && !Boolean.getBoolean("trunkdeck.rtlSync")) {
@@ -319,20 +420,33 @@ public final class RtlSdr implements IqSource {
                         java.lang.invoke.MethodType.methodType(void.class, MemorySegment.class, int.class, MemorySegment.class));
                 MemorySegment stub = Linker.nativeLinker().upcallStub(cb, FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS), arena);
                 int r = (int) l.readAsync.invoke(dev, stub, MemorySegment.NULL, USB_BUFS, BUF_LEN);
-                if (r < 0 && run) error = "USB streaming failed (" + r + ") - dongle unplugged?";
+                if (usbGen == gen && usbWanted) {
+                    error = r < 0 ? "USB streaming failed (" + r + ") - dongle unplugged?" : "USB stream ended (" + r + ")";
+                    p25monitor.DiagLog.event("sdr", "RTL-SDR #" + index + " " + error);
+                }
             } else {   // fallback (very old librtlsdr): a reader thread that only copies; still far better than decoding in between
                 usbMode = "sync reader thread";
                 try (Arena a = Arena.ofConfined()) {
                     MemorySegment buf = a.allocate(BUF_LEN, 512), nread = a.allocate(ValueLayout.JAVA_INT);
-                    while (run) {
+                    while (run && usbGen == gen) {
                         int r = (int) l.readSync.invoke(dev, buf, BUF_LEN, nread);
-                        if (r < 0) { error = "USB read failed (" + r + ") - dongle unplugged?"; break; }
+                        if (r < 0) {
+                            if (usbGen == gen && usbWanted) {
+                                error = "USB read failed (" + r + ") - dongle unplugged?";
+                                p25monitor.DiagLog.event("sdr", "RTL-SDR #" + index + " " + error);
+                            }
+                            break;
+                        }
                         accept(buf, nread.get(ValueLayout.JAVA_INT, 0));
                     }
                 }
             }
-        } catch (Throwable t) { if (run) error = t.toString(); }
-        finally { run = false; filled.offer(END); }
+        } catch (Throwable t) {
+            if (usbGen == gen && usbWanted) {
+                error = t.toString();
+                p25monitor.DiagLog.event("sdr", "RTL-SDR #" + index + " USB read failed: " + error);
+            }
+        }
     }
 
     /** librtlsdr callback (on the USB thread). Must never throw: an exception in a native callback ends the JVM. */
@@ -345,6 +459,9 @@ public final class RtlSdr implements IqSource {
 
     void accept(MemorySegment buf, int n) {
         buffers++;
+        lastBufferNanos = System.nanoTime();
+        watch.noteSample(lastBufferNanos);
+        if (error != null && error.startsWith("USB stream")) error = null;
         if (n < BUF_LEN) overruns++;
         if (flush > 0) { flush--; return; }
         byte[] b = free.poll();
@@ -404,6 +521,10 @@ public final class RtlSdr implements IqSource {
     }
 
     @Override public void stop() {
+        usbWanted = false;
+        watch.wanted = false;
+        usbGen++;
+        p25monitor.DiagLog.event("sdr", "RTL-SDR #" + index + " stream stopped");
         run = false;
         if (l.cancelAsync != null && dev.address() != 0 && usbThread != null) call(l.cancelAsync, dev);
         if (usbThread != null) try { usbThread.join(2000); } catch (InterruptedException ignored) {}

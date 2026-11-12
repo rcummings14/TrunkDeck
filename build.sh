@@ -8,7 +8,7 @@ JAVAC="${JAVAC:-javac}"; JAR="${JAR:-jar}"; JAVA="${JAVA:-java}"
 rm -rf build/classes build/test && mkdir -p build/classes build/test
 find src -name '*.java' > build/sources.txt
 "$JAVAC" --release 22 -encoding UTF-8 -Xlint:-options -cp lib/flatlaf-3.5.4.jar -d build/classes @build/sources.txt
-printf 'Main-Class: p25monitor.Main\nClass-Path: flatlaf-3.5.4.jar\nEnable-Native-Access: ALL-UNNAMED\nImplementation-Title: TrunkDeck\nImplementation-Version: 1.7.4\n' > build/manifest.txt
+printf 'Main-Class: p25monitor.Main\nClass-Path: flatlaf-3.5.4.jar\nEnable-Native-Access: ALL-UNNAMED\nImplementation-Title: TrunkDeck\nImplementation-Version: 1.7.4.1\n' > build/manifest.txt
 # RadioReference app key (1.6.0): only when RR_APP_KEY is set while building, written into the built jar only (never into
 # src/ or the git tree). Stored obscured (base64 of the reversed key) - any key inside a distributed binary can be read out.
 rm -f build/classes/p25monitor/rr/appkey.dat
@@ -35,6 +35,7 @@ if [ "${1:-}" = "test" ]; then
   "$JAVA" -Dtrunkdeck.lib=lib -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.SpeakerIsolationTests
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.SpeakerQueueTests   # speaker Queue mode (1.4.2)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.SelfHealTests   # self-healing sample processing (1.4.3)
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.SoakTests   # long-run sample clock, USB stall and diagnostic log
   "$JAVA" -Dtrunkdeck.lib=lib -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.LiveTalkgroupTests   # live talkgroup edits, feeds stay connected (1.4.4)
   "$JAVA" -Dtrunkdeck.lib=lib -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.FeedTagTests   # now-playing tags on feeds (1.5.1)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test p25monitor.rr.RrTests   # RadioReference setup against a mock SOAP server (1.6.0)
