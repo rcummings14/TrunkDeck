@@ -11,7 +11,7 @@ import java.util.*;
  * dongle needs the WinUSB driver from Zadig). Linux: the system librtlsdr (dnf/apt package "rtl-sdr") or the bundled
  * librtlsdr.so (needs libusb-1.0, present on all desktop distros).
  */
-public final class RtlSdr implements IqSource {
+public final class RtlSdr implements IqSource, IqSource.UsbRestartable {
     // ------------------------------------------------------------------ library binding
     static final class Lib {
         final MethodHandle count, name, usbStrings, open, close, setFreq, getFreq, setRate, setPpm, gainMode, setGain, getGains,
@@ -329,7 +329,8 @@ public final class RtlSdr implements IqSource {
     }
 
     boolean restartUsb(String why) {
-        String msg = "RTL-SDR #" + index + " USB stream restart (" + why + ") #" + watch.restartsWithoutSamples;
+        int n = watch.noteRestart();
+        String msg = "RTL-SDR #" + index + " USB stream restart (" + why + ") #" + n;
         p25monitor.DiagLog.event("sdr", msg);
         guard.events.add(msg);
         gap = true;
@@ -370,9 +371,9 @@ public final class RtlSdr implements IqSource {
         boolean alive = usbWanted && u != null && u.isAlive();
         long ageMs = Math.max(0, (System.nanoTime() - lastBufferNanos) / 1_000_000L);
         return String.format(java.util.Locale.ROOT,
-                "streaming=%s usbThread=%s lastSample=%d s ago blocks=%d dropped=%d queuePeak=%d watchdogRestarts=%d processingRestarts=%d gaveUp=%s error=%s",
+                "streaming=%s usbThread=%s lastSample=%d s ago blocks=%d dropped=%d queuePeak=%d watchdogRestarts=%d sessionRestarts=%d processingRestarts=%d gaveUp=%s error=%s",
                 run && usbWanted, alive ? "alive" : "stopped", ageMs / 1000, buffers, droppedBlocks, queuePeak,
-                watch.restartsWithoutSamples, guard.restarts, watch.givenUp(System.nanoTime()), error == null ? "(none)" : error);
+                watch.restartsWithoutSamples, watch.sessionRestarts, guard.restarts, watch.givenUp(System.nanoTime()), error == null ? "(none)" : error);
     }
 
     void launchUsb(int gen) {
