@@ -663,6 +663,12 @@ Your systems, talkgroups, radio names, streams, recordings and voice codec are k
   if you don't need them.
 * Set your dongles' PPM and gain on the *Engine* page (1.1.x's SDRTrunk tuner settings aren't carried over).
 
+## Credits
+
+Built by Ray Cummings.  
+Thanks to @phillydjdan for the Display-Only button idea ([Discussion #15](https://github.com/rcummings14/TrunkDeck/discussions/15)) and DMR testing,  
+and @kd8bxp for SDRplay testing, the auto-start idea and the Linux line-ending catch.
+
 ## Licenses & credits
 * **TrunkDeck**, including the TrunkDeck engine (`source/src/p25monitor/{p25,dsp,sdr,nativeengine}`): MIT license (`licenses/TrunkDeck-LICENSE.txt`).
   Source code and tests are in `source/`. Written from the published TIA-102 standards. Since 1.4.6 the error-correction and
