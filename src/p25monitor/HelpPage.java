@@ -174,6 +174,7 @@ public class HelpPage extends JPanel {
                 "For a <b>conventional</b> P25 system (fixed channels, no control channel), choose Conventional and type the channel frequencies. Add a NAC after a colon if one channel uses its own (<b>155.2500:2D5</b>). " +
                 "<span style='color:#FFB300'>(untested)</span> P25 conventional has not been tested on a real radio system yet. If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + "). " +
                 "DMR conventional and DMR trunking (Tier III, Capacity Plus, Connect Plus and XPT) are also <span style='color:#FFB300'>(untested)</span>. " +
+                "When every Capacity Plus repeater fits in the receiver window, each repeater is decoded at once, on both timeslots, and the rest channel is only followed for display. If they do not fit, TrunkDeck still follows one group at a time. " +
                 "Choose DMR on the Systems page, set the colour code and timeslot, and report problems on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + "). " +
                 "<b>With a RadioReference Premium account:</b> Systems page (or Tools below) &rarr; <b>Set up from RadioReference</b> - sign in, pick your state, county, system, site and talkgroups, and TrunkDeck fills in the control channels and talkgroup names (builds with a RadioReference app key only). " +
                 "Add the alternate control channel after a comma: the site uses one at a time and TrunkDeck switches over by itself if the active one goes quiet. " +

@@ -20,14 +20,39 @@ public final class DmrSync {
     public static int distance(long a, long b) { return Long.bitCount((a ^ b) & MASK); }
 
     public static Kind match(long window, int maxErrors) {
+        return best(window, maxErrors, false).kind;
+    }
+
+    /** A sync hit. {@code inverted} means the 48 bits matched the pattern with every bit flipped. */
+    public static final class Found {
+        public final Kind kind;
+        public final boolean inverted;
+        public final int errors;
+        Found(Kind kind, boolean inverted, int errors) {
+            this.kind = kind;
+            this.inverted = inverted;
+            this.errors = errors;
+        }
+        public boolean hit() { return kind != Kind.NONE; }
+    }
+
+    /**
+     * Closest published sync word, optionally also its bit-flipped copy (an inverted discriminator).
+     * The normal pattern wins a tie, so a clean sync is never called inverted.
+     */
+    public static Found best(long window, int maxErrors, boolean allowInverted) {
         Kind best = Kind.NONE;
+        boolean inv = false;
         int bestD = maxErrors + 1;
         for (Kind k : Kind.values()) {
             if (k == Kind.NONE) continue;
             int d = distance(window, word(k));
-            if (d < bestD) { bestD = d; best = k; }
+            if (d < bestD) { bestD = d; best = k; inv = false; }
+            if (!allowInverted) continue;
+            int di = distance(window, (~word(k)) & MASK);
+            if (di < bestD) { bestD = di; best = k; inv = true; }
         }
-        return bestD <= maxErrors ? best : Kind.NONE;
+        return bestD <= maxErrors ? new Found(best, inv, bestD) : new Found(Kind.NONE, false, bestD);
     }
 
     public static long word(Kind k) {

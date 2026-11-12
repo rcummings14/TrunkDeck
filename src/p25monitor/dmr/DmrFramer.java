@@ -2,12 +2,26 @@ package p25monitor.dmr;
 
 /**
  * Collects dibits and reports a burst when the 48-bit sync word is found in the middle of a 264-bit window.
- * Up to {@link #MAX_ERRORS} wrong sync bits are still accepted.
+ * <p>While acquiring, at most {@link #ACQUIRE_ERRORS} wrong sync bits are accepted. After two syncs land on the
+ * 144-dibit burst grid, the receiver is locked and will take up to {@link #TRACK_ERRORS} errors, but only within
+ * {@link #BOUNDARY} dibits of that grid. Missing the next grid point drops the lock and the tight rule returns.
+ * An inverted pattern (every sync bit flipped) is accepted, and that polarity is kept after three inverted syncs
+ * in a row until three normal ones replace it.
  */
 public final class DmrFramer {
     public interface Sink { void burst(DmrBurst burst, DmrCach cach); }
 
+    /** Kept for callers that still name the acquire limit. */
     public static final int MAX_ERRORS = 4;
+    /** Bit errors allowed before the burst grid is known. */
+    public static final int ACQUIRE_ERRORS = 4;
+    /** Bit errors allowed once locked, and only on the burst grid. */
+    /** Looser than acquire, and still tight enough that an all-zero window is not an inverted sync. */
+    public static final int TRACK_ERRORS = 8;
+    /** Dibits of slack around a predicted burst boundary. */
+    public static final int BOUNDARY = 2;
+    /** One burst plus the CACH in front of the next one. */
+    public static final int BURST_GAP = 144;
     static final int DIBITS = DmrBurst.LENGTH / 2;
 
     private final Sink sink;
@@ -16,14 +30,32 @@ public final class DmrFramer {
     private int n, quietUntil;
     /** Same-slot bursts still to take after a voice sync. One slot, the other slot, and two CACH fields is 288 dibits. */
     private int follow, nextEnd;
+    private boolean locked, inverted, polarityHeld;
+    private int streak, normalStreak, invertStreak;
+    private int lastSync;
+    private boolean haveSync;
 
     public DmrFramer(Sink sink) { this.sink = sink; }
 
-    public void reset() { n = 0; quietUntil = 0; follow = 0; nextEnd = 0; }
+    public void reset() {
+        n = 0; quietUntil = 0; follow = 0; nextEnd = 0;
+        locked = false; inverted = false; polarityHeld = false;
+        streak = 0; normalStreak = 0; invertStreak = 0;
+        haveSync = false;
+    }
+
+    public boolean locked() { return locked; }
+    public boolean inverted() { return inverted; }
 
     public void dibit(int dibit) {
         hist[n % hist.length] = dibit & 3;
         n++;
+        // The next burst was due and did not arrive: back to the tight acquire rule.
+        // A voice superframe is still being stepped by position, so that gap is not a loss.
+        if (locked && follow == 0 && haveSync && n > lastSync + BURST_GAP + BOUNDARY) {
+            locked = false;
+            streak = 0;
+        }
         if (follow > 0 && n == nextEnd) {
             boolean[] bits = burstBits(n);
             int emb = (DmrBits.read(bits, 108, 8) << 8) | DmrBits.read(bits, 148, 8);
@@ -45,16 +77,53 @@ public final class DmrFramer {
             int d = hist[(mid + i) % hist.length];
             sync = (sync << 2) | d;
         }
-        DmrSync.Kind kind = DmrSync.match(sync, MAX_ERRORS);
-        if (kind == DmrSync.Kind.NONE) return;
+        int allow = locked ? TRACK_ERRORS : ACQUIRE_ERRORS;
+        DmrSync.Found hit = DmrSync.best(sync, allow, true);
+        if (!hit.hit()) return;
+        if (polarityHeld && hit.inverted != inverted) return;
+        if (locked && haveSync && !onGrid(n - lastSync)) return;
+        if (hit.inverted) { invertStreak++; normalStreak = 0; }
+        else { normalStreak++; invertStreak = 0; }
+        if (invertStreak >= 3) { inverted = true; polarityHeld = true; }
+        if (normalStreak >= 3) { inverted = false; polarityHeld = true; }
+        if (haveSync && onGrid(n - lastSync)) streak++;
+        else streak = 1;
+        if (streak >= 2) locked = true;
+        lastSync = n;
+        haveSync = true;
         quietUntil = n + 60;
         boolean[] bits = burstBits(n);
+        if (hit.inverted) flip(bits);
+        DmrSync.Kind kind = hit.kind;
         DmrBurst burst = DmrBurst.parse(bits, kind);
+        DmrCach cach = cachBefore(n);
+        if (hit.inverted && cach != null) cach = invertCach(n);
         if (DmrSync.voice(kind)) {
             follow = 5; // bursts B C D E F of this timeslot
             nextEnd = n + 288;
         }
-        if (burst != null) sink.burst(burst, cachBefore(n));
+        if (burst != null) sink.burst(burst, cach);
+    }
+
+    /** True when {@code delta} dibits is a whole number of bursts, within {@link #BOUNDARY}. */
+    static boolean onGrid(int delta) {
+        if (delta <= 0) return false;
+        int mod = delta % BURST_GAP;
+        return Math.min(mod, BURST_GAP - mod) <= BOUNDARY;
+    }
+
+    static void flip(boolean[] bits) { for (int i = 0; i < bits.length; i++) bits[i] = !bits[i]; }
+
+    DmrCach invertCach(int end) {
+        if (end < DIBITS + 12) return null;
+        boolean[] cbits = new boolean[24];
+        int c0 = end - DIBITS - 12;
+        for (int i = 0; i < 12; i++) {
+            int d = hist[(c0 + i) % hist.length] ^ 3;
+            cbits[i * 2] = ((d >> 1) & 1) == 1;
+            cbits[i * 2 + 1] = (d & 1) == 1;
+        }
+        return DmrCach.parse(cbits);
     }
 
     boolean[] burstBits(int end) {

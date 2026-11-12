@@ -1,4 +1,4 @@
-TRUNKDECK 1.7.4 - P25 Phase 1 and Phase 2 trunking monitor
+TRUNKDECK 1.7.5 - P25 Phase 1 and Phase 2 trunking monitor
 ==========================================================
 
 WINDOWS:  open the "windows" folder and double-click Install.bat

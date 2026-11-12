@@ -12,6 +12,8 @@ public class DmrTests {
 
     public static void main(String[] a) throws Exception {
         sync();
+        syncGate();
+        capPlusWindow();
         slotAndColor();
         specFec();
         cach();
@@ -34,6 +36,55 @@ public class DmrTests {
         long dirty = DmrSync.MS_VOICE ^ 0x5;
         check(DmrSync.match(dirty, 4) == DmrSync.Kind.MS_VOICE, "voice sync with a few errors");
         check(DmrSync.match(0x123456789ABCL, 2) == DmrSync.Kind.NONE, "noise is not a sync");
+        long flipped = (~DmrSync.BS_DATA) & 0xFFFFFFFFFFFFL;
+        DmrSync.Found inv = DmrSync.best(flipped, 0, true);
+        check(inv.hit() && inv.inverted && inv.kind == DmrSync.Kind.BS_DATA, "an inverted sync word is the same pattern with every bit flipped");
+        check(!DmrSync.best(flipped, 0, false).hit(), "inverted sync is ignored when polarity is not being searched");
+    }
+
+    /** Two clean bursts lock the grid. A noisier sync is then kept only when it lands on that grid. */
+    static void syncGate() {
+        int[] n = {0};
+        DmrFramer fr = new DmrFramer((b, c) -> n[0]++);
+        boolean[] clean = DmrBurst.build(DmrSync.Kind.BS_DATA, 1, DmrBurst.IDLE, null);
+        boolean[] noisy = clean.clone();
+        for (int i = 0; i < 6; i++) noisy[108 + i] = !noisy[108 + i];
+        fr.bits(noisy);
+        check(n[0] == 0 && !fr.locked(), "six sync-bit errors are rejected while acquiring");
+        fr.bits(DmrCach.encode(1));
+        fr.bits(clean);
+        check(n[0] == 1 && !fr.locked(), "the first clean sync is not locked yet");
+        fr.bits(DmrCach.encode(1));
+        fr.bits(clean);
+        check(n[0] == 2 && fr.locked() && !fr.inverted(), "a second sync on the burst grid locks, normal polarity");
+        fr.bits(DmrCach.encode(1));
+        fr.bits(noisy);
+        check(n[0] == 3 && fr.locked(), "once locked, those six errors are kept when the burst is on the grid");
+        for (int i = 0; i < 40; i++) fr.dibit(0);
+        fr.bits(noisy);
+        check(n[0] == 3, "the same noisy sync off the grid is not taken");
+        for (int i = 0; i < DmrFramer.BURST_GAP + DmrFramer.BOUNDARY + 5; i++) fr.dibit(0);
+        check(!fr.locked(), "missing the next burst boundary drops the lock");
+        int[] colors = {0};
+        DmrFramer pol = new DmrFramer((b, c) -> { if (b != null && b.colorCode == 1) colors[0]++; });
+        boolean[] flipped = clean.clone();
+        for (int i = 0; i < flipped.length; i++) flipped[i] = !flipped[i];
+        boolean[] gap = DmrCach.encode(1);
+        for (int i = 0; i < gap.length; i++) gap[i] = !gap[i];
+        for (int k = 0; k < 3; k++) { pol.bits(gap); pol.bits(flipped); }
+        check(colors[0] >= 1 && pol.inverted(), "three inverted syncs latch inverted polarity and the burst still decodes");
+    }
+
+    static void capPlusWindow() {
+        List<Long> near = List.of(450_000_000L, 450_012_500L, 450_025_000L);
+        List<Long> far = List.of(450_000_000L, 455_000_000L);
+        check(DmrTrunk.watchAll("capplus", near, 2_000_000L), "Capacity Plus repeaters inside a 2 MHz window are all decoded");
+        check(!DmrTrunk.watchAll("capplus", far, 2_000_000L), "Capacity Plus repeaters that do not fit stay on the group-at-a-time path");
+        check(!DmrTrunk.watchAll("tier3", near, 2_000_000L), "a Tier III system is not the all-repeater Capacity Plus path");
+        DmrTrunk shared = new DmrTrunk(DmrTrunk.Flavor.CAPACITY_PLUS);
+        DmrCsbk rest = DmrCsbk.parse(DmrBurst.csbk(DmrCsbk.CAPACITY_REST, 16, DmrBurst.restData(1, 2)));
+        shared.onCsbk(rest, 450_000_000L, near);
+        check(shared.restMoved && shared.restHz == 450_012_500L, "a rest-channel change is remembered for every repeater that shares the tracker");
     }
 
     static void slotAndColor() {

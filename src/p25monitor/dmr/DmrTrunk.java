@@ -29,6 +29,28 @@ public final class DmrTrunk {
 
     public DmrTrunk(Flavor flavor) { this.flavor = flavor == null ? Flavor.TIER3 : flavor; }
 
+    /**
+     * True when every repeater frequency sits in one receiver window, using the same grouping as the tuner
+     * ({@code windowHz} is the full usable width). A single repeater always fits.
+     */
+    public static boolean repeatersFit(java.util.List<Long> hz, long windowHz) {
+        if (hz == null || hz.isEmpty() || windowHz <= 0) return false;
+        long min = Long.MAX_VALUE, max = Long.MIN_VALUE;
+        int n = 0;
+        for (long f : hz) {
+            if (f <= 0) continue;
+            n++;
+            if (f < min) min = f;
+            if (f > max) max = f;
+        }
+        return n > 0 && max - min <= (long) (windowHz * 0.8);
+    }
+
+    /** Capacity Plus, and the repeaters all fit, so every repeater can be decoded at once. */
+    public static boolean watchAll(String flavorName, java.util.List<Long> hz, long windowHz) {
+        return flavor(flavorName) == Flavor.CAPACITY_PLUS && repeatersFit(hz, windowHz);
+    }
+
     public static final class Grant {
         public final int talkgroup, source, lcn, slot;
         public final long hz;

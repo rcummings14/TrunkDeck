@@ -168,6 +168,7 @@ final class ControlChannel {
      */
     void plan(long now) {
         Tuner t = e.ccTuner;
+        if (e.capPlusAll) return;
         if (t == null || e.ccCenter <= 0 || e.mode == NativeEngine.Mode.FILE || !Boolean.parseBoolean(e.app.settings.getProperty("native.ccRecenter", "true"))) return;
         if (e.mode != NativeEngine.Mode.RTL && !e.huntable) return;
         if (t.wideband()) { planWide(now); return; }

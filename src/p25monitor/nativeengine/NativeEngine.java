@@ -258,6 +258,7 @@ public final class NativeEngine {
         lsmPreferred = "lsm".equalsIgnoreCase(s.nativeModulation); ccDemodLogged = "";
         usage.clear(); missed.clear(); missedRecent.clear(); peakConcurrent = 0; tuners.clear(); huntCount = 0; fixedWideCenter = 0; widePlanned = false;
         conventional = s.fixedChannels(); parkedDecoders.clear(); scanTuner = null; scanGroups = List.of(); scanIndex = 0; lastScanAt = 0;
+        capPlusAll = false; siteTrunk = null;
         if (s.dmr()) log("DMR " + (s.dmrTrunk() ? "trunked (" + s.dmrFlavor + ")" : "conventional") + " (untested). If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         SpeakerMode sm;
         try { sm = SpeakerMode.valueOf(app.settings.getProperty("native.speaker", "PRIORITY")); } catch (Exception e) { sm = SpeakerMode.PRIORITY; }
@@ -308,7 +309,7 @@ public final class NativeEngine {
         ccSource = ccTuner.src;
         if (!tuners.contains(ccTuner)) tuners.add(0, ccTuner);
         if (conventional) arrangeConventional();
-        else cc.buildDecoders(expectedNac);
+        else { noteCapPlus(); cc.buildDecoders(expectedNac); }
         running = true;
         state = conventional ? (scanGroups.size() > 1 ? "SCANNING CHANNELS" : "LISTENING") : "LOOKING FOR CONTROL CHANNEL";
         speaker.start();
@@ -784,23 +785,47 @@ public final class NativeEngine {
         return d;
     }
 
+    /** Capacity Plus repeaters all sit in this tuner's window, so each one is decoded instead of scanned. */
+    boolean capPlusAll;
+    /** One rest-channel tracker shared by every repeater of this DMR site. */
+    p25monitor.dmr.DmrTrunk siteTrunk;
+
+    /** Capacity Plus (untested): decode every repeater at once when they fit; otherwise keep the group-at-a-time hunt. */
+    void noteCapPlus() {
+        capPlusAll = false;
+        siteTrunk = null;
+        if (sys == null || !sys.dmrTrunk() || ccTuner == null) return;
+        siteTrunk = new p25monitor.dmr.DmrTrunk(p25monitor.dmr.DmrTrunk.flavor(sys.dmrFlavor));
+        if (siteTrunk.flavor != p25monitor.dmr.DmrTrunk.Flavor.CAPACITY_PLUS) return;
+        long window = (long) (2 * ccTuner.halfSpan());
+        capPlusAll = p25monitor.dmr.DmrTrunk.watchAll(sys.dmrFlavor, ccFreqs, window);
+        log(capPlusAll
+                ? "Capacity Plus (untested): all " + ccFreqs.size() + " repeaters fit in this window, so each repeater is decoded on both timeslots."
+                : "Capacity Plus (untested): the repeaters do not fit in one window, so they are followed one group at a time.");
+    }
+
     /** A channel decoder whose P25 framer is idle and whose samples feed the DMR receiver. */
     ChannelDecoder dmrDecoder(Tuner t, long f) {
         ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {}, 0);
-        int cc = sys == null ? -1 : sys.colorCodeFor(f);
-        int slot = sys == null ? 0 : sys.slotFor(f);
+        int color = sys == null ? -1 : sys.colorCodeFor(f);
+        int slot = capPlusAll ? 0 : (sys == null ? 0 : sys.slotFor(f));
         java.util.List<Long> chans = new java.util.ArrayList<>();
         if (sys != null) for (double mhz : sys.frequencies()) chans.add(Math.round(mhz * 1e6));
         long base = chans.isEmpty() ? f : chans.get(0);
-        p25monitor.dmr.DmrTrunk trunk = sys != null && sys.dmrTrunk() ? new p25monitor.dmr.DmrTrunk(p25monitor.dmr.DmrTrunk.flavor(sys.dmrFlavor)) : null;
+        p25monitor.dmr.DmrTrunk trunk = siteTrunk != null ? siteTrunk
+                : (sys != null && sys.dmrTrunk() ? new p25monitor.dmr.DmrTrunk(p25monitor.dmr.DmrTrunk.flavor(sys.dmrFlavor)) : null);
         final long freq = f;
-        d.dmr = new p25monitor.dmr.DmrReceiver(f, cc, slot, trunk, base, chans, new p25monitor.dmr.DmrReceiver.Listener() {
+        d.dmr = new p25monitor.dmr.DmrReceiver(f, color, slot, trunk, base, chans, new p25monitor.dmr.DmrReceiver.Listener() {
             public void group(long hz, int sl, int color, int tg, int src, byte[][] ambe) { voice.onDmr(hz, sl, color, tg, src, true, ambe); d.lastFrameAt = System.currentTimeMillis(); }
             public void unit(long hz, int sl, int color, int target, int src) { voice.onDmr(hz, sl, color, target, src, false, new byte[0][]); d.lastFrameAt = System.currentTimeMillis(); }
             public void encrypted(long hz, int sl, int color) { voice.onDmrEncrypted(hz, sl, color); }
             public void end(long hz, int sl) { voice.onDmrEnd(hz); }
             public void grant(p25monitor.dmr.DmrTrunk.Grant g) { voice.onDmrGrant(g); d.lastFrameAt = System.currentTimeMillis(); }
-            public void rest(int repeater, int sl, long hz, boolean moved) { if (moved) log("DMR rest channel (untested) -> repeater " + repeater + " slot " + sl + (hz > 0 ? " " + mhz(hz) + " MHz" : "")); d.lastFrameAt = System.currentTimeMillis(); }
+            public void rest(int repeater, int sl, long hz, boolean moved) {
+                if (moved) log("DMR rest channel (untested) -> repeater " + repeater + " slot " + sl + (hz > 0 ? " " + mhz(hz) + " MHz" : ""));
+                if (moved && !capPlusAll && hz > 0 && ccTuner != null && !ccTuner.covers(hz)) cc.retuneTo(hz, "Capacity Plus rest channel moved (untested)");
+                d.lastFrameAt = System.currentTimeMillis();
+            }
             public void alias(int src, String text) { log("DMR talker alias " + src + " " + text); }
         });
         d.anchor = () -> tunerAnchor(t, d, freq);
