@@ -451,7 +451,11 @@ public final class NativeEngine {
         }
     }
 
-    /** A carrier with no frames: reset the demodulator, and restart an RTL-SDR stream that stays that way. */
+    /**
+     * A carrier with no frames: reset the demodulator. On a trunked control channel, an RTL-SDR that stays that way
+     * has its USB read restarted. On a conventional channel (P25 or DMR) a non-digital carrier is normal, so the
+     * USB read is left alone; only a real stall (no samples from the device) restarts it, in the tuner watchdog.
+     */
     void watchSync(long now) {
         for (Tuner t : tuners) {
             java.util.LinkedHashSet<ChannelDecoder> ds = new java.util.LinkedHashSet<>();
@@ -460,13 +464,27 @@ public final class NativeEngine {
             for (ChannelDecoder d : ds) {
                 if (d.locked(now)) { d.syncResets = 0; if ("NO SYNC".equals(problem)) problem = null; continue; }
                 if (!d.resyncCarrier(now)) continue;
-                String msg = "Tuner T" + t.id + " " + mhz(d.freqHz) + " MHz: signal present, no frame sync - demodulator reset #" + d.syncResets;
-                log(msg);
-                p25monitor.DiagLog.event("sync", msg);
+                if (logSyncReset(d, now)) {
+                    String msg = "Tuner T" + t.id + " " + mhz(d.freqHz) + " MHz: signal present, no frame sync - demodulator reset #" + d.syncResetTotal;
+                    log(msg);
+                    p25monitor.DiagLog.event("sync", msg);
+                }
+                if (conventional) continue;
                 if (d.syncResets >= 8) { if (problem == null) problem = "NO SYNC"; }
-                else if (t.src instanceof p25monitor.sdr.RtlSdr rtl) rtl.requestUsbRestart("no frame sync while a signal is present on " + mhz(d.freqHz) + " MHz");
+                else if (t.src instanceof p25monitor.sdr.IqSource.UsbRestartable usb)
+                    usb.requestUsbRestart("no frame sync while a signal is present on " + mhz(d.freqHz) + " MHz");
             }
         }
+    }
+
+    /** Trunked: every reset. Conventional: the first, then at most one line per 10 minutes, so an analog carrier does not fill the log. */
+    boolean logSyncReset(ChannelDecoder d, long now) {
+        if (!conventional) return true;
+        if (d.syncResetTotal <= 1 || now - d.lastSyncResetLogAt >= 600_000L) {
+            d.lastSyncResetLogAt = now;
+            return true;
+        }
+        return false;
     }
 
     /** Shows a tuner failure on the display, and clears it once the stream is delivering again. */

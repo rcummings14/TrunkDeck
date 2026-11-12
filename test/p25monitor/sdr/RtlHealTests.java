@@ -22,6 +22,7 @@ public final class RtlHealTests {
         exceptionSurvived(info);
         stall(info);
         usbQuiet(info);
+        usbCount(info);
         System.out.println();
         System.out.println("RtlHealTests: " + pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);
@@ -117,6 +118,38 @@ public final class RtlHealTests {
         for (int i = 0; i < 6; i++) r.watchdog(5_000);
         check(n[0] == before + 5 && r.error() != null && r.error().contains("could not be restarted"), "after five restarts with no samples: " + r.error() + " (" + (n[0] - before) + " restarts)");
         check(!r.watchdog(5_000) && n[0] == before + 5, "further restarts wait");
+        shutdown(r);
+    }
+
+    /** Samples coming back must not send the printed restart number back to #1. */
+    static void usbCount(RtlSdr.Info info) throws Exception {
+        System.out.println("4. USB restart count keeps climbing after samples resume");
+        RtlSdr r = new RtlSdr(info);
+        r.listener = new IqSource.Listener() { public void samples(float[] i, float[] q, int n) {} };
+        r.run = true;
+        r.usbWanted = true;
+        r.watch.wanted = true;
+        Thread quiet = new Thread(() -> { try { Thread.sleep(60_000); } catch (InterruptedException ignored) {} });
+        quiet.setDaemon(true);
+        quiet.start();
+        r.usbThread = quiet;
+        r.watch.lastSampleNanos = System.nanoTime() - 20_000_000_000L;
+        r.usbRestartAction = () -> {
+            Thread live = new Thread(() -> { try { Thread.sleep(60_000); } catch (InterruptedException ignored) {} });
+            live.setDaemon(true);
+            live.start();
+            r.usbThread = live;
+        };
+        check(r.watchdog(5_000), "no samples: USB stream restarted");
+        String ev = String.join(" | ", r.guard.events);
+        check(ev.contains("no samples") && ev.contains("#1"), "first stall is #1: " + ev);
+        r.watch.noteSample(System.nanoTime());
+        r.usbThread = quiet;
+        r.watch.lastSampleNanos = System.nanoTime() - 20_000_000_000L;
+        check(r.watchdog(5_000) && r.watch.sessionRestarts == 2 && r.watch.restartsWithoutSamples == 1,
+                "after samples resume, the next stall is session #2 (backoff count is 1)");
+        ev = String.join(" | ", r.guard.events);
+        check(ev.contains("#2") && !ev.endsWith("#1"), "the log shows #2: " + ev);
         shutdown(r);
     }
 }

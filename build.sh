@@ -40,6 +40,7 @@ if [ "${1:-}" = "test" ]; then
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.SpeakerQueueTests   # speaker Queue mode (1.4.2)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.SelfHealTests   # self-healing sample processing (1.4.3)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.SoakTests   # long-run sample clock, USB stall and diagnostic log
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.UsbWatchTests   # conventional carriers do not restart USB; a real stall still does
   "$JAVA" -Dtrunkdeck.lib=lib -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.LiveTalkgroupTests   # live talkgroup edits, feeds stay connected (1.4.4)
   "$JAVA" -Dtrunkdeck.lib=lib -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.FeedTagTests   # now-playing tags on feeds (1.5.1)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test p25monitor.rr.RrTests   # RadioReference setup against a mock SOAP server (1.6.0)

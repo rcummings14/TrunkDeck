@@ -344,8 +344,12 @@ final class ChannelDecoder {
     double frequencyError() { return afcHz + active.demod.freqErrorHz; }
     boolean locked(long now) { return now - lastFrameAt < 2500; }
 
+    /** Resets since the last frame lock. Drives the trunked "give up after 8" rule, and goes back to 0 when sync returns. */
     int syncResets;
+    /** Every demodulator reset this session. The log uses this, so it does not go back to 1 after a brief lock. */
+    int syncResetTotal;
     long lastSyncResetAt;
+    long lastSyncResetLogAt;
 
     /**
      * The channel is still at about the level it had while frames were decoding, but nothing has framed for a long
@@ -366,6 +370,7 @@ final class ChannelDecoder {
         if (!carrierWithoutFrame(now) || (lastSyncResetAt != 0 && now - lastSyncResetAt < 60_000)) return false;
         lastSyncResetAt = now;
         syncResets++;
+        syncResetTotal++;
         double back = 0;
         java.util.function.DoubleSupplier as = anchor;
         if (as != null) { double a = as.getAsDouble(); if (!Double.isNaN(a)) back = a; }

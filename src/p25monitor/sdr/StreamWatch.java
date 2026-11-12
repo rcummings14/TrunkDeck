@@ -8,16 +8,21 @@ public final class StreamWatch {
     public volatile long lastSampleNanos = System.nanoTime();
     public volatile boolean wanted;
     public int restartsWithoutSamples;
+    /** Every USB restart this session, including ones after samples came back. Not cleared when samples resume. */
+    public int sessionRestarts;
     public long gaveUpAt;
 
     public long quietLimitMs() { return Long.getLong("trunkdeck.usbQuietMs", 8_000L); }
 
-    /** A sample arrived. Clears a previous give-up. */
+    /** A sample arrived. Clears a previous give-up. The session restart count is left as it is. */
     public void noteSample(long nowNanos) {
         lastSampleNanos = nowNanos;
         restartsWithoutSamples = 0;
         gaveUpAt = 0;
     }
+
+    /** One USB restart that is actually being done. The returned number is what the log prints. */
+    public int noteRestart() { return ++sessionRestarts; }
 
     /** The USB thread has ended, or no sample has arrived for the quiet limit. */
     public boolean sampleQuiet(long nowNanos, boolean threadAlive) {

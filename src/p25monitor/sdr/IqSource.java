@@ -2,6 +2,10 @@ package p25monitor.sdr;
 
 /** A source of complex samples (RTL-SDR dongle or a recording). */
 public interface IqSource extends AutoCloseable {
+    /** A dongle that can close and reopen its USB read. Files and simulations do not. */
+    interface UsbRestartable {
+        void requestUsbRestart(String why);
+    }
     interface Listener {
         void samples(float[] i, float[] q, int n);
         /** Samples were lost just before the next block (the decoders should re-sync, not decode shifted bits). */
