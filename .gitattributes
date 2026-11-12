@@ -1,0 +1,10 @@
+# Linux executes these directly. A CRLF checkout (Git for Windows autocrlf) makes
+# install.sh and run.sh fail with "$'\r': command not found".
+*.sh text eol=lf
+*.desktop text eol=lf
+*.rules text eol=lf
+stage/linux/** text eol=lf
+
+# Windows command scripts stay CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
