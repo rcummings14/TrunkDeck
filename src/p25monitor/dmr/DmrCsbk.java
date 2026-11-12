@@ -4,9 +4,11 @@ import java.util.HashMap;
 
 /**
  * A control signalling block. Tier III channel grants follow ETSI TS 102 361-4 (destination, source, logical channel,
- * timeslot). Connect Plus voice grants are FID 0x06 opcode 3: source, talkgroup, a 4-bit repeater number and a
- * timeslot bit, as described for that message on the RadioReference forums. Capacity Plus and Hytera XPT rest
- * messages are the same kind of published description. None of this has been checked on air.
+ * timeslot). Connect Plus voice grants are FID 0x06 opcode 3. The body is a 24-bit source, a 24-bit talkgroup,
+ * then a tail whose high nibble is the repeater (LCN, counting from 1). The next bit, taken together with whether
+ * that LCN is odd, picks the timeslot: timeslot 1 when the bit and the LCN's low bit differ. That was read off a
+ * capture by matching each tail to the 30 ms timeslot the voice actually used. Opcode 1 is a repeating status.
+ * Capacity Plus and Hytera XPT rest messages are a separate published description. DMR is untested.
  */
 public final class DmrCsbk {
     public static final int GRANT = 0x31, CONNECT_GRANT = 0x32, CAPACITY_REST = 0x3A, XPT_REST = 0x3E;
@@ -42,18 +44,18 @@ public final class DmrCsbk {
         boolean known = false;
         String text;
         if (fid == FID_CONNECT && opcode == CONNECT_VOICE) {
-            // Source, then talkgroup, then repeater (LCN) and timeslot. LCN is 1-based. Bit clear = timeslot 1.
+            // Source, talkgroup, LCN in the high nibble, then one bit. Timeslot 1 when that bit differs from the LCN's low bit.
             source = DmrBits.read(info96, 16, 24);
             target = DmrBits.read(info96, 40, 24);
             lcn = DmrBits.read(info96, 64, 4);
             repeater = lcn;
-            slot = info96[68] ? 2 : 1;
+            slot = (info96[68] ^ ((lcn & 1) == 1)) ? 1 : 2;
             connectVoice = true;
             known = true;
             text = "CONNECT PLUS VOICE GRANT TG:" + target + " SRC:" + source + " LCN:" + lcn + " TS" + slot;
         } else if (fid == FID_CONNECT && opcode == CONNECT_NEIGHBOR) {
             known = true;
-            text = "CONNECT PLUS NEIGHBORS " + hex(info96);
+            text = "CONNECT PLUS STATUS " + hex(info96);
         } else if (fid == 0 && (opcode == GRANT || opcode == CONNECT_GRANT)) {
             known = true;
             text = "TIER III GRANT TG:" + target + " SRC:" + source + " LCN:" + lcn + " TS" + slot;

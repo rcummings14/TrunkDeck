@@ -129,7 +129,8 @@ public final class DmrBurst {
         DmrBits.write(d, 0, source, 24);
         DmrBits.write(d, 24, target, 24);
         DmrBits.write(d, 48, lcn, 4);
-        if (slot == 2) d[52] = true;
+        boolean odd = (lcn & 1) == 1;
+        if ((slot == 1) ^ odd) d[52] = true;
         return d;
     }
 

@@ -8,8 +8,12 @@ package p25monitor.dmr;
 public final class DmrCach {
     public final int nextSlot;
     public final boolean ok;
+    /** 0 = the seven TACT bits were already a codeword, 1 = one bit was corrected, -1 = not a TACT. */
+    public final int errors;
 
-    DmrCach(int nextSlot, boolean ok) { this.nextSlot = nextSlot; this.ok = ok; }
+    DmrCach(int nextSlot, boolean ok, int errors) {
+        this.nextSlot = nextSlot; this.ok = ok; this.errors = errors;
+    }
 
     /** TC = 0 means the following burst is channel 1, TC = 1 means channel 2 (table 9.24). AT stays 0 (idle). */
     public static boolean[] encode(int nextSlot) {
@@ -21,10 +25,12 @@ public final class DmrCach {
     }
 
     public static DmrCach parse(boolean[] bits24) {
-        if (bits24 == null || bits24.length < 7) return new DmrCach(0, false);
-        int info = DmrFec.hamming74Decode(DmrBits.read(bits24, 0, 7));
-        if (info < 0) return new DmrCach(0, false);
+        if (bits24 == null || bits24.length < 7) return new DmrCach(0, false, -1);
+        int got = DmrBits.read(bits24, 0, 7);
+        int info = DmrFec.hamming74Decode(got);
+        if (info < 0) return new DmrCach(0, false, -1);
         int slot = ((info >> 2) & 1) == 1 ? 2 : 1;
-        return new DmrCach(slot, true);
+        int errors = Integer.bitCount(got ^ DmrFec.hamming74Encode(info));
+        return new DmrCach(slot, true, errors);
     }
 }

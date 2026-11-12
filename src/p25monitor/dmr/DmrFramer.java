@@ -83,6 +83,14 @@ public final class DmrFramer {
         if (!hit.hit()) return;
         if (polarityHeld && hit.inverted != inverted) return;
         if (locked && haveSync && !onGrid(n - lastSync)) return;
+        boolean[] bits = burstBits(n);
+        if (hit.inverted) flip(bits);
+        DmrSync.Kind kind = hit.kind;
+        DmrBurst burst = DmrBurst.parse(bits, kind);
+        // A sync word alone is not enough to hold the clock. Noise matches it often enough to stay
+        // locked through a gap, and the symbol clock then misses the next key-up. A data burst has to
+        // pass the slot-type check. A voice sync has to be close, not merely inside the track limit.
+        if (burst == null || (!DmrSync.voice(kind) && !burst.slotOk) || (DmrSync.voice(kind) && hit.errors > ACQUIRE_ERRORS)) return;
         if (hit.inverted) { invertStreak++; normalStreak = 0; }
         else { normalStreak++; invertStreak = 0; }
         if (invertStreak >= 3) { inverted = true; polarityHeld = true; }
@@ -93,10 +101,6 @@ public final class DmrFramer {
         lastSync = n;
         haveSync = true;
         quietUntil = n + 60;
-        boolean[] bits = burstBits(n);
-        if (hit.inverted) flip(bits);
-        DmrSync.Kind kind = hit.kind;
-        DmrBurst burst = DmrBurst.parse(bits, kind);
         DmrCach cach = cachBefore(n);
         if (hit.inverted && cach != null) cach = invertCach(n);
         if (DmrSync.voice(kind)) {

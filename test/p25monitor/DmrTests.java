@@ -25,6 +25,7 @@ public class DmrTests {
         demod();
         ambe();
         slots();
+        grantSlot();
         rawIq();
         ui();
         check(HelpPage.guideHtml().contains("DMR conventional and DMR trunking") && HelpPage.guideHtml().contains("(untested)")
@@ -306,6 +307,11 @@ public class DmrTests {
         DmrCsbk cg = DmrCsbk.parse(voice);
         check(cg.ok && cg.connectVoice && cg.grant() && cg.source == 42 && cg.target == 100 && cg.lcn == 2 && cg.slot == 2,
                 "Connect Plus voice grant is source, talkgroup, LCN and timeslot");
+        boolean[] slot1 = DmrBurst.connectVoice(42, 100, 2, 1);
+        check(slot1[52], "an even LCN uses the set bit for timeslot 1");
+        check(!DmrBurst.connectVoice(42, 100, 2, 2)[52], "an even LCN leaves that bit clear for timeslot 2");
+        DmrCsbk odd = DmrCsbk.parse(DmrBurst.csbk(DmrCsbk.CONNECT_VOICE, DmrCsbk.FID_CONNECT, DmrBurst.connectVoice(7, 11, 1, 2)));
+        check(odd.lcn == 1 && odd.slot == 2 && odd.source == 7 && odd.target == 11, "an odd LCN with the bit set is timeslot 2");
         check(cg.text.contains("TG:100") && !cg.text.startsWith("DMR CSBK"), "a Connect Plus voice grant is labelled, not left unknown");
         DmrTrunk con = new DmrTrunk(DmrTrunk.Flavor.CONNECT_PLUS);
         DmrTrunk.Grant followed = con.onCsbk(cg, 451_000_000L, List.of(451_000_000L, 451_025_000L));
@@ -315,7 +321,7 @@ public class DmrTests {
         check(none != null && none.hz == 0 && none.lcn == 4, "a Connect Plus LCN with no listed repeater is reported with no frequency");
         boolean[] neighbor = DmrBurst.csbk(DmrCsbk.CONNECT_NEIGHBOR, DmrCsbk.FID_CONNECT, new boolean[64]);
         DmrCsbk nb = DmrCsbk.parse(neighbor);
-        check(nb.ok && nb.known && nb.text.startsWith("CONNECT PLUS NEIGHBORS"), "a Connect Plus neighbour report counts as control");
+        check(nb.ok && nb.known && nb.text.startsWith("CONNECT PLUS STATUS"), "a Connect Plus status burst counts as control");
         boolean[] unknown = DmrBurst.csbk(9, DmrCsbk.FID_CONNECT, new boolean[64]);
         DmrCsbk un = DmrCsbk.parse(unknown);
         check(un.ok && !un.known && un.text.startsWith("DMR CSBK FID:06 OPCODE:9"), "an unknown Connect Plus opcode is kept for the log");
@@ -358,6 +364,37 @@ public class DmrTests {
         check(slot2, "timeslot 2 still has its talkgroup after timeslot 1 ends");
     }
 
+    /** A grant's timeslot labels the voice when the CACH is not an exact TACT. Made-up ids only. */
+    static void grantSlot() throws Exception {
+        List<int[]> got = new ArrayList<>();
+        DmrReceiver rx = new DmrReceiver(451_000_000L, -1, 0, null, 0, List.of(), new DmrReceiver.Listener() {
+            public void group(long hz, int slot, int color, int tg, int src, byte[][] ambe) { got.add(new int[]{slot, tg}); }
+            public void unit(long hz, int slot, int color, int target, int source) {}
+            public void encrypted(long hz, int slot, int color) {}
+            public void end(long hz, int slot) {}
+            public void grant(DmrTrunk.Grant grant) {}
+            public void rest(int repeater, int slot, long hz, boolean moved) {}
+            public void alias(int source, String text) {}
+        });
+        boolean[] messy = DmrCach.encode(2);
+        messy[3] = !messy[3];
+        DmrCach slip = DmrCach.parse(messy);
+        check(slip.errors == 1, "one flipped TACT bit is corrected, not trusted as the slot");
+        rx.prime(1, 11, 7);
+        rx.prime(2, 20, 8);
+        var m = DmrReceiver.class.getDeclaredMethod("onBurst", DmrBurst.class, DmrCach.class);
+        m.setAccessible(true);
+        boolean[] g11 = DmrBurst.build(DmrSync.Kind.BS_DATA, 1, DmrBurst.VOICE_LC, DmrBurst.linkControl(0, 0, 11, 7, false));
+        boolean[] g20 = DmrBurst.build(DmrSync.Kind.BS_DATA, 1, DmrBurst.VOICE_LC, DmrBurst.linkControl(0, 0, 20, 8, false));
+        m.invoke(rx, DmrBurst.parse(g11), slip);
+        m.invoke(rx, DmrBurst.parse(g20), slip);
+        m.invoke(rx, DmrBurst.parse(g11), slip);
+        check(got.size() == 3 && got.get(0)[0] == 1 && got.get(0)[1] == 11
+                && got.get(1)[0] == 2 && got.get(1)[1] == 20
+                && got.get(2)[0] == 1 && got.get(2)[1] == 11,
+                "a grant puts the voice on its timeslot when the CACH does not");
+    }
+
     static void rawIq() throws Exception {
         check(RawIqCapture.bytes(2_400_000, 1) == 576_000_000L, "2.4 MS/s raw I/Q is 576 MB per minute");
         check(RawIqCapture.warning(2_400_000, 1).contains("576 MB") && RawIqCapture.warning(2_400_000, 1).contains("stops by itself"),
@@ -388,6 +425,17 @@ public class DmrTests {
         Fsk4Demod demod = new Fsk4Demod(new DmrFramer((b, c) -> got.add(b)));
         demod.process(i, q, i.length);
         check(!got.isEmpty() && got.get(0).colorCode == 3 && got.get(0).dataType == DmrBurst.VOICE_LC, "4FSK demod finds the burst (colour code 3)");
+        // The clock stays on one sample phase long enough for two bursts, then tries the next. A five-sample
+        // shift needs several of those tries, so the same waveform is repeated.
+        int copies = 40;
+        float[] lateI = new float[i.length * copies + 5], lateQ = new float[q.length * copies + 5];
+        for (int ncopy = 0; ncopy < copies; ncopy++) {
+            System.arraycopy(i, 0, lateI, 5 + ncopy * i.length, i.length);
+            System.arraycopy(q, 0, lateQ, 5 + ncopy * q.length, q.length);
+        }
+        List<DmrBurst> shifted = new ArrayList<>();
+        new Fsk4Demod(new DmrFramer((b, c) -> { if (b != null && !b.voice && b.dataType == DmrBurst.VOICE_LC) shifted.add(b); })).process(lateI, lateQ, lateI.length);
+        check(!shifted.isEmpty() && shifted.get(0).colorCode == 3, "a burst that starts five samples late still decodes");
         if (!got.isEmpty()) {
             DmrLc lc = DmrLc.parse(got.get(0).info);
             check(lc.group() && lc.target == 240 && lc.source == 8, "demodulated link control is TG 240 from radio 8");

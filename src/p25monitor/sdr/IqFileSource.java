@@ -38,6 +38,10 @@ public final class IqFileSource implements IqSource {
                     : n.endsWith(".cs8") || n.endsWith(".s8") ? Format.CS8 : Format.CU8;
             dataOffset = 0; dataLength = Files.size(p);
         }
+        java.util.regex.Matcher kRate = java.util.regex.Pattern.compile("(\\d{2,4})k(?:s|hz)?\\b").matcher(n);
+        if (kRate.find() && rate <= 0) rate = Integer.parseInt(kRate.group(1)) * 1000.0;
+        java.util.regex.Matcher bare = java.util.regex.Pattern.compile("(?<![0-9])(\\d{9})(?![0-9])").matcher(n);
+        if (bare.find() && center == 0) center = Long.parseLong(bare.group(1));
         java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d{5,10})hz").matcher(n);
         while (m.find()) {
             long v = Long.parseLong(m.group(1));
@@ -89,6 +93,8 @@ public final class IqFileSource implements IqSource {
 
     public Format format() { return format; }
     @Override public double sampleRate() { return rate; }
+    /** A recording has no dongle DC spike, so a channel sitting on the file centre is still decoded. */
+    @Override public long dcGuardHz() { return 0; }
     @Override public long centerHz() { return center; }
     public double seconds() { return dataLength / (double) frameBytes() / rate; }
     public double progress() { return progress; }
