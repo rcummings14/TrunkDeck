@@ -183,7 +183,7 @@ and @kd8bxp for SDRplay testing, the auto-start idea and the Linux line-ending c
 
 ## License
 
-TrunkDeck is released under the [MIT License](LICENSE) - Copyright (c) 2026 TrunkDeck contributors.
+Copyright (C) 2026 Ray Cummings. TrunkDeck is free software licensed under the GNU General Public License v3.0 or later. See [LICENSE](LICENSE). Versions 1.7.4.1 and earlier were released under the MIT License.
 Bundled third-party components keep their own licences (FlatLaf, librtlsdr, libusb, java-lame, JTransforms, ...);
 SoapySDR, its modules and the SDRplay API are not bundled (you install them yourself):
 see [NOTICE.txt](NOTICE.txt) and [stage/licenses/THIRD-PARTY.txt](stage/licenses/THIRD-PARTY.txt).

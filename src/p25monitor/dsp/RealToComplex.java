@@ -12,7 +12,8 @@ package p25monitor.dsp;
  * <p>Orientation: the j^k shift moves the negative-frequency image of the IF to 0 Hz. The Airspy's R820T runs its LO
  * above the RF frequency (high-side injection), so the IF spectrum is mirrored and this image is the upright one. Use
  * {@link #invert} to conjugate the output if a front end needs the other orientation.
- * <p>Written for TrunkDeck from the textbook structure; the filter is TrunkDeck's own Kaiser design (MIT licence).
+ * <p>Written for TrunkDeck from the textbook structure; the filter is TrunkDeck's own Kaiser design.
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 public final class RealToComplex {
     final float[] h;   // 2 x half-band taps at even indices (unity complex gain)
