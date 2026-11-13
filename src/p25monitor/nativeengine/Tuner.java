@@ -1,6 +1,7 @@
 package p25monitor.nativeengine;
 
 import p25monitor.dsp.PolyphaseBank;
+import p25monitor.sdr.AirspyR2;
 import p25monitor.sdr.IqSource;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -9,11 +10,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * its usable window can be decoded at the same time: each active call gets its own {@link ChannelDecoder} (frequency
  * shift + decimating filter to 48 kHz) fed from this tuner's samples.
  * <p>The usable window is the sample rate minus the anti-alias roll-off at the edges, minus a guard band around the
- * centre (RTL dongles have a DC spike there): for an RTL at 2.4 MS/s that is about +/-1.0 MHz, for an Airspy R2 at
- * 10 MS/s about +/-4.4 MHz.
- * <p>Wideband tuners (Airspy R2 at 10 or 2.5 MS/s) first split their samples into 312.5 kHz sub-bands with a polyphase
- * filter bank ({@link PolyphaseBank}); each decoder then runs on the 625 kS/s sub-band containing its channel, so a
- * control channel plus a dozen voice channels cost about as much as on an RTL dongle.
+ * centre (RTL dongles have a DC spike there): for an RTL at 2.4 MS/s that is about +/-1.0 MHz, for an Airspy at
+ * 10 MS/s about +/-4.4 MHz. An Airspy Mini at 6 MS/s is about +/-2.6 MHz and at 3 MS/s about +/-1.3 MHz.
+ * <p>Wideband tuners (Airspy R2 at 10 or 2.5 MS/s, Airspy Mini at 10, 6 or 3 MS/s) first split their samples into
+ * sub-bands with a polyphase filter bank ({@link PolyphaseBank}); each decoder then runs on the sub-band containing
+ * its channel, so a control channel plus a dozen voice channels cost about as much as on an RTL dongle.
  */
 public final class Tuner {
     public enum Role { CONTROL, ROAMING }
@@ -46,9 +47,10 @@ public final class Tuner {
         this.id = id; this.label = label; this.src = src; this.role = role;
         this.center = src.centerHz();
         double rate = src.sampleRate();
+        boolean airspy = src instanceof AirspyR2;
         bank = rate >= 2.5e6 && PolyphaseBank.supports(rate) && !Boolean.getBoolean("trunkdeck.noFilterBank") ? new PolyphaseBank(rate) : null;
         // RTL: the last ~15 % of each half is anti-alias roll-off. Airspy: its half-band converter is flat to 0.44 x the rate.
-        this.usableFraction = bank != null ? 0.44 : rate > 5e6 ? 0.45 : 0.42;
+        this.usableFraction = bank != null || airspy ? 0.44 : rate > 5e6 ? 0.45 : 0.42;
         long g = src.dcGuardHz();
         this.dcGuard = g > 0 ? g : rate > 5e6 ? 15_000 : 25_000;
     }

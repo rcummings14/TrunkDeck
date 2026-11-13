@@ -23,8 +23,8 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   listens on those channels and decodes the P25 voice. Encrypted calls are skipped. P25 conventional has not been tested
   on a real radio system yet. If something doesn't work, please report it on
   [GitHub Issues](https://github.com/rcummings14/TrunkDeck/issues).
-* **Receivers:** one **Airspy R2** (about 8.8 MHz at 10 MS/s - often a whole site at once, many calls decoded in parallel)
-  and/or one or more **RTL-SDR** dongles (a control dongle plus roaming voice dongles). Own drivers - no SDR# / SDRTrunk.
+* **Receivers:** one **Airspy R2** or **Airspy Mini** (about 8.8 MHz at 10 MS/s - often a whole site at once, many calls decoded in parallel;
+  the Mini also offers 6 and 3 MS/s, the R2 also 2.5 MS/s) and/or one or more **RTL-SDR** dongles (a control dongle plus roaming voice dongles). Own drivers - no SDR# / SDRTrunk.
   New in 1.7.0 and **untested**: **SDRplay**, **HackRF One**, **LimeSDR** and **Ettus USRP** through SoapySDR - see
   [Supported receivers](#supported-receivers).
 * **Big scanner display** with colour themes (Full color, SDS-style, amber, ... or your own colours, including the bars
@@ -96,7 +96,8 @@ Uninstall: `~/.local/share/trunkdeck/uninstall.sh`.
 | Receiver | Status | What you install besides TrunkDeck |
 |---|---|---|
 | **RTL-SDR** (RTL2832U) | Tested | Windows: WinUSB driver via Zadig. Linux: the installer's USB setup. (librtlsdr is bundled.) |
-| **Airspy R2** | Tested | Windows: WinUSB driver via Zadig. Linux: USB setup + `libusb1`. (TrunkDeck's own driver.) |
+| **Airspy R2** | Tested | Windows: WinUSB driver via Zadig. Linux: USB setup + `libusb1`. (TrunkDeck's own driver. 10 or 2.5 MS/s.) |
+| **Airspy Mini** | Tested | Same driver and same USB ID as the R2 (`1D50 60A1`). Windows: WinUSB via Zadig. Linux: USB setup + `libusb1`. Sample rates 10, 6 and 3 MS/s. |
 | **SDRplay** RSP1A / RSP1B / RSP2 / RSPdx / RSPduo | **UNTESTED** (1.7.0) | The **SDRplay API 3.x** from [sdrplay.com](https://www.sdrplay.com) (its licence doesn't allow bundling) + SoapySDR with the SDRplay module |
 | **HackRF One** | **UNTESTED** (1.7.0) | SoapySDR + HackRF module (Windows: also WinUSB via Zadig) |
 | **LimeSDR** (USB / Mini) | **UNTESTED** (1.7.0) | SoapySDR + LimeSuite module |
