@@ -13,8 +13,11 @@ cp -r stage/native "$P/app/native"
 cp stage/talkgroups_template.csv "$P/app/" && cp stage/talkgroups_template.csv "$P/"
 cp stage/README.md stage/START-HERE.txt stage/NOTICE.txt "$P/"
 cp -r stage/licenses "$P/licenses"
+# TrunkDeck's own licence (GPL-3.0-or-later). Same text as licenses/TrunkDeck-LICENSE.txt.
+cp LICENSE "$P/LICENSE"
 cp -r stage/linux "$P/linux" && cp -r stage/windows "$P/windows"
 cp -r src test lib build.sh assemble_pkg.sh make_zip.py "$P/source/"
+cp LICENSE "$P/source/LICENSE"
 cp stage/third-party/* "$P/source/third-party/"
 # never ship user data (radio-name files, settings) even if one was left in the tree
 find "$P" \( -name "*.radios" -o -name "settings.properties" -o -name "rr-app-key.txt" -o -name "rr-login.properties" \) -delete

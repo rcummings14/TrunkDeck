@@ -670,7 +670,8 @@ Thanks to @phillydjdan for the Display-Only button idea ([Discussion #15](https:
 and @kd8bxp for SDRplay testing, the auto-start idea and the Linux line-ending catch.
 
 ## Licenses & credits
-* **TrunkDeck**, including the TrunkDeck engine (`source/src/p25monitor/{p25,dsp,sdr,nativeengine}`): MIT license (`licenses/TrunkDeck-LICENSE.txt`).
+* **TrunkDeck**, including the TrunkDeck engine (`source/src/p25monitor/{p25,dsp,sdr,nativeengine}`): GNU General Public License v3.0 or later (`licenses/TrunkDeck-LICENSE.txt`).
+  Copyright (C) 2026 Ray Cummings. Versions 1.7.4.1 and earlier were released under the MIT License.
   Source code and tests are in `source/`. Written from the published TIA-102 standards. Since 1.4.6 the error-correction and
   coding tables are built from the standards' own definitions (`source/src/p25monitor/p25/CodeTables.java`), and a test proves they
   are identical to the earlier tables. See `NOTICE.txt`.

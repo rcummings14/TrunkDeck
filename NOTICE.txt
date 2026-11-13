@@ -1,8 +1,9 @@
 TrunkDeck
 =========
-Copyright (c) 2026 TrunkDeck contributors. Licensed under the MIT License: licenses/TrunkDeck-LICENSE.txt.
+Copyright (C) 2026 Ray Cummings. Licensed under the GNU General Public License v3.0 or later: licenses/TrunkDeck-LICENSE.txt.
+Versions 1.7.4.1 and earlier were released under the MIT License.
 
-TrunkDeck's own code (the window, the P25 engine, the SDR drivers) is MIT-licensed. It was written from the published
+TrunkDeck's own code (the window, the P25 engine, the SDR drivers) is licensed under the GNU GPL v3.0 or later. It was written from the published
 TIA-102 (APCO Project 25) standards:
   TIA-102.BAAA-A  FDMA Common Air Interface (NID BCH code, trellis code and interleaver, Golay / Hamming / Reed-Solomon codes)
   TIA-102.BAAC-A  CAI Reserved Values (Data Unit IDs and NID parity bits)

@@ -7,7 +7,7 @@ import java.nio.file.*;
 import java.util.*;
 
 /**
- * 1.4.6 (MIT table regeneration): decodes recordings and prints every decoded item - NIDs with bit errors, TSBKs, LDU
+ * 1.4.6 (table regeneration): decodes recordings and prints every decoded item - NIDs with bit errors, TSBKs, LDU
  * voice frames and link control, HDU / terminators, FEC statistics, Phase 2 ISCH / MAC PDUs / voice frames - so that the
  * output of two builds can be compared line for line (it must be identical).
  * Usage: DecodeDump out.txt file...   (.wav I/Q through C4FM and CQPSK demodulators; .bin = Phase 2 dibit capture)
