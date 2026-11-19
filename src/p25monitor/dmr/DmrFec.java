@@ -80,6 +80,8 @@ public final class DmrFec {
 
     /** Table B.21. Masks are applied to the CRC or RS parity, not to the message. */
     public static final int MASK_VOICE_LC = 0x969696, MASK_TERMINATOR = 0x999999, MASK_CSBK = 0xA5A5, MASK_DATA_HEADER = 0xCCCC;
+    /** CRC masks of the privacy (PI) header and of a multiple block control (MBC) message (TS 102 361-1 table B.21). */
+    public static final int MASK_PI = 0x6969, MASK_MBC = 0xAAAA;
 
     static final int[] GF_EXP = new int[512];
     static final int[] GF_LOG = new int[256];
@@ -150,9 +152,14 @@ public final class DmrFec {
 
     public static int golayDecode(int word20) { return decodeInfo(GOLAY_20_8, 8, 20, word20, 3); }
 
+    /** Same, but only accepts a word within {@code maxErr} bits of a codeword. A smaller limit makes a chance match rarer. */
+    public static int golayDecode(int word20, int maxErr) { return decodeInfo(GOLAY_20_8, 8, 20, word20, maxErr); }
+
     public static int qrEncode(int info7) { return encode(QR_16_7, 7, info7 & 0x7F); }
 
     public static int qrDecode(int word16) { return decodeInfo(QR_16_7, 7, 16, word16, 2); }
+
+    public static int qrDecode(int word16, int maxErr) { return decodeInfo(QR_16_7, 7, 16, word16, maxErr); }
 
     public static int hamming74Encode(int info4) { return encode(HAMMING_7_4, 4, info4 & 0xF); }
 
@@ -220,6 +227,45 @@ public final class DmrFec {
         return expect[0] == (byte) ((got >> 16) & 0xFF) && expect[1] == (byte) ((got >> 8) & 0xFF) && expect[2] == (byte) (got & 0xFF);
     }
 
+    /**
+     * RS(12,9) has distance 4, so it fixes one wrong octet. Tries every single-octet change (12 positions x 255 values)
+     * and returns the corrected 96 bits when exactly one makes the check pass, else null. Only worth calling after
+     * {@link #fullLcOk} has failed.
+     */
+    public static boolean[] repairFullLc(boolean[] info96, int mask24) {
+        if (info96 == null || info96.length < 96) return null;
+        boolean[] t = java.util.Arrays.copyOf(info96, 96);
+        boolean[] found = null;
+        for (int p = 0; p < 12; p++) {
+            for (int v = 1; v < 256; v++) {
+                flipOctet(t, p, v);
+                if (fullLcOk(t, mask24)) {
+                    if (found != null) return null;
+                    found = t.clone();
+                }
+                flipOctet(t, p, v);
+            }
+        }
+        return found;
+    }
+
+    private static void flipOctet(boolean[] bits, int octet, int v) {
+        for (int i = 0; i < 8; i++) if (((v >> (7 - i)) & 1) != 0) bits[octet * 8 + i] = !bits[octet * 8 + i];
+    }
+
+    /** 80 body bits followed by their CRC-CCITT XOR {@code mask16}. */
+    public static boolean[] crc96(boolean[] body80, int mask16) {
+        boolean[] info = new boolean[96];
+        System.arraycopy(body80, 0, info, 0, 80);
+        DmrBits.write(info, 80, crcCcitt(info, 0, 80) ^ mask16, 16);
+        return info;
+    }
+
+    /** True when the last 16 of the 96 bits are the CRC-CCITT of the first 80, XOR {@code mask16}. */
+    public static boolean crcOk(boolean[] info96, int mask16) {
+        return info96 != null && info96.length >= 96 && ((DmrBits.read(info96, 80, 16) ^ mask16) ^ crcCcitt(info96, 0, 80)) == 0;
+    }
+
     /** 96 information bits: 80-bit CSBK body, then CRC-CCITT masked with 0xA5A5. */
     public static boolean[] csbk96(boolean[] body80) {
         boolean[] info = new boolean[96];
@@ -230,8 +276,33 @@ public final class DmrFec {
 
     public static boolean csbkOk(boolean[] info96) {
         if (info96 == null || info96.length < 96) return false;
+        return csbkResidual(info96) == 0;
+    }
+
+    /** Received CRC XOR the CRC the standard mask expects. Zero means the CSBK checks. */
+    public static int csbkResidual(boolean[] info96) {
         int got = DmrBits.read(info96, 80, 16) ^ MASK_CSBK;
-        return got == crcCcitt(info96, 0, 80);
+        return (got ^ crcCcitt(info96, 0, 80)) & 0xFFFF;
+    }
+
+    /**
+     * The CSBK as received when its CRC matches, or a copy with the one body bit flipped that makes the CRC match.
+     * The opcode is read from the result, so a corrected bit can change which message it is. Null when nothing fits.
+     */
+    public static boolean[] repairCsbk(boolean[] info96) {
+        if (info96 == null || info96.length < 96) return null;
+        if (csbkOk(info96)) return info96;
+        boolean[] trial = info96.clone();
+        boolean[] found = null;
+        for (int i = 0; i < 80; i++) {
+            trial[i] = !trial[i];
+            if (csbkOk(trial)) {
+                if (found != null) return null;
+                found = trial.clone();
+            }
+            trial[i] = !trial[i];
+        }
+        return found;
     }
 
     /**
@@ -265,21 +336,46 @@ public final class DmrFec {
         return tx;
     }
 
+    /**
+     * Decodes BPTC(196,96) with both codes. Each row is a Hamming(15,11) word and each column a Hamming(13,9) word.
+     * A row pass fixes single errors (a row with two errors gets a third bit wrongly flipped), a column pass then repairs
+     * what the row pass left, and a final row pass cleans up. Bits that no code can fix are returned as received.
+     */
     public static boolean[] bptcDecode(boolean[] tx) {
         boolean[] indexed = new boolean[196];
         for (int i = 0; i < 196; i++) indexed[i] = tx[(i * 181) % 196];
-        int[] row = new int[9];
+        boolean[][] g = new boolean[13][15];
         int idx = 1;
-        for (int r = 0; r < 9; r++) {
-            int word = 0;
-            for (int c = 0; c < 15; c++) word = (word << 1) | (indexed[idx++] ? 1 : 0);
-            int info = decodeInfo(HAMMING_15_11, 11, 15, word, 1);
-            row[r] = info < 0 ? (word >> 4) & 0x7FF : info;
-        }
+        for (int r = 0; r < 13; r++) for (int c = 0; c < 15; c++) g[r][c] = indexed[idx++];
+        fixRows(g);
+        fixColumns(g);
+        fixRows(g);
         boolean[] data = new boolean[99];
-        for (int r = 0; r < 9; r++) for (int c = 0; c < 11; c++) data[r * 11 + c] = ((row[r] >> (10 - c)) & 1) == 1;
+        for (int r = 0; r < 9; r++) for (int c = 0; c < 11; c++) data[r * 11 + c] = g[r][c];
         boolean[] info = new boolean[96];
         for (int i = 0; i < 96; i++) info[i] = data[3 + i];
         return info;
+    }
+
+    private static void fixRows(boolean[][] g) {
+        for (int r = 0; r < 9; r++) {
+            int word = 0;
+            for (int c = 0; c < 15; c++) word = (word << 1) | (g[r][c] ? 1 : 0);
+            int info = decodeInfo(HAMMING_15_11, 11, 15, word, 1);
+            if (info < 0) continue;
+            int cw = encode(HAMMING_15_11, 11, info);
+            for (int c = 0; c < 15; c++) g[r][c] = ((cw >> (14 - c)) & 1) == 1;
+        }
+    }
+
+    private static void fixColumns(boolean[][] g) {
+        for (int c = 0; c < 15; c++) {
+            int word = 0;
+            for (int r = 0; r < 13; r++) word = (word << 1) | (g[r][c] ? 1 : 0);
+            int info = decodeInfo(HAMMING_13_9, 9, 13, word, 1);
+            if (info < 0) continue;
+            int cw = encode(HAMMING_13_9, 9, info);
+            for (int r = 0; r < 13; r++) g[r][c] = ((cw >> (12 - r)) & 1) == 1;
+        }
     }
 }

@@ -52,18 +52,19 @@ SoapySDR - Boost Software License 1.0 - https://github.com/pothosware/SoapySDR
 SDRplay API - proprietary (SDRplay Ltd) - https://www.sdrplay.com
   Its licence does not allow redistribution: it is never included and must be downloaded from sdrplay.com.
   TrunkDeck only checks whether it is installed, to explain what is missing.
-mock_soapy.cpp / broken_module.c (source/test/mocksoapy) are TrunkDeck's own test code (MIT).
+mock_soapy.cpp / broken_module.c (source/test/mocksoapy) are TrunkDeck's own test code (GPL-3.0-or-later).
 
 Reference only (no code or binary included)
 -------------------------------------------
 airspyone_host / libairspy - BSD 3-Clause - https://github.com/airspy/airspyone_host
-  TrunkDeck's own Airspy R2 driver (Java, MIT) talks to the receiver over libusb. The USB protocol (vendor request
+  TrunkDeck's own Airspy R2 driver (Java, GPL-3.0-or-later) talks to the receiver over libusb. The USB protocol (vendor request
   numbers, sample formats) was read from libairspy's airspy.c; the linearity / sensitivity gain preset tables are
   taken from airspy.c with its copyright notice: airspyone_host-BSD-3-Clause.txt. libairspy's IQ converter and filter
   code (marked "for the Airspy ecosystem only") was not used - TrunkDeck has its own converter and filter bank.
 
 TrunkDeck itself
 ----------------
-TrunkDeck and its P25 engine - MIT (TrunkDeck-LICENSE.txt). Written from the published TIA-102 standards. The
+TrunkDeck and its P25 engine - GNU GPL v3.0 or later (TrunkDeck-LICENSE.txt). Copyright (C) 2026 Ray Cummings.
+  Versions 1.7.4.1 and earlier were released under the MIT License. Written from the published TIA-102 standards. The
   error-correction and coding tables are built from the standards' definitions (source/src/p25monitor/p25/CodeTables.java,
   with the standard section for each), and a test proves they are identical to the tables of earlier releases. See NOTICE.txt.

@@ -32,6 +32,16 @@ if [ "${1:-}" = "test" ]; then
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.DisplayBarsTests   # bar colours (1.4.9)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.DisplayColorTests   # every custom colour and preset reaches the panel
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.DmrTests   # synthetic DMR bursts (untested on air)
+  "$JAVA" ${TEST_OPTS:-} -cp build/classes:build/test p25monitor.dmr.DmrSystemTests   # Tier III grant layout, MBC absolute grants, PI header, emergency, P_CLEAR (1.7.6)
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.DmrEngineTests   # DMR calls per slot, emergency, encryption, private grants (1.7.6)
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nxdn.NxdnTests   # NXDN coding, frames, receiver, NXDN48/96 demod (1.7.6)
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.NxdnEngineTests   # NXDN calls in the engine, Type-C channel resolution (1.7.6)
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.NxdnSystemsPageTests   # Systems page NXDN channel table (1.7.6)
+  "$JAVA" ${TEST_OPTS:-} -cp build/classes:build/test p25monitor.analog.AnalogTests   # analog FM squelch, every CTCSS tone, tone squelch (1.7.6)
+  "$JAVA" ${TEST_OPTS:-} -cp build/classes:build/test p25monitor.analog.SquelchToneTests   # adjustable analog squelch level, CTCSS tone formats (206.5 PL, 206,5)
+  "$JAVA" ${TEST_OPTS:-} -cp build/classes:build/test p25monitor.motorola.Type2Tests   # Motorola Type II control channel: OSW coding, 3600 bit/s FSK receiver, band plans, grants
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.Type2EngineTests   # Type II grants -> analog / P25 calls, saved band plan, RadioReference type
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.AnalogEngineTests   # analog calls, channel tones (1.7.6)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.SignalMeterTests   # control-channel signal meter: scale, text, glass
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.ControlSignalTests   # control-tuner level only; no invented reading
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.DisplayOnlyTests   # Display only logic (1.5.0; the window part needs a display)
@@ -42,7 +52,10 @@ if [ "${1:-}" = "test" ]; then
   "$JAVA" -Dtrunkdeck.lib=lib -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.LiveTalkgroupTests   # live talkgroup edits, feeds stay connected (1.4.4)
   "$JAVA" -Dtrunkdeck.lib=lib -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.FeedTagTests   # now-playing tags on feeds (1.5.1)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test p25monitor.rr.RrTests   # RadioReference setup against a mock SOAP server (1.6.0)
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test p25monitor.rr.RrAllSystemsTests   # RadioReference import of every decodable system type (1.7.6)
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test p25monitor.rr.ChannelTableTests   # a pasted frequency table (RadioReference page, CHIRP CSV, spreadsheet) becomes channels
   "$JAVA" --enable-native-access=ALL-UNNAMED -Dtrunkdeck.lib=lib -Djava.awt.headless=true -Dtrunkdeck.src=. ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.SoapyTests   # SDRplay/HackRF/LimeSDR/USRP via SoapySDR with simulated modules (1.7.0); -Dsoapy.prefix=<conda env with SoapySDR 0.8 + g++> (default $CONDA_PREFIX), skipped otherwise
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.nativeengine.P25MessageTests   # PDU / AMBTC grants, voice-channel group updates, more LC and TSBK messages (1.7.6)
   "$JAVA" ${TEST_OPTS:-} -cp build/classes:build/test p25monitor.p25.CodeTablesTests   # coding tables built from the TIA-102 standards = the earlier tables (1.4.6)
   "$JAVA" -Dtrunkdeck.lib=lib ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.ViewModeTests   # Simple / Advanced view, colours, scan animation (1.4.5; needs a display, skipped when headless)
   "$JAVA" -Dtrunkdeck.lib=lib -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes:build/test:lib/flatlaf-3.5.4.jar p25monitor.PlaybackTests   # in-app playback of saved MP3/WAV calls (the window part needs a display)

@@ -36,6 +36,15 @@ public final class Tsbk {
 
     public boolean standard() { return mfid == 0x00 || mfid == 0x01; }
 
+    /** Motorola (MFID 0x90) patch group add / delete: supergroup in octets 2-3, up to three patched groups in octets 4-9. */
+    public static final int MOT_PATCH_ADD = 0x00, MOT_PATCH_DELETE = 0x01;
+    /** The distinct, non-zero patched groups of a Motorola patch add / delete (the supergroup itself left out). */
+    public int[] patchGroups() {
+        java.util.LinkedHashSet<Integer> g = new java.util.LinkedHashSet<>();
+        for (int o = 4; o <= 8; o += 2) { int t = u16(o); if (t != 0 && t != u16(2)) g.add(t); }
+        return g.stream().mapToInt(Integer::intValue).toArray();
+    }
+
     // ----- service options (grants)
     public static boolean emergency(int so) { return (so & 0x80) != 0; }
     public static boolean encrypted(int so) { return (so & 0x40) != 0; }
@@ -69,7 +78,13 @@ public final class Tsbk {
 
     /** Human readable summary (channel numbers shown as band-channel; the engine adds frequencies). */
     public String describe(ChannelMap map) {
-        if (!standard()) return (mfid == 0x90 ? "MOTOROLA " : String.format("MFID %02X ", mfid)) + String.format("OPCODE %02X", opcode);
+        if (mfid == 0x90 && (opcode == MOT_PATCH_ADD || opcode == MOT_PATCH_DELETE)) {
+            StringBuilder s = new StringBuilder(opcode == MOT_PATCH_ADD ? "MOTOROLA PATCH ADD SG:" : "MOTOROLA PATCH DELETE SG:").append(u16(2)).append(" TG:");
+            int[] g = patchGroups();
+            for (int i = 0; i < g.length; i++) s.append(i == 0 ? "" : ",").append(g[i]);
+            return s.toString();
+        }
+        if (!standard()) return (mfid == 0x90 ? "MOTOROLA " : mfid == 0xA4 ? "HARRIS " : String.format("MFID %02X ", mfid)) + String.format("OPCODE %02X", opcode) + "  " + hex();
         StringBuilder s = new StringBuilder(name(opcode));
         switch (opcode) {
             case GRP_V_CH_GRANT -> s.append(" TG:").append(u16(5)).append(" SRC:").append(u24(7)).append(" CH:").append(ch(u16(3), map)).append(so(u8(2)));
@@ -101,6 +116,8 @@ public final class Tsbk {
             case CALL_ALRT -> s.append(" TO:").append(u24(4)).append(" FROM:").append(u24(7));
             case ACK_RSP_FNE -> s.append(" TARGET:").append(u24(7));
             case SN_DATA_CHN_GNT -> s.append(" RADIO:").append(u24(7)).append(" CH:").append(ch(u16(3), map));
+            case TELE_INT_CH_GRANT -> s.append(" UNIT:").append(u24(7)).append(" CH:").append(ch(u16(3), map))
+                    .append(u16(5) != 0 ? String.format(" TIMER:%.1fs", u16(5) / 10.0) : "").append(so(u8(2)));
             default -> s.append("  ").append(hex());
         }
         return s.toString();

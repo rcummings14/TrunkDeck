@@ -17,6 +17,32 @@ import p25monitor.p25.Fec;
 public final class DmrAmbe {
     private DmrAmbe() {}
 
+    /** A frame JMBE decodes as near silence with no FEC errors (a real capture; it also passes {@link #decode}). */
+    public static final byte[] SILENCE = {(byte) 0xA4, 0x78, (byte) 0xE4, 0x52, 0x01, 0x14, (byte) 0xC0, 0x27, 0x67};
+
+    /**
+     * Per-call frame repair. A frame that passes is rewritten with its corrected C0 and C1 and remembered. The first
+     * bad frame in a row repeats the last good one, later bad frames become silence, so a burst of damage gives a
+     * short gap and not a chirp.
+     */
+    public static final class Concealer {
+        private byte[] last;
+        private int bad;
+
+        public byte[] process(byte[] frame) {
+            Voice v = decode(frame);
+            if (v.ok()) {
+                bad = 0;
+                last = encode(v.c0, v.c1, v.c2, v.c3);
+                return last;
+            }
+            bad++;
+            return bad == 1 && last != null ? last.clone() : SILENCE.clone();
+        }
+
+        public void reset() { last = null; bad = 0; }
+    }
+
     /** Dibit i: high bit goes to vector {@code W[i]} index {@code X[i]}, low bit to {@code Y[i]} index {@code Z[i]}. */
     private static final int[] W = {
             0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2 };
@@ -36,15 +62,24 @@ public final class DmrAmbe {
         public boolean ok() { return errors >= 0; }
     }
 
-    /** Decode one 9-byte frame. The voice fields are zero and {@code errors} is -1 when Golay cannot correct it. */
+    /**
+     * Decode one 9-byte frame. The voice fields are zero and {@code errors} is -1 when the frame is rejected.
+     * Golay(23,12) is a perfect code: it "corrects" every received word, so on its own it never reports failure.
+     * C0 is the extended (24,12) word, so its overall parity bit is used to spot four wrong bits. C1 has no spare bit;
+     * its corrections are trusted only because C0 passed.
+     */
     public static Voice decode(byte[] frame) {
         if (frame == null || frame.length < 9) return new Voice(0, 0, 0, 0, -1);
         boolean[][] v = deinterleave(frame);
         int c0cw = 0;
         for (int j = 0; j < 23; j++) if (v[0][j + 1]) c0cw |= 1 << j;
+        int parity = v[0][0] ? 1 : 0;
         int[] e0 = new int[1];
-        int c0 = Fec.golay24Decode(c0cw << 1, e0);
+        int c0 = Fec.golay24Decode((c0cw << 1) | parity, e0);
         if (e0[0] < 0) return new Voice(0, 0, 0, 0, -1);
+        // With the 12 data bits repaired, the parity bit has to be what the encoder would have sent.
+        int c0errors = e0[0] + ((Fec.golay24Encode(c0 & 0xFFF) & 1) != parity ? 1 : 0);
+        if (c0errors > 3) return new Voice(0, 0, 0, 0, -1);
         int c1cw = 0;
         for (int j = 0; j < 23; j++) if (v[1][j]) c1cw |= 1 << j;
         c1cw ^= pnMask(c0);
@@ -54,7 +89,7 @@ public final class DmrAmbe {
         int c2 = 0, c3 = 0;
         for (int j = 0; j < 11; j++) if (v[2][j]) c2 |= 1 << j;
         for (int j = 0; j < 14; j++) if (v[3][j]) c3 |= 1 << j;
-        return new Voice(c0 & 0xFFF, c1 & 0xFFF, c2 & 0x7FF, c3 & 0x3FFF, e0[0] + e1[0]);
+        return new Voice(c0 & 0xFFF, c1 & 0xFFF, c2 & 0x7FF, c3 & 0x3FFF, c0errors + e1[0]);
     }
 
     /** 9-byte frame in the order {@code AMBEFrame} reads. C0 and C1 are freshly Golay-encoded and C1 is whitened. */

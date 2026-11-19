@@ -6,7 +6,8 @@ import p25monitor.dsp.C4fmDemod;
  * Assembles P25 Phase 1 data units from demodulated symbols: removes status symbols (every 36th dibit counted from
  * the start of frame sync), decodes the NID (BCH) with NAC check, then TSDU (up to 3 trellis-coded TSBKs), LDU1/LDU2
  * (9 IMBE voice frames + RS/Hamming protected link control / encryption sync), HDU, TDU, and TDULC
- * (12 sequential Golay(24,12) words over an RS(24,12) link-control word).
+ * (12 sequential Golay(24,12) words over an RS(24,12) link-control word), and PDU: the header block of every packet
+ * data unit and the data blocks of alternate multiple block trunking control messages ({@link Pdu}).
  */
 public final class P25Framer implements C4fmDemod.Sink {
     public static final int DUID_HDU = 0x0, DUID_TDU = 0x3, DUID_LDU1 = 0x5, DUID_TSDU = 0x7, DUID_LDU2 = 0xA,
@@ -15,6 +16,8 @@ public final class P25Framer implements C4fmDemod.Sink {
     public interface Listener {
         default void nid(int nac, int duid, int bitErrors) {}
         default void tsbk(Tsbk t) {}
+        /** A PDU whose header checked; an AMBTC also carries its data blocks (their CRC-32 checked). */
+        default void pdu(Pdu p) {}
         default void tsbkError() {}
         /** imbe: 9 frames x 18 bytes (raw 144 channel bits, JMBE deinterleaves/decodes). lc: LDU1 link control or null. */
         default void ldu(int nac, int duid, byte[][] imbe, LinkControl lc, EncryptionSync ess) {}
@@ -35,9 +38,12 @@ public final class P25Framer implements C4fmDemod.Sink {
     final byte[] bits = new byte[1800];
     final float[] levels = new float[900];
     int nbits, dibitIndex, need, duid, nac, blocks;
+    byte[] pduHeader;
+    /** Longest AMBTC accepted (TIA-102.AABC messages use 1 to 3 data blocks); also bounded by the frame buffer. */
+    static final int AMBTC_MAX_BLOCKS = 3;
     boolean active;
     // statistics
-    public volatile long tsbkOk, tsbkBad, nidOk, nidBad, frames;
+    public volatile long tsbkOk, tsbkBad, nidOk, nidBad, frames, pduOk, pduBad;
     /** Running FEC statistics (bits checked / bits corrected by the NID BCH, TSBK trellis and LDU Hamming codes): a live
      *  bit-error-rate estimate used to compare demodulators. A failed NID counts as 16 errors in 64 bits. */
     public volatile long fecBits, fecErrors;
@@ -61,6 +67,7 @@ public final class P25Framer implements C4fmDemod.Sink {
         need = 112;
         blocks = 0;
         duid = -1;
+        pduHeader = null;
     }
 
     @Override public void symbol(int dibit, float level) {
@@ -92,7 +99,8 @@ public final class P25Framer implements C4fmDemod.Sink {
                 case DUID_HDU -> need = 112 + 648;
                 case DUID_TDU -> { listener.terminator(nac, duid); active = false; }
                 case DUID_TDULC -> need = 112 + 288; // 12 Golay(24,12) words, status symbols already removed
-                default -> active = false; // PDU etc. not decoded
+                case DUID_PDU -> need = 112 + 196;   // header block first; AMBTC data blocks are added once it checks
+                default -> active = false;
             }
             return;
         }
@@ -117,8 +125,53 @@ public final class P25Framer implements C4fmDemod.Sink {
             case DUID_LDU1, DUID_LDU2 -> { ldu(); active = false; }
             case DUID_HDU -> { listener.hdu(nac); active = false; }
             case DUID_TDULC -> { tdulc(); active = false; }
+            case DUID_PDU -> pdu();
             default -> active = false;
         }
+    }
+
+    /** Decodes one 1/2-rate trellis block at a status-free bit offset (hard decision, then soft), or null. errOut[0] = hard metric. */
+    byte[] halfRateBlock(int off, int[] errOut) {
+        byte[] b = Fec.trellisDecode(bits, off, errOut);
+        fecBits += 196; fecErrors += Math.min(errOut[0], 98);
+        return b;
+    }
+
+    /**
+     * PDU: the header block must pass its CRC-CCITT. A data packet is reported by its header only. An AMBTC's data blocks
+     * are collected and checked with the CRC-32; when that check fails the message is still accepted if every block
+     * decoded without a single corrected bit (the trellis code then leaves essentially no doubt).
+     */
+    void pdu() {
+        int[] err = new int[1];
+        if (pduHeader == null) {
+            byte[] h = halfRateBlock(112, err);
+            if (h == null || !Fec.crc16Ok(h)) h = Fec.trellisDecodeSoft(levels, 112 / 2);
+            if (h == null || !Fec.crc16Ok(h)) { pduBad++; active = false; return; }
+            Pdu head = new Pdu(h, null, nac);
+            int n = head.blocksToFollow();
+            if (!head.ambtc() || n == 0) { pduOk++; listener.pdu(head); active = false; return; }
+            if (n > AMBTC_MAX_BLOCKS) { pduBad++; active = false; return; }
+            pduHeader = h;
+            blocks = n;
+            need = 112 + 196 * (1 + n);
+            return;
+        }
+        byte[] hard = new byte[12 * blocks], soft = new byte[12 * blocks];
+        boolean clean = true;
+        for (int k = 0; k < blocks; k++) {
+            int off = 112 + 196 * (1 + k);
+            byte[] b = halfRateBlock(off, err);
+            byte[] s = b != null && err[0] == 0 ? b : Fec.trellisDecodeSoft(levels, off / 2);
+            if (b == null || err[0] != 0) clean = false;
+            System.arraycopy(b != null ? b : s, 0, hard, 12 * k, 12);
+            System.arraycopy(s, 0, soft, 12 * k, 12);
+        }
+        active = false;
+        byte[] data = Pdu.crc32Ok(hard) || clean ? hard : Pdu.crc32Ok(soft) ? soft : null;
+        if (data == null) { pduBad++; return; }
+        pduOk++;
+        listener.pdu(new Pdu(pduHeader, data, nac));
     }
 
     void ldu() {
@@ -185,6 +238,23 @@ public final class P25Framer implements C4fmDemod.Sink {
         public boolean isProtected() { return (lcf & 0x80) != 0; }
         public boolean isGroupVoice() { return opcode() == 0 && mfid == 0 || opcode() == 0 && mfid == 0x90; }
         public boolean isUnitToUnit() { return opcode() == 3 && mfid == 0; }
+        /**
+         * Standard format bit (LCF bit 6, TIA-102.AABF): set, the word has no MFID octet (implicit MFID 0x00) and octets
+         * 1-8 are all message fields.
+         */
+        public boolean implicitMfid() { return (lcf & 0x40) != 0; }
+        boolean standardMessage() { return implicitMfid() || mfid == 0x00; }
+        /**
+         * Group Voice Channel Update (LCO 0x02, implicit MFID): the site's other active group calls, sent on a voice
+         * channel: Channel A, Group A, Channel B, Group B. A channel of 0 means the pair is unused.
+         */
+        public boolean isGroupUpdate() { return (lcf & 0x7f) == 0x42; }
+        public int updateChannel(int pair) { return pair == 0 ? (u(1) << 8) | u(2) : (u(5) << 8) | u(6); }
+        public int updateGroup(int pair) { return pair == 0 ? (u(3) << 8) | u(4) : (u(7) << 8) | u(8); }
+        /** Telephone Interconnect Voice Channel User (LCO 0x06): service options in octet 2, the unit in octets 6-8. */
+        public boolean isTelephone() { return opcode() == 0x06 && standardMessage(); }
+        /** Call Termination / Cancellation (LCO 0x0F): the unit (LLID) in octets 6-8. */
+        public boolean isCallTermination() { return opcode() == 0x0F && standardMessage(); }
         public int serviceOptions() { return u(2); }
         public boolean emergency() { return (u(2) & 0x80) != 0; }
         public boolean encrypted() { return (u(2) & 0x40) != 0; }
@@ -206,7 +276,15 @@ public final class P25Framer implements C4fmDemod.Sink {
         }
         public String toString() {
             if (isGroupVoice()) return "LC GROUP VOICE TG:" + talkgroup() + " SRC:" + source() + (encrypted() ? " ENCRYPTED" : "") + (emergency() ? " EMERGENCY" : "");
-            if (isUnitToUnit()) return "LC UNIT-TO-UNIT TO:" + target() + " SRC:" + source();
+            if (isUnitToUnit()) return "LC UNIT-TO-UNIT TO:" + target() + " SRC:" + source() + (encrypted() ? " ENCRYPTED" : "") + (emergency() ? " EMERGENCY" : "");
+            if (isGroupUpdate()) {
+                String t = "LC GROUP VOICE UPDATE TG:" + updateGroup(0) + " CH:" + (updateChannel(0) >> 12) + "-" + (updateChannel(0) & 0xfff);
+                if (updateChannel(1) != 0 && (updateGroup(1) != updateGroup(0) || updateChannel(1) != updateChannel(0)))
+                    t += " | TG:" + updateGroup(1) + " CH:" + (updateChannel(1) >> 12) + "-" + (updateChannel(1) & 0xfff);
+                return t;
+            }
+            if (isTelephone()) return "LC TELEPHONE INTERCONNECT UNIT:" + source() + (encrypted() ? " ENCRYPTED" : "") + (emergency() ? " EMERGENCY" : "");
+            if (isCallTermination()) return "LC CALL TERMINATION UNIT:" + source();
             return String.format("LC LCF:%02X MFID:%02X", lcf, mfid);
         }
     }
@@ -278,6 +356,17 @@ public final class P25Framer implements C4fmDemod.Sink {
             for (int i = 0; i < 10; i++) b[LC_OFFSETS[g] + j * 10 + i] = (byte) ((h >> (9 - i)) & 1);
         }
         return toDibitsWithStatus(b, 1680, 2);
+    }
+
+    /** PDU frame: a 12-octet header (its CRC is filled in) and 12-octet 1/2-rate data blocks (sent as given). */
+    public static int[] buildPdu(int nac, byte[] header12, byte[]... blocks12) {
+        byte[] b = header(nac, DUID_PDU);
+        byte[] h = header12.clone();
+        Fec.crc16Fill(h);
+        System.arraycopy(Fec.trellisEncode(h), 0, b, 112, 196);
+        int n = 112 + 196;
+        for (byte[] blk : blocks12) { System.arraycopy(Fec.trellisEncode(blk), 0, b, n, 196); n += 196; }
+        return toDibitsWithStatus(b, n, 2);
     }
 
     public static int[] buildTdu(int nac) {

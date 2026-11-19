@@ -68,25 +68,76 @@ public final class RrImport {
         n.mode = mode(t);
     }
 
+    /** What TrunkDeck can do with a RadioReference system type. */
+    public enum Family {
+        P25, DMR, NXDN,
+        /** Motorola Type II SmartNet / SmartZone (including Type IIi hybrid): Motorola control channel, analog or P25 voice. */
+        TYPE2,
+        /** Analog trunking (EDACS, LTR, MPT 1327, Passport): its control channel is not followed, its voice channels are analog FM. */
+        ANALOG,
+        /** Digital voice TrunkDeck cannot decode (TETRA, iDEN, OpenSky, ProVoice, dPMR). */
+        UNSUPPORTED
+    }
+
+    static String typeText(String typeName, String flavorName) {
+        return ((typeName == null ? "" : typeName) + " " + (flavorName == null ? "" : flavorName)).toLowerCase(Locale.ROOT).trim();
+    }
+
+    /** The decoder family for a RadioReference type and flavor. A blank type is treated as P25, as before. */
+    public static Family family(String typeName, String flavorName) {
+        String t = typeText(typeName, flavorName);
+        if (t.isEmpty()) return Family.P25;
+        if (t.matches(".*(tetra|iden|opensky|provoice|dpmr).*")) return Family.UNSUPPORTED;
+        if (t.matches(".*(dmr|mototrbo|capacity plus|capacity max|connect plus|xpt|hytera).*")) return Family.DMR;
+        if (t.matches(".*(nxdn|nexedge|idas).*")) return Family.NXDN;
+        if (t.contains("25") || t.contains("apco")) return Family.P25;
+        // Motorola Type II (SmartNet, SmartZone, OmniLink, Type IIi hybrid) has its own 3600 bit/s control channel.
+        if (t.matches(".*(smartzone|smartnet|type ii).*")) return Family.TYPE2;
+        // Type I (fleet maps) is not decoded: it imports as P25, as before, so the talkgroups and frequencies come along.
+        if (t.matches(".*(type i\\b|motorola).*")) return Family.P25;
+        if (t.matches(".*(edacs|ltr|mpt|passport|multi-net|multinet).*")) return Family.ANALOG;
+        return Family.UNSUPPORTED;
+    }
+
+    public static Family family(TrsDetails d) { return d == null ? Family.P25 : family(d.typeName(), d.flavorName()); }
+
+    /** DMR trunking flavour for {@link RadioSystem#dmrFlavor}: capplus, conplus, xpt or tier3. */
+    public static String dmrFlavor(String typeName, String flavorName) {
+        String t = typeText(typeName, flavorName);
+        if (t.contains("capacity plus")) return "capplus";   // Linked Capacity Plus too
+        if (t.contains("connect plus")) return "conplus";
+        if (t.contains("xpt")) return "xpt";
+        return "tier3";
+    }
+
     /**
-     * A RadioReference system is conventional P25 when its type or flavor says so (for example "Project 25 Conventional").
+     * Fixed channels rather than a followed control channel: a type or flavor that says "conventional" (for example
+     * "Project 25 Conventional"), and every analog trunked system (its voice channels are listened to directly).
      * A normal trunked P25 system is not, even if a site forgot to mark its control channel.
      */
     public static boolean conventionalSystem(String typeName, String flavorName) {
-        String t = ((typeName == null ? "" : typeName) + " " + (flavorName == null ? "" : flavorName)).toLowerCase(Locale.ROOT);
-        if (!t.contains("conventional")) return false;
-        return t.contains("25") || t.contains("apco") || t.contains("p25");
+        Family fam = family(typeName, flavorName);
+        if (fam == Family.ANALOG) return true;
+        if (fam == Family.UNSUPPORTED) return false;
+        return typeText(typeName, flavorName).contains("conventional");
     }
 
     public static boolean conventionalSystem(TrsDetails d) { return d != null && conventionalSystem(d.typeName(), d.flavorName()); }
 
-    /** Every frequency on the chosen sites, as a conventional channel. The site's NAC is kept when the sites don't all share one. */
+    /**
+     * Every voice frequency on the chosen sites, as a conventional channel. A frequency marked as a control channel is
+     * left out (on an analog trunked system it is a data carrier, not voice), unless the site marks nothing else.
+     * The site's NAC is kept when the sites don't all share one.
+     */
     public static List<RadioSystem.Channel> conventionalChannels(List<Site> sites) {
         List<RadioSystem.Channel> l = new ArrayList<>();
         String shared = sharedNac(sites);
         for (Site s : sites) {
             String nac = shared.isEmpty() ? nacOf(s.nac()) : "";
+            boolean anyVoice = false;
+            for (SiteFreq f : s.freqs()) if (!f.control()) anyVoice = true;
             for (SiteFreq f : s.freqs()) {
+                if (anyVoice && f.control()) continue;
                 boolean seen = false;
                 for (RadioSystem.Channel c : l) if (Math.abs(c.mhz - f.mhz()) < 1e-6) seen = true;
                 if (!seen) l.add(new RadioSystem.Channel(f.mhz(), nac, ""));
@@ -158,8 +209,93 @@ public final class RrImport {
         return s;
     }
 
-    public static boolean dmrSystem(String typeName, String flavorName) {
-        return ((typeName == null ? "" : typeName) + " " + (flavorName == null ? "" : flavorName)).toLowerCase(Locale.ROOT).contains("dmr");
+    public static boolean dmrSystem(String typeName, String flavorName) { return family(typeName, flavorName) == Family.DMR; }
+
+    // ------------------------------------------------------------------ conventional channel groups, every mode
+    /** The modes TrunkDeck decodes on a county's conventional channels. */
+    public enum ConvMode {
+        P25("P25"), DMR("DMR"), NXDN("NXDN"), FM("Analog FM");
+        public final String label;
+        ConvMode(String label) { this.label = label; }
+    }
+
+    public static boolean nxdnMode(String mode) { return mode != null && mode.toUpperCase(Locale.ROOT).contains("NXDN"); }
+
+    /** Analog FM as RadioReference writes it: FM, FMN (narrow), NFM, FMW. Not AM, not broadcast WFM, not digital. */
+    public static boolean fmMode(String mode) {
+        if (mode == null) return false;
+        String m = mode.trim().toUpperCase(Locale.ROOT).replace(" ", "");
+        return m.equals("FM") || m.equals("FMN") || m.equals("NFM") || m.equals("FMW") || m.equals("NBFM");
+    }
+
+    static boolean is(ConvMode m, String mode) {
+        return switch (m) { case P25 -> p25Mode(mode); case DMR -> dmrMode(mode); case NXDN -> nxdnMode(mode); case FM -> fmMode(mode); };
+    }
+
+    /**
+     * The CTCSS tone in a RadioReference tone field ("100.0 PL", "PL 100.0", "100.0"), as "100.0", or "" when there is
+     * none, it is CSQ, or it is a DCS (DPL) code, which TrunkDeck does not decode.
+     */
+    public static String ctcssFromTone(String tone) {
+        if (tone == null) return "";
+        String t = tone.trim().toUpperCase(Locale.ROOT);
+        if (t.contains("DPL") || t.contains("DCS") || t.contains("NAC")) return "";
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d{2,3}\\.\\d)").matcher(t);
+        if (!m.find()) return "";
+        double v = p25monitor.analog.FmReceiver.parseTone(m.group(1));
+        return v > 0 ? String.format(Locale.ROOT, "%.1f", v) : "";
+    }
+
+    /** True when the tone field is a DCS (DPL) code: the channel is set up with carrier squelch instead. */
+    public static boolean dcsTone(String tone) {
+        return tone != null && tone.toUpperCase(Locale.ROOT).matches(".*(DPL|DCS).*");
+    }
+
+    /** Channels of one mode. The code after the colon: NAC (P25), colour code (DMR), CTCSS tone (analog), none (NXDN). */
+    public static List<RadioSystem.Channel> channels(ConvMode mode, List<Freq> freqs) {
+        if (mode == ConvMode.P25) return p25Channels(freqs);
+        if (mode == ConvMode.DMR) return dmrChannels(freqs);
+        List<RadioSystem.Channel> l = new ArrayList<>();
+        if (freqs == null) return l;
+        for (Freq f : freqs) {
+            if (f == null || !is(mode, f.mode()) || f.outMhz() < 25) continue;
+            String name = !f.alpha().isBlank() ? f.alpha().trim() : f.descr().trim();
+            boolean seen = false;
+            for (RadioSystem.Channel c : l) if (Math.abs(c.mhz - f.outMhz()) < 1e-6) seen = true;
+            if (!seen) l.add(new RadioSystem.Channel(f.outMhz(), mode == ConvMode.FM ? ctcssFromTone(f.tone()) : "", name));
+        }
+        return l;
+    }
+
+    /** The modes with at least one channel in this group, P25 first. */
+    public static List<ConvMode> modesIn(List<Freq> freqs) {
+        List<ConvMode> l = new ArrayList<>();
+        for (ConvMode m : ConvMode.values()) if (!channels(m, freqs).isEmpty()) l.add(m);
+        return l;
+    }
+
+    /** A conventional system of one mode from a county channel group. */
+    public static RadioSystem fromConventional(ConvMode mode, String name, List<Freq> freqs) {
+        if (mode == ConvMode.P25) return fromConventional(name, freqs);
+        if (mode == ConvMode.DMR) return fromDmr(name, freqs);
+        RadioSystem s = new RadioSystem();
+        s.kind = mode == ConvMode.NXDN ? RadioSystem.NXDN : RadioSystem.ANALOG;
+        s.name = name == null || name.isBlank() ? mode.label + " conventional" : name.trim();
+        s.channels = channels(mode, freqs);
+        StringBuilder notes = new StringBuilder("From RadioReference: ").append(mode.label).append(" conventional channels (untested).");
+        if (mode == ConvMode.FM) {
+            String shared = null; boolean differ = false;
+            for (RadioSystem.Channel c : s.channels) {
+                String t = c.nac == null ? "" : c.nac;
+                if (shared == null) shared = t; else if (!shared.equals(t)) differ = true;
+            }
+            if (shared != null && !shared.isEmpty() && !differ) { s.nac = shared; for (RadioSystem.Channel c : s.channels) c.nac = ""; }
+            int dcs = 0;
+            for (Freq f : freqs) if (f != null && fmMode(f.mode()) && dcsTone(f.tone())) dcs++;
+            if (dcs > 0) notes.append("\n").append(dcs).append(" channel").append(dcs == 1 ? " uses" : "s use").append(" a DCS (DPL) code, which TrunkDeck does not decode: carrier squelch is used there.");
+        }
+        s.notes = notes.toString();
+        return s;
     }
 
     public static String nacFromTone(String tone) {
@@ -250,6 +386,7 @@ public final class RrImport {
         s.name = name == null || name.isBlank() ? defaultName(f, sites) : name.trim();
         s.talkgroups.clear();
         applySystem(s, f, sites);
+        if (s.analog()) return s;   // analog channels carry no talkgroup IDs TrunkDeck can read
         for (Tg t : f.ordered()) if (chosen.contains(t.dec())) s.talkgroups.add(talkgroup(t, f));
         return s;
     }
@@ -261,9 +398,16 @@ public final class RrImport {
     }
 
     static void applySystem(RadioSystem s, Fetched f, List<Site> sites) {
-        boolean dmr = dmrSystem(f.details().typeName(), f.details().flavorName());
-        boolean conv = conventionalSystem(f.details()) || (dmr && (f.details().typeName() + " " + f.details().flavorName()).toLowerCase(Locale.ROOT).contains("conventional"));
-        s.kind = dmr ? (conv ? RadioSystem.DMR : RadioSystem.DMR_TRUNK) : conv ? RadioSystem.CONVENTIONAL : RadioSystem.TRUNKED;
+        Family fam = family(f.details());
+        boolean conv = conventionalSystem(f.details());
+        s.kind = switch (fam) {
+            case DMR -> conv ? RadioSystem.DMR : RadioSystem.DMR_TRUNK;
+            case NXDN -> conv ? RadioSystem.NXDN : RadioSystem.NXDN_TRUNK;
+            case ANALOG -> RadioSystem.ANALOG;
+            case TYPE2 -> conv ? RadioSystem.ANALOG : RadioSystem.TYPE2;
+            default -> conv ? RadioSystem.CONVENTIONAL : RadioSystem.TRUNKED;
+        };
+        if (fam == Family.DMR) s.dmrFlavor = dmrFlavor(f.details().typeName(), f.details().flavorName());
         if (conv) {
             s.channels = conventionalChannels(sites);
             s.controlChannelsMHz = new ArrayList<>();
@@ -278,7 +422,13 @@ public final class RrImport {
             s.rfss = first.rfss() > 0 ? String.valueOf(first.rfss()) : "";
             s.siteNumber = first.siteNumber() > 0 ? String.format("%03d", first.siteNumber()) : "";
         }
-        if (!conv && !f.details().sysids().isEmpty()) {
+        if (fam != Family.P25) {   // NAC, RFSS and site number are P25 only
+            s.nac = ""; s.rfss = ""; s.siteNumber = "";
+            for (RadioSystem.Channel c : s.channels) c.nac = "";
+        }
+        s.nxdnChannels = new TreeMap<>();
+        if (fam == Family.NXDN && !conv) for (Site x : sites) for (SiteFreq sf : x.freqs()) if (sf.lcn() > 0) s.nxdnChannels.putIfAbsent(sf.lcn(), sf.mhz());
+        if (fam == Family.P25 && !conv && !f.details().sysids().isEmpty()) {
             s.sysId = f.details().sysids().get(0).sysid().trim().toUpperCase(Locale.ROOT);
             s.wacn = f.details().sysids().get(0).wacn().trim().toUpperCase(Locale.ROOT);
         } else if (conv) { s.sysId = ""; s.wacn = ""; }
@@ -335,7 +485,7 @@ public final class RrImport {
      */
     public static Summary merge(RadioSystem s, Fetched f, List<Site> sites, Set<Integer> addNew, boolean updateNames) {
         Summary sum = new Summary();
-        boolean conv = conventionalSystem(f.details()) || s.conventional();
+        boolean conv = conventionalSystem(f.details()) || s.fixedChannels();
         sum.freqLabel = conv ? "Channels" : "Control channels";
         sum.ccBefore = conv ? s.frequencies() : new ArrayList<>(s.controlChannelsMHz);
         Map<Integer, Talkgroup> local = new HashMap<>();

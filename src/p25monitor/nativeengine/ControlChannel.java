@@ -32,9 +32,20 @@ final class ControlChannel {
             for (long f : fs) e.ccDecoders.add(e.dmrDecoder(e.ccTuner, f));
             return;
         }
+        if (e.sys != null && e.sys.type2()) {
+            e.ccDecoders.clear();
+            for (long f : fs) e.ccDecoders.add(e.type2Decoder(e.ccTuner, f));
+            return;
+        }
+        if (e.sys != null && e.sys.nxdnTrunk()) {
+            e.ccDecoders.clear();
+            for (long f : fs) e.ccDecoders.add(e.nxdnDecoder(e.ccTuner, f));
+            return;
+        }
         for (long f : fs) {
             ChannelDecoder d = new ChannelDecoder(e.ccTuner.decoderRate(), e.ccTuner.decoderCenter(f), f, new P25Framer.Listener() {
                 public void tsbk(Tsbk t) { onTsbk(t, f); }
+                public void pdu(Pdu p) { onPdu(p, f); }
                 public void tsbkError() { e.tsbkBad++; }
                 public void ldu(int nac, int duid, byte[][] imbe, P25Framer.LinkControl lc, P25Framer.EncryptionSync ess) { e.voice.onConventional(f, nac, imbe, lc, ess); }
                 public void tdulc(int nac, P25Framer.LinkControl lc) { e.voice.onConventionalLc(f, lc); }
@@ -96,6 +107,46 @@ final class ControlChannel {
         }
     }
 
+    /**
+     * A PDU on the control channel. An AMBTC (multi-block trunking message) carries the explicit forms of the grants -
+     * separate downlink and uplink channels, or a source address from another system - and is followed like the
+     * single-block TSBK. A grant only counts when its downlink channel is in the site's channel plan (IDEN_UP).
+     */
+    void onPdu(Pdu p, long fromHz) {
+        synchronized (e) {
+            long now = System.currentTimeMillis();
+            e.lastTsbkAt = now;
+            e.ccFreqHz = fromHz;
+            e.nac = p.nac;
+            e.msgTotal++;
+            e.pendingMsgs++;
+            ChannelMap map = e.map;
+            if (p.groupGrant() && map.frequency(p.channelT()) > 0) grant(p.group(), p.source(), p.channelT(), p.serviceOptions(), false, false);
+            else if (p.unitGrant() && map.frequency(p.channelT()) > 0) unitGrant(p.target(), p.source(), p.channelT(), p.opcode() == Tsbk.UU_V_CH_GRANT_UPDT);
+            String text = p.describe(map);
+            e.msgs.add(new NativeEngine.Msg(now, fromHz / 1e6, text));
+            while (e.msgs.size() > 3000) e.msgs.pollFirst();
+            e.lastMsg = text;
+        }
+    }
+
+    /**
+     * Group Voice Channel Update link control heard on a trunked voice channel: the site's other active group calls.
+     * They are handled as grant updates (keeps those calls alive, and picks up a call whose grant the control channel
+     * missed), but only for channels the site's channel plan knows.
+     */
+    void voiceChannelUpdate(P25Framer.LinkControl lc) {
+        if (lc == null || !lc.isGroupUpdate() || e.conventional || e.sys == null || e.sys.dmr() || e.sys.nxdn() || e.sys.type2()) return;
+        synchronized (e) {
+            for (int pair = 0; pair < 2; pair++) {
+                int ch = lc.updateChannel(pair), tg = lc.updateGroup(pair);
+                if (ch == 0 || tg == 0 || e.map.frequency(ch) <= 0) continue;
+                if (pair == 1 && ch == lc.updateChannel(0) && tg == lc.updateGroup(0)) continue;
+                grant(tg, -1, ch, 0, true, false);
+            }
+        }
+    }
+
     void grant(int tg, int src, int channel, int so, boolean update, boolean patch) {
         long now = System.currentTimeMillis();
         String key = "G" + tg;
@@ -117,6 +168,42 @@ final class ControlChannel {
             c.lastSeen = now;
             if (src > 0 && c.src <= 0) { c.src = src; c.ev.from = String.valueOf(src); c.ev.radioId = src; e.listener.callUpdated(c.ev); }
             if (!update) { c.encrypted |= Tsbk.encrypted(so); c.emergency |= Tsbk.emergency(so); }
+        }
+    }
+
+    /**
+     * A Motorola Type II grant or grant update. The voice mode comes from the grant (analog FM or P25); an update does
+     * not say, so the talkgroup's last known mode is used, else the mode most grants on this system have had, else analog.
+     */
+    void type2Grant(int tg, int status, int src, int channel, long hz, Boolean digital, boolean update) {
+        synchronized (e) {
+            long now = System.currentTimeMillis();
+            if (hz <= 0) return;
+            if (digital != null) { e.type2Digital.put(tg, digital); e.type2Grants += digital ? 1 : -1; }
+            Boolean known = e.type2Digital.get(tg);
+            boolean dig = digital != null ? digital : known != null ? known : e.type2Grants > 0;
+            String key = "G" + tg;
+            ActiveCall c = e.callMap.get(key);
+            if (c != null && c.freq != hz && !update) { e.calls.endCall(c, "new grant on another channel"); c = null; }
+            if (c == null) {
+                Long ended = e.recentlyEnded.get(key);
+                if (update && ended != null && now - ended < 2500) return;
+                c = new ActiveCall();
+                c.type2 = true; c.analogVoice = !dig;
+                c.tg = tg; c.src = src; c.channel = channel; c.start = now; c.lastSeen = now;
+                c.freq = hz;
+                c.encrypted = p25monitor.motorola.Type2Site.encrypted(status);
+                c.emergency = p25monitor.motorola.Type2Site.emergency(status);
+                c.patch = p25monitor.motorola.Type2Site.patch(status);
+                c.t = e.tg(tg);
+                if (c.t != null) c.priority = c.t.priority;
+                e.callMap.put(key, c);
+                e.calls.newCall(c);
+            } else {
+                c.lastSeen = now;
+                if (src > 0 && c.src <= 0) { c.src = src; c.ev.from = String.valueOf(src); c.ev.radioId = src; e.listener.callUpdated(c.ev); }
+                if (!update) { c.encrypted |= p25monitor.motorola.Type2Site.encrypted(status); c.emergency |= p25monitor.motorola.Type2Site.emergency(status); }
+            }
         }
     }
 

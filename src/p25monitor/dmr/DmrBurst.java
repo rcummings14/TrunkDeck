@@ -7,7 +7,7 @@ package p25monitor.dmr;
  * A voice burst is 108 vocoder bits, 48 sync or embedded signalling, 108 vocoder bits. See {@link DmrVoice}.
  */
 public final class DmrBurst {
-    public static final int VOICE_LC = 1, TERMINATOR = 2, CSBK = 3, IDLE = 9;
+    public static final int PI_HEADER = 0, VOICE_LC = 1, TERMINATOR = 2, CSBK = 3, MBC_HEADER = 4, MBC_CONTINUATION = 5, IDLE = 9;
     public static final int LENGTH = 264;
 
     public final DmrSync.Kind sync;
@@ -21,6 +21,14 @@ public final class DmrBurst {
     public final int lcss;
     public final boolean[] raw;
     public final boolean[] info = new boolean[96];
+    /** Set by the framer. 1 or 2 when the sync word itself names the slot (direct mode), else 0. */
+    /** Set by the framer. Wrong bits in the 48-bit sync word that located this burst. */
+    public int syncErrors;
+    public int slotHint;
+    /** Set by the framer. Burst number on the 144-dibit grid (rounded), so slot parity survives a missed burst. */
+    public long gridIndex;
+    /** Set by the framer. Changes whenever the grid is re-anchored, which invalidates any parity learned from it. */
+    public int epoch;
 
     DmrBurst(DmrSync.Kind sync, int colorCode, int dataType, boolean slotOk, boolean voice, boolean[] embedded, int lcss, boolean[] raw) {
         this.sync = sync;
@@ -105,21 +113,66 @@ public final class DmrBurst {
         System.arraycopy(full, 72, info96, 72, 24);
     }
 
-    /** 96 information bits for a CSBK. {@code data64} is written at bit 16. CRC-CCITT, then mask A5A5. */
+    /** 96 information bits for a CSBK (last block set). {@code data64} is written at bit 16. CRC-CCITT, then mask A5A5. */
     public static boolean[] csbk(int opcode, int fid, boolean[] data64) {
         boolean[] body = new boolean[80];
+        body[0] = true;
         DmrBits.write(body, 2, opcode, 6);
         DmrBits.write(body, 8, fid, 8);
         if (data64 != null) for (int i = 0; i < 64 && i < data64.length; i++) body[16 + i] = data64[i];
         return DmrFec.csbk96(body);
     }
 
-    public static boolean[] grantData(int target, int source, int lcn, int slot) {
+    /** Tier III channel grant body (TS 102 361-4): LPCN, slot bit (set = timeslot 2), reserved, emergency, offset, target, source. */
+    public static boolean[] grantData(int target, int source, int lcn, int slot) { return grantData(target, source, lcn, slot, false); }
+
+    public static boolean[] grantData(int target, int source, int lcn, int slot, boolean emergency) {
         boolean[] d = new boolean[64];
-        DmrBits.write(d, 0, target, 24);
-        DmrBits.write(d, 24, source, 24);
-        DmrBits.write(d, 48, lcn, 12);
-        if (slot == 2) d[60] = true;
+        DmrBits.write(d, 0, lcn, 12);
+        if (slot == 2) d[12] = true;
+        d[14] = emergency;
+        DmrBits.write(d, 16, target, 24);
+        DmrBits.write(d, 40, source, 24);
+        return d;
+    }
+
+    /** A Tier III grant sent as an MBC header (LB clear, CRC mask AAAA) with LPCN 0xFFF: the frequency follows. */
+    public static boolean[] mbcGrantHeader(int opcode, int target, int source, int slot) {
+        boolean[] body = new boolean[80];
+        DmrBits.write(body, 2, opcode, 6);
+        boolean[] d = grantData(target, source, DmrCsbk.LPCN_ABSOLUTE, slot);
+        System.arraycopy(d, 0, body, 16, 64);
+        return DmrFec.crc96(body, DmrFec.MASK_MBC);
+    }
+
+    /** The MBC last block with absolute channel parameters: LPCN, then transmit and receive frequency (MHz + 125 Hz steps). */
+    public static boolean[] mbcAbsolute(int lpcn, long txHz, long rxHz) {
+        boolean[] body = new boolean[80];
+        body[0] = true;
+        DmrBits.write(body, 10, lpcn, 12);
+        DmrBits.write(body, 22, (int) (txHz / 1_000_000), 10);
+        DmrBits.write(body, 32, (int) (txHz % 1_000_000 / 125), 13);
+        DmrBits.write(body, 45, (int) (rxHz / 1_000_000), 10);
+        DmrBits.write(body, 55, (int) (rxHz % 1_000_000 / 125), 13);
+        return DmrFec.crc96(body, DmrFec.MASK_MBC);
+    }
+
+    /** A privacy (PI) header with the given algorithm, key ID and destination, CRC mask 6969. */
+    public static boolean[] piHeader(int algorithm, int keyId, int target) {
+        boolean[] body = new boolean[80];
+        DmrBits.write(body, 0, algorithm, 3);
+        DmrBits.write(body, 8, keyId, 8);
+        DmrBits.write(body, 56, target, 24);
+        return DmrFec.crc96(body, DmrFec.MASK_PI);
+    }
+
+    /** Connect Plus voice grant body: source, talkgroup, 4-bit repeater (LCN from 1), then the timeslot bit (set = slot 2). */
+    public static boolean[] connectVoice(int source, int target, int lcn, int slot) {
+        boolean[] d = new boolean[64];
+        DmrBits.write(d, 0, source, 24);
+        DmrBits.write(d, 24, target, 24);
+        DmrBits.write(d, 48, lcn, 4);
+        if (slot == 2) d[52] = true;
         return d;
     }
 

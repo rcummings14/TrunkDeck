@@ -122,11 +122,12 @@ public class DmrTests {
         info[17] = true;
         DmrBurst.sealLc(info, DmrFec.MASK_VOICE_LC);
         check(DmrLc.parse(info).encrypted && !DmrLc.parse(info).group(), "encrypted group call is flagged and not played");
-        boolean[] alias = DmrBurst.linkControl(DmrLc.ALIAS_HEADER, 0, 0, 7, false);
-        DmrBits.write(alias, 24, 0, 24);
-        long packed = (('S' - 32L) << 36) | (('A' - 32L) << 30) | (('M' - 32L) << 24);
-        DmrBits.write(alias, 24, (int) (packed >>> 24), 24);
-        DmrBits.write(alias, 48, (int) (packed & 0xFFFFFF), 24);
+        boolean[] alias = new boolean[96];                       // header: FLCO 4, format 7-bit, length 3, then the characters
+        DmrBits.write(alias, 2, DmrLc.ALIAS_HEADER, 6);
+        DmrBits.write(alias, 16, 0, 2);
+        DmrBits.write(alias, 18, 3, 5);
+        int at = 23;
+        for (char ch : "SAM".toCharArray()) { DmrBits.write(alias, at, ch, 7); at += 7; }
         DmrBurst.sealLc(alias, DmrFec.MASK_VOICE_LC);
         check("SAM".equals(DmrLc.parse(alias).alias()), "talker alias letters");
     }
@@ -233,11 +234,13 @@ public class DmrTests {
     static void demod() {
         boolean[] bits = DmrBurst.build(DmrSync.Kind.BS_DATA, 3, DmrBurst.VOICE_LC, DmrBurst.linkControl(0, 0, 240, 8, false));
         int[] dibits = Fsk4Demod.dibitsOf(bits);
-        float[] i = new float[dibits.length * Fsk4Demod.SPS + Fsk4Demod.SPS];
-        float[] q = new float[i.length];
-        int[] padded = new int[dibits.length + 1];
-        padded[0] = dibits[0];
-        System.arraycopy(dibits, 0, padded, 1, dibits.length);
+        float[] i;
+        float[] q;
+        int lead = 40, tail = 40;                                // the demodulator needs the line to settle before and after
+        int[] padded = new int[lead + dibits.length + tail];
+        for (int k = 0; k < padded.length; k++) padded[k] = (k * 7 + k / 3) & 3;
+        System.arraycopy(dibits, 0, padded, lead, dibits.length);
+        i = new float[padded.length * Fsk4Demod.SPS + Fsk4Demod.SPS]; q = new float[i.length];
         Fsk4Demod.modulate(padded, i, q);
         List<DmrBurst> got = new ArrayList<>();
         Fsk4Demod demod = new Fsk4Demod(new DmrFramer((b, c) -> got.add(b)));

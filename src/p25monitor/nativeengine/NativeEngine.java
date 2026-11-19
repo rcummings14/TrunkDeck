@@ -258,6 +258,13 @@ public final class NativeEngine {
         lsmPreferred = "lsm".equalsIgnoreCase(s.nativeModulation); ccDemodLogged = "";
         usage.clear(); missed.clear(); missedRecent.clear(); peakConcurrent = 0; tuners.clear(); huntCount = 0; fixedWideCenter = 0; widePlanned = false;
         conventional = s.fixedChannels(); parkedDecoders.clear(); scanTuner = null; scanGroups = List.of(); scanIndex = 0; lastScanAt = 0;
+        speaker.holdFrequency(0); lastAnalogHeard = 0;
+        nxdnSite = s.nxdnTrunk() ? new p25monitor.nxdn.NxdnSite(s::nxdnChannelHz) : null;
+        nxdnVoice.clear(); nxdnLogged.clear();
+        type2Digital.clear(); type2Grants = 0;
+        if (s.type2()) log("Motorola Type II (untested): band plan " + s.type2BandPlan() + "; voice is analog FM or P25 as each grant says. If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
+        if (s.analog()) log("Analog FM conventional (untested): noise squelch level " + s.squelch + (s.channels.stream().anyMatch(c -> s.toneFor(Math.round(c.mhz * 1e6)) > 0) ? " and CTCSS tone squelch" : "") + ". If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
+        if (s.nxdn()) log("NXDN " + (s.nxdnTrunk() ? "Type-C trunked" : "conventional") + " (untested; NXDN48 and NXDN96 are detected automatically). If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         if (s.dmr()) log("DMR " + (s.dmrTrunk() ? "trunked (" + s.dmrFlavor + ")" : "conventional") + " (untested). If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         SpeakerMode sm;
         try { sm = SpeakerMode.valueOf(app.settings.getProperty("native.speaker", "PRIORITY")); } catch (Exception e) { sm = SpeakerMode.PRIORITY; }
@@ -735,6 +742,8 @@ public final class NativeEngine {
 
     ChannelDecoder voiceDecoder(Tuner t, long f) {
         if (sys != null && sys.dmr()) return dmrDecoder(t, f);
+        if (sys != null && sys.nxdn()) return nxdnDecoder(t, f);
+        if (sys != null && sys.analog()) return analogDecoder(t, f);
         int nac = sys == null ? -1 : sys.nacFor(f);
         ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {
             public void ldu(int n, int duid, byte[][] imbe, P25Framer.LinkControl lc, P25Framer.EncryptionSync ess) { voice.onConventional(f, n, imbe, lc, ess); }
@@ -760,13 +769,136 @@ public final class NativeEngine {
             public void group(long hz, int sl, int color, int tg, int src, byte[][] ambe) { voice.onDmr(hz, sl, color, tg, src, true, ambe); d.lastFrameAt = System.currentTimeMillis(); }
             public void unit(long hz, int sl, int color, int target, int src) { voice.onDmr(hz, sl, color, target, src, false, new byte[0][]); d.lastFrameAt = System.currentTimeMillis(); }
             public void encrypted(long hz, int sl, int color) { voice.onDmrEncrypted(hz, sl, color); }
-            public void end(long hz, int sl) { voice.onDmrEnd(hz); }
+            public void end(long hz, int sl) { voice.onDmrEnd(hz, sl); }
             public void grant(p25monitor.dmr.DmrTrunk.Grant g) { voice.onDmrGrant(g); d.lastFrameAt = System.currentTimeMillis(); }
             public void rest(int repeater, int sl, long hz, boolean moved) { if (moved) log("DMR rest channel (untested) -> repeater " + repeater + " slot " + sl + (hz > 0 ? " " + mhz(hz) + " MHz" : "")); d.lastFrameAt = System.currentTimeMillis(); }
             public void alias(int src, String text) { log("DMR talker alias " + src + " " + text); }
+            public void unitAudio(long hz, int sl, int color, int target, int src, byte[][] ambe) { voice.onDmr(hz, sl, color, target, src, false, ambe); d.lastFrameAt = System.currentTimeMillis(); }
+            public void control(String text) { onDmrControl(freq, d, text); }
+            public void controlError() { tsbkBad++; }
+            public void emergency(long hz, int sl) { voice.onDmrEmergency(hz, sl); }
         });
         d.anchor = () -> tunerAnchor(t, d, freq);
         return d;
+    }
+
+    /** A channel decoder whose P25 framer is idle and whose samples feed an analog FM receiver with tone squelch. */
+    ChannelDecoder analogDecoder(Tuner t, long f) {
+        ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {}, 0);
+        final long freq = f;
+        double tone = sys == null ? 0 : sys.toneFor(f);
+        d.analog = new p25monitor.analog.FmReceiver(tone, new p25monitor.analog.FmReceiver.Listener() {
+            public void start(double toneHz) { d.lastFrameAt = System.currentTimeMillis(); voice.onAnalogStart(freq, toneHz); }
+            public void tone(double toneHz) { voice.onAnalogTone(freq, toneHz); }
+            public void audio(float[] pcm) { d.lastFrameAt = System.currentTimeMillis(); voice.onAnalogAudio(freq, pcm); }
+            public void end() { voice.onAnalogEnd(freq); }
+        });
+        d.analog.setSquelch(sys == null ? p25monitor.analog.FmReceiver.SQUELCH_DEFAULT : sys.squelch);
+        d.anchor = () -> tunerAnchor(t, d, freq);
+        return d;
+    }
+
+    // ------------------------------------------------------------------ Motorola Type II (untested on air)
+    /** Type II: the voice mode each talkgroup's last grant gave (true = P25). */
+    final Map<Integer, Boolean> type2Digital = new ConcurrentHashMap<>();
+    /** Type II: digital grants minus analog grants, the guess for a call whose grant was missed. */
+    int type2Grants;
+
+    /** A channel decoder whose P25 framer is idle and whose samples feed the Type II control channel receiver. */
+    ChannelDecoder type2Decoder(Tuner t, long f) {
+        ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {}, 0);
+        final long freq = f;
+        p25monitor.motorola.Type2Site site = new p25monitor.motorola.Type2Site(sys.type2BandPlan(), f, new p25monitor.motorola.Type2Site.Listener() {
+            public void grant(int tg, int status, int src, int channel, long hz, Boolean digital, boolean update) { cc.type2Grant(tg, status, src, channel, hz, digital, update); }
+            public void message(String text) { onDmrControl(freq, d, text); }
+        });
+        d.type2 = new p25monitor.motorola.Type2Demod(new p25monitor.motorola.Type2Demod.Listener() {
+            public void osw(p25monitor.motorola.Type2Frame.Osw w) { site.osw(w); }
+            public void bad() { tsbkBad++; }
+        });
+        d.anchor = () -> tunerAnchor(t, d, freq);
+        return d;
+    }
+
+    // ------------------------------------------------------------------ NXDN (untested on air)
+    /** Type-C site state (channel access information). Null unless the system is NXDN trunked. */
+    p25monitor.nxdn.NxdnSite nxdnSite;
+    /** NXDN voice channels opened on the control tuner for assignments, by downlink Hz. */
+    final Map<Long, ChannelDecoder> nxdnVoice = new ConcurrentHashMap<>();
+    /** Last time each NXDN warning was logged, so a repeating assignment does not flood the log. */
+    final Map<String, Long> nxdnLogged = new ConcurrentHashMap<>();
+
+    /** A channel decoder whose P25 framer is idle and whose samples feed the NXDN demodulator (NXDN48 and NXDN96). */
+    ChannelDecoder nxdnDecoder(Tuner t, long f) {
+        ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {}, 0);
+        final long freq = f;
+        d.nxdn = new p25monitor.nxdn.NxdnDemod(new p25monitor.nxdn.NxdnReceiver.Listener() {
+            public void call(p25monitor.nxdn.NxdnMessage m, boolean control) {
+                d.lastFrameAt = System.currentTimeMillis();
+                if (control) onNxdnAssignment(freq, m); else voice.onNxdnCall(freq, m);
+            }
+            public void voice(byte[][] frames) { d.lastFrameAt = System.currentTimeMillis(); voice.onNxdnVoice(freq, frames); }
+            public void release(p25monitor.nxdn.NxdnMessage m) { voice.onNxdnEnd(freq); }
+            public void message(p25monitor.nxdn.NxdnMessage m, String text) {
+                if (!m.control) return;
+                if (nxdnSite != null) nxdnSite.onMessage(m);
+                onDmrControl(freq, d, text);
+            }
+        });
+        d.anchor = () -> tunerAnchor(t, d, freq);
+        return d;
+    }
+
+    /** A Type-C voice channel assignment: open (or keep) an NXDN decoder on the voice channel and start the call there. */
+    void onNxdnAssignment(long cc, p25monitor.nxdn.NxdnMessage m) {
+        long now = System.currentTimeMillis();
+        long hz = nxdnSite == null ? 0 : nxdnSite.downlink(m);
+        if (hz <= 0) {
+            nxdnWarn("ch" + m.channel(), now, "NXDN assignment TG " + m.destination() + " on channel " + m.channel() + ": frequency unknown"
+                    + (nxdnSite != null && nxdnSite.dfaKnown() ? "" : " (the site uses channel numbers; add \"nxdnChannels=" + m.channel() + "=<MHz>\" to the system file)"));
+            return;
+        }
+        if (hz == cc) { voice.onNxdnCall(hz, m); return; }
+        Tuner t = ccTuner;
+        if (t == null || !t.covers(hz)) { nxdnWarn("far" + hz, now, "NXDN TG " + m.destination() + " on " + mhz(hz) + " MHz is outside the control receiver's bandwidth - not followed"); return; }
+        ChannelDecoder d = nxdnVoice.get(hz);
+        if (d == null || !t.decoders.contains(d)) {
+            d = nxdnDecoder(t, hz);
+            nxdnVoice.put(hz, d);
+            t.decoders.add(d);
+        }
+        d.lastFrameAt = Math.max(d.lastFrameAt, now);
+        voice.onNxdnCall(hz, m);
+    }
+
+    void nxdnWarn(String key, long now, String text) {
+        Long at = nxdnLogged.get(key);
+        if (at != null && now - at < 30_000) return;
+        nxdnLogged.put(key, now);
+        log(text);
+    }
+
+    /** Closes NXDN voice-channel decoders 4 s after their last frame or assignment. */
+    void nxdnHousekeeping(long now) {
+        for (var en : nxdnVoice.entrySet()) {
+            ChannelDecoder d = en.getValue();
+            if (now - d.lastFrameAt < 4000) continue;
+            nxdnVoice.remove(en.getKey());
+            for (Tuner t : tuners) t.decoders.remove(d);
+            if (ccTuner != null) ccTuner.decoders.remove(d);
+            voice.onNxdnEnd(en.getKey());
+        }
+    }
+
+    /** A CRC-good DMR control block counts like a P25 TSBK: the LIVE panel and the lock status follow it. */
+    void onDmrControl(long f, ChannelDecoder d, String text) {
+        long now = System.currentTimeMillis();
+        synchronized (this) {
+            lastTsbkAt = now; ccFreqHz = f; msgTotal++; pendingMsgs++;
+            msgs.add(new Msg(now, f / 1e6, text)); while (msgs.size() > 3000) msgs.pollFirst();
+            lastMsg = text;
+        }
+        d.lastTsbkAt = now; d.lastFrameAt = now;
     }
 
     Tuner tunerFor(long f) {
@@ -787,7 +919,7 @@ public final class NativeEngine {
         synchronized (this) {
             for (ActiveCall c : callMap.values()) if (!c.ended && c.conventional && now - c.lastVoice < 1500) dec++;
             if (scanTuner != null && scanGroups.size() > 1 && (mode == Mode.RTL || huntable)
-                    && !scanBusy(now) && now - lastScanAt >= Long.getLong("trunkdeck.convScanMs", 5_000L)) {
+                    && speaker.holdFreq == 0 && !scanBusy(now) && now - lastScanAt >= Long.getLong("trunkdeck.convScanMs", 5_000L)) {
                 lastScanAt = now;
                 scanIndex = (scanIndex + 1) % scanGroups.size();
                 List<Long> g = scanGroups.get(scanIndex);
@@ -804,7 +936,7 @@ public final class NativeEngine {
         ActiveCall cur = speaker.speaker;
         if (cur != null) state = (cur.encrypted ? "ENCRYPTED " : "VOICE ") + "TG " + cur.tg + (dec > 1 ? "  +" + (dec - 1) : "");
         else if (dec > 0) state = dec + " CALL" + (dec == 1 ? "" : "S");
-        else state = scanGroups.size() > 1 ? "SCANNING CHANNELS" : "LISTENING";
+        else state = speaker.holdFreq > 0 ? "HOLD " + mhz(speaker.holdFreq) : scanGroups.size() > 1 ? "SCANNING CHANNELS" : "LISTENING";
     }
 
     boolean scanBusy(long now) {
@@ -979,6 +1111,7 @@ public final class NativeEngine {
             if (n > 0) listener.messages(n, last);
             calls.housekeep(now);
             tdma.refreshScrambler();
+            nxdnHousekeeping(now);
             if (conventional) { conventionalHousekeeping(now); return; }
             synchronized (this) { cc.plan(now); }
             boolean anyLock = false;
@@ -1059,6 +1192,82 @@ public final class NativeEngine {
         audio.setMuted(m);
     }
     public int holdTg() { return speaker.holdTg; }
+
+    // ------------------------------------------------------------------ analog Hold / Scan (Monitor page)
+    /** The analog channel most recently heard (Hz): what Hold stays on when nothing is playing right now. */
+    volatile long lastAnalogHeard;
+    /** True while an analog FM system is running: the Monitor page shows Hold / Scan only then. */
+    public boolean analogRunning() { RadioSystem s = sys; return running && s != null && s.analog(); }
+    /** The analog channel held (Hz), or 0 while scanning. */
+    public long holdFreq() { return speaker.holdFreq; }
+    public static String mhzText(long hz) { return mhz(hz); }
+    /**
+     * Hold: the speaker plays only the analog channel being heard (or the last one heard) and a scanning receiver stays
+     * on the group with that channel. Channels the receivers already cover are still recorded. Returns why not, or null.
+     */
+    public String holdAnalog() {
+        if (!analogRunning()) return "Hold works on analog systems.";
+        long f = 0;
+        ActiveCall s = speaker.speaker;
+        if (s != null && !s.ended && s.conventional && s.freq > 0) f = s.freq;
+        if (f <= 0) f = lastAnalogHeard;
+        if (f <= 0) return "Nothing heard yet to hold.";
+        holdOn(f);
+        return null;
+    }
+
+    /** The system's analog channels in the order they were typed (each frequency once). */
+    List<Long> analogChannels() {
+        List<Long> fs = new ArrayList<>();
+        RadioSystem s = sys;
+        if (s != null) for (RadioSystem.Channel c : s.channels) { long hz = Math.round(c.mhz * 1e6); if (hz > 0 && !fs.contains(hz)) fs.add(hz); }
+        return fs;
+    }
+
+    /**
+     * Down / Up (dir -1 / +1): hold the previous / next channel in the system's list, wrapping around. While scanning it
+     * starts from the channel being heard (or the last one heard), else from the first / last channel.
+     */
+    public String stepAnalog(int dir) {
+        if (!analogRunning()) return "Up / Down work on analog systems.";
+        List<Long> fs = analogChannels();
+        if (fs.isEmpty()) return "This system has no channels.";
+        long cur = speaker.holdFreq;
+        if (cur <= 0) { ActiveCall s = speaker.speaker; cur = s != null && !s.ended && s.conventional ? s.freq : lastAnalogHeard; }
+        int i = fs.indexOf(cur);
+        int n = i < 0 ? (dir > 0 ? 0 : fs.size() - 1) : Math.floorMod(i + (dir > 0 ? 1 : -1), fs.size());
+        holdOn(fs.get(n));
+        return null;
+    }
+
+    /** The channel's name from the system (or ""), for the Monitor page's hold label. */
+    public String channelName(long hz) {
+        RadioSystem s = sys;
+        RadioSystem.Channel c = s == null ? null : s.channelAt(hz);
+        return c == null || c.name == null ? "" : c.name.trim();
+    }
+
+    /** Hold this channel: speaker only on it, and a scanning receiver tuned to (and kept on) the group with it. */
+    void holdOn(long f) {
+        speaker.holdFrequency(f);
+        synchronized (this) {
+            int g = -1;
+            for (int i = 0; i < scanGroups.size(); i++) if (scanGroups.get(i).contains(f)) g = i;
+            if (scanTuner != null && g >= 0 && g != scanIndex) {
+                scanIndex = g; lastScanAt = System.currentTimeMillis();
+                for (ActiveCall c : new ArrayList<>(callMap.values())) if (c.tuner == scanTuner && !c.ended) calls.endCall(c, "changing channel");
+                tunePark(scanTuner, ConventionalPlan.center(scanGroups.get(g), scanTuner.halfSpan(), scanTuner.dcGuard), "hold " + mhz(f) + " MHz");
+            }
+        }
+        log("Hold: " + mhz(f) + " MHz - the speaker plays only this channel until Scan");
+    }
+    /** Scan: every channel again; a scanning receiver moves on after its usual wait. */
+    public void scanAnalog() {
+        if (speaker.holdFreq == 0) return;
+        speaker.holdFrequency(0);
+        lastScanAt = System.currentTimeMillis();
+        log("Scan: back to all channels");
+    }
 
     /** All current calls for the Monitor view: the one on the speaker first. */
     public List<CallView> activeCalls() { return diag.activeCalls(); }

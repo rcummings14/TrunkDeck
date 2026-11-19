@@ -33,7 +33,7 @@ final class RrWizard extends JDialog {
     RrSoap rr;
     RrImport.Fetched fetched;
     int chosenCtid;
-    /** The county just shown, so "P25 conventional channels" can read its groups. */
+    /** The county just shown, so "Conventional channels" can read its groups. */
     CountyInfo countyInfo;
     /** Subcategory id (negative sid in the system list) -> the frequencies RadioReference returned. */
     final Map<Integer, List<Freq>> convFreqs = new HashMap<>();
@@ -302,8 +302,8 @@ final class RrWizard extends JDialog {
         bottom.add(dim("Or open it by ID:")); bottom.add(idKind); bottom.add(idField);
         JButton open = MainFrame.button("Open", null, Theme.CYAN); bottom.add(open);
         open.addActionListener(e -> openById()); idField.addActionListener(e -> openById());
-        JButton conv = MainFrame.button("P25 conventional channels", null, Theme.CYAN);
-        conv.setToolTipText("Look through this county's channel groups for P25 channels that stay on one frequency");
+        JButton conv = MainFrame.button("Conventional channels", null, Theme.CYAN);
+        conv.setToolTipText("Look through this county's channel groups for P25, DMR, NXDN and analog FM channels that stay on one frequency");
         conv.addActionListener(e -> findConventional());
         bottom.add(conv);
         JButton reload = MainFrame.button("Reload lists", Theme.Glyph.APPLY, Theme.DIM);
@@ -312,7 +312,7 @@ final class RrWizard extends JDialog {
         bottom.add(Box.createHorizontalStrut(16)); bottom.add(reload);
         JPanel south = new JPanel(new BorderLayout(0, 6)); south.setOpaque(false);
         south.add(bottom, BorderLayout.NORTH);
-        south.add(note("The system ID is the number at the end of the system page address on the RadioReference website (…/sid/<b>1234</b>). TrunkDeck decodes trunked P25 and conventional P25. Use <b>P25 conventional channels</b> for a county's fixed P25 frequencies."), BorderLayout.SOUTH);
+        south.add(note("The system ID is the number at the end of the system page address on the RadioReference website (…/sid/<b>1234</b>). TrunkDeck decodes P25, DMR and NXDN (trunked and conventional) and analog FM with CTCSS. Analog trunked systems (EDACS, LTR, MPT 1327) are set up as their analog voice channels. Use <b>Conventional channels</b> for a county's fixed frequencies."), BorderLayout.SOUTH);
         JPanel in = new JPanel(new BorderLayout(0, 10)); in.setOpaque(false);
         in.add(top, BorderLayout.NORTH); in.add(lists, BorderLayout.CENTER); in.add(south, BorderLayout.SOUTH);
         c.add(in, BorderLayout.CENTER);
@@ -432,59 +432,70 @@ final class RrWizard extends JDialog {
         fetchSystem(t.sid(), chosenCtid, null);
     }
 
-    /** County groups that actually have P25 channels, added under the trunked systems. */
+    /** Ids of county channel groups in the systems list: negative, one per group and mode. */
+    static int convId(int scid, RrImport.ConvMode m) { return -(scid * 8 + m.ordinal() + 1); }
+    static int convScid(int id) { return (-id - 1) / 8; }
+    static RrImport.ConvMode convMode(int id) { return RrImport.ConvMode.values()[(-id - 1) % 8]; }
+
+    /** County groups that have channels TrunkDeck decodes, one entry per mode, added under the trunked systems. */
     void findConventional() {
         if (countyInfo == null || countyInfo.subcats().isEmpty()) { info("Pick a county first. If it has no channel groups, RadioReference has no conventional list to search."); return; }
         CountyInfo ci = countyInfo;
-        run("Looking for P25 conventional channels", () -> {
+        run("Looking for conventional channels", () -> {
             Map<Integer, List<Freq>> found = new LinkedHashMap<>();
             for (Subcat sc : ci.subcats()) {
                 List<Freq> freqs = rr.getSubcatFreqs(sc.scid());
-                if (!RrImport.p25Channels(freqs).isEmpty() || !RrImport.dmrChannels(freqs).isEmpty()) found.put(sc.scid(), freqs);
+                if (!RrImport.modesIn(freqs).isEmpty()) found.put(sc.scid(), freqs);
             }
             return found;
         }, found -> {
             convFreqs.clear();
             convFreqs.putAll(found);
-            if (found.isEmpty()) { info("RadioReference lists no P25 conventional channels in " + ci.name() + "."); return; }
+            if (found.isEmpty()) { info("RadioReference lists no P25, DMR, NXDN or analog FM channels in " + ci.name() + "."); return; }
             int added = 0;
             for (Subcat sc : ci.subcats()) if (found.containsKey(sc.scid())) {
-                String label = (sc.category().isBlank() ? "" : sc.category() + " — ") + sc.name();
-                boolean have = false;
-                for (int i = 0; i < systemModel.size(); i++) if (systemModel.get(i).sid() == -sc.scid()) have = true;
-                if (!have) { systemModel.addElement(new TrsRef(-sc.scid(), label, 0, 0, 0, "P25 conventional")); added++; }
+                String label = (sc.category().isBlank() ? "" : sc.category() + " \u2014 ") + sc.name();
+                for (RrImport.ConvMode m : RrImport.modesIn(found.get(sc.scid()))) {
+                    int id = convId(sc.scid(), m);
+                    boolean have = false;
+                    for (int i = 0; i < systemModel.size(); i++) if (systemModel.get(i).sid() == id) have = true;
+                    if (!have) { systemModel.addElement(new TrsRef(id, label + " \u00b7 " + m.label, 0, 0, 0, m.label + " conventional")); added++; }
+                }
             }
             if (systemModel.size() == added) systems.setSelectedIndex(0);
             next.setEnabled(systems.getSelectedValue() != null);
-            info(found.size() + " P25 conventional channel group" + (found.size() == 1 ? "" : "s") + ". Pick one and press Next.");
+            info(added + " conventional channel group" + (added == 1 ? "" : "s") + " (one entry per mode). Pick one and press Next.");
         });
     }
 
     void openConventional(TrsRef t) {
-        List<Freq> freqs = convFreqs.get(-t.sid());
-        if (freqs == null || (RrImport.p25Channels(freqs).isEmpty() && RrImport.dmrChannels(freqs).isEmpty())) { error("Those channels are no longer available. Press P25 conventional channels again."); return; }
-        if (RrImport.p25Channels(freqs).isEmpty()) { pendingConv = RrImport.fromDmr(t.name(), freqs); fetched = null; prepareFinish(); go(4); info(pendingConv.channels.size() + " DMR channel" + (pendingConv.channels.size() == 1 ? "" : "s") + " (untested)."); return; }
-        pendingConv = RrImport.fromConventional(t.name(), freqs);
+        RrImport.ConvMode mode = convMode(t.sid());
+        List<Freq> freqs = convFreqs.get(convScid(t.sid()));
+        if (freqs == null || RrImport.channels(mode, freqs).isEmpty()) { error("Those channels are no longer available. Press Conventional channels again."); return; }
+        String name = t.name().replaceFirst(" \u00b7 " + java.util.regex.Pattern.quote(mode.label) + "$", "");
+        pendingConv = RrImport.fromConventional(mode, name, freqs);
         fetched = null;
         prepareFinish();
         go(4);
-        info(pendingConv.channels.size() + " P25 channel" + (pendingConv.channels.size() == 1 ? "" : "s") + ".");
+        int n = pendingConv.channels.size();
+        info(n + " " + mode.label + " channel" + (n == 1 ? "" : "s") + (mode == RrImport.ConvMode.P25 ? "." : " (untested)."));
     }
 
     /** getTrsDetails + getTrsSites + getTrsTalkgroupCats + getTrsTalkgroups: the only system data fetched, on Next. */
     void fetchSystem(int sid, int ctid, String okText) {
         run("Downloading the system from RadioReference", () -> {
             TrsDetails d = rr.getTrsDetails(sid);
-            String type = d.typeName().toLowerCase(Locale.ROOT);
-            boolean dmrType = type.contains("dmr");
-            if (!type.isEmpty() && !dmrType && !(type.contains("25") || type.contains("apco"))) throw new IllegalStateException(d.name() + " is a " + d.typeName() + " system. TrunkDeck decodes P25 and DMR systems.");
+            if (RrImport.family(d) == RrImport.Family.UNSUPPORTED)
+                throw new IllegalStateException(d.name() + " is a " + (d.typeName() + " " + d.flavorName()).trim() + " system. TrunkDeck can't decode its voice: it decodes P25, DMR, NXDN and analog FM.");
             return new RrImport.Fetched(d, rr.getTrsSites(sid), rr.getTrsTalkgroupCats(sid), rr.getTrsTalkgroups(sid));
         }, fd -> {
             fetched = fd;
             fillSites(ctid);
             go(2);
             info((okText == null ? "" : okText + " \u00b7 ") + Util.xml(fd.details().name()) + (fd.details().typeName().isBlank() ? "" : " (" + Util.xml(fd.details().typeName()) + ")")
-                    + ": " + fd.sites().size() + " site" + (fd.sites().size() == 1 ? "" : "s") + ", " + fd.ordered().size() + " talkgroups");
+                    + ": " + fd.sites().size() + " site" + (fd.sites().size() == 1 ? "" : "s") + ", " + fd.ordered().size() + " talkgroups"
+                    + (fd.details().typeName().toLowerCase(Locale.ROOT).matches(".*(smartzone|type i).*") ? ". Analog Motorola control channels cannot be followed; this works when the site has a P25 control channel." : "")
+                    + (RrImport.family(fd.details()) == RrImport.Family.ANALOG ? ". Its analog control channel can't be followed: TrunkDeck sets up its voice frequencies as analog FM channels, without talkgroup names (untested)." : ""));
         });
     }
 
@@ -613,6 +624,7 @@ final class RrWizard extends JDialog {
         RadioSystem probe = new RadioSystem();
         probe.rrSid = fetched.details().sid();
         if (RrImport.conventionalSystem(fetched.details())) probe.kind = RadioSystem.CONVENTIONAL;
+        if (RrImport.family(fetched.details()) != RrImport.Family.P25) return false;   // only P25 sites share lists by WACN / System ID
         if (!fetched.details().sysids().isEmpty()) {
             probe.sysId = fetched.details().sysids().get(0).sysid();
             probe.wacn = fetched.details().sysids().get(0).wacn();
@@ -634,12 +646,18 @@ final class RrWizard extends JDialog {
             Set<String> cats = new TreeSet<>(); int enc = 0;
             for (Tg t : fetched.ordered()) if (tgs.contains(t.dec())) { cats.add(fetched.category(t.tgCid())); if (t.encrypted()) enc++; }
             boolean conv = RrImport.conventionalSystem(fetched.details());
+            RrImport.Family fam = RrImport.family(fetched.details());
             List<Double> shown = conv ? channelFreqs(RrImport.conventionalChannels(sites)) : RrImport.controlChannels(sites);
             h.append("<p>TrunkDeck will create <b>").append(Util.xml(sysName.getText().isBlank() ? RrImport.defaultName(fetched, sites) : sysName.getText())).append("</b>:</p><ul>")
              .append("<li>").append(conv ? "Channels" : "Control channels").append(": <b>").append(freqs(shown)).append("</b> MHz (").append(sites.size()).append(" site").append(sites.size() == 1 ? "" : "s").append(")</li>")
-             .append("<li><b>").append(tgs.size()).append("</b> talkgroups in ").append(cats.size()).append(" categories, with names, tags and categories")
-             .append(enc > 0 ? " (" + enc + " encrypted - their calls are skipped)" : "").append("</li>")
-             .append("<li>Usual settings: demodulator Auto (C4FM and LSM), up to 20 calls at once. Change them on the Systems page any time.</li>")
+             .append(fam == RrImport.Family.ANALOG
+                     ? "<li>Analog FM channels, one per voice frequency (the control channel is left out). Talkgroups are not imported: analog voice carries no talkgroup ID TrunkDeck can read. (untested)</li>"
+                     : "<li><b>" + tgs.size() + "</b> talkgroups in " + cats.size() + " categories, with names, tags and categories"
+                       + (enc > 0 ? " (" + enc + " encrypted - their calls are skipped)" : "") + "</li>")
+             .append(fam == RrImport.Family.P25 ? "<li>Usual settings: demodulator Auto (C4FM and LSM), up to 20 calls at once. Change them on the Systems page any time.</li>"
+                     : fam == RrImport.Family.DMR ? "<li>DMR " + (conv ? "conventional" : "trunked, " + RrImport.dmrFlavor(fetched.details().typeName(), fetched.details().flavorName())) + " (untested). Change it on the Systems page any time.</li>"
+                     : fam == RrImport.Family.NXDN ? "<li>NXDN " + (conv ? "conventional" : "trunked; voice channels found from RadioReference's channel numbers or the site's own announcements") + " (untested).</li>"
+                     : fam == RrImport.Family.TYPE2 ? "<li>Motorola Type II (untested). Band plan Auto works for 800 and 900 MHz; a VHF/UHF system needs its band plan entered on the Systems page.</li>" : "")
              .append(sharesExisting() ? "<li>This site shares the talkgroup list you already keep for this system. RadioReference names are merged in; favorites, mutes, record, priority and streams stay.</li>" : "")
              .append("<li>New talkgroups are not sent to any stream until you assign them (Talkgroups or Streams page).</li></ul>")
              .append("<p style='color:#7D8FA3'>Nothing else is fetched from RadioReference until you choose Refresh on the Systems page.</p>");
@@ -669,10 +687,16 @@ final class RrWizard extends JDialog {
         startNow.setSelected(!running); startNow.setEnabled(!running);
         startNow.setText(running ? "Start monitoring it now (TrunkDeck is already monitoring another system)" : "Start monitoring it now");
         StringBuilder h = new StringBuilder("<html><body style='font-family:sans-serif'><p>TrunkDeck will create <b>")
-                .append(Util.xml(sysName.getText().isBlank() ? s.name : sysName.getText())).append("</b>, a conventional P25 system:</p><ul>")
+                .append(Util.xml(sysName.getText().isBlank() ? s.name : sysName.getText())).append("</b>, ").append(Util.xml(s.kindLabel())).append(":</p><ul>")
                 .append("<li>Channels: <b>").append(freqs(channelFreqs(s.channels))).append("</b> MHz</li>")
                 .append("<li><b>").append(s.talkgroups.size()).append("</b> talkgroup").append(s.talkgroups.size() == 1 ? "" : "s").append(" named from RadioReference</li>")
-                .append("<li>No control channel. TrunkDeck listens on these frequencies and decodes P25 voice. Encrypted calls are skipped.</li></ul></body></html>");
+                .append("<li>No control channel. TrunkDeck listens on these frequencies and ")
+                .append(s.analog() ? "plays what opens the squelch" + (s.nac.isBlank() && s.channels.stream().allMatch(c -> c.nac == null || c.nac.isBlank()) ? "." : ", only with the CTCSS tones RadioReference lists.")
+                        : s.dmr() ? "decodes DMR voice. Encrypted calls are skipped."
+                        : s.nxdn() ? "decodes NXDN voice. Encrypted calls are skipped."
+                        : "decodes P25 voice. Encrypted calls are skipped.").append("</li>")
+                .append(s.notes != null && s.notes.contains("DCS") ? "<li>" + Util.xml(s.notes.substring(s.notes.indexOf('\n') + 1)) + "</li>" : "")
+                .append("</ul></body></html>");
         finishText.setText(h.toString());
         finishText.setCaretPosition(0);
     }

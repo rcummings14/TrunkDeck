@@ -15,6 +15,8 @@ final class ActiveCall {
     int loggedSrc = -1;   // radio last written to the engine log ("TG x: radio NAME (ID)")
     int tg, src = -1, channel, priority = 100, alg = -1;
     long freq, start, lastSeen, lastVoice, followStart, hangSince, waitingSince;
+    /** Motorola Type II call; {@code analogVoice}: its voice channel is analog FM (else P25 Phase 1). */
+    boolean type2, analogVoice;
     boolean encrypted, emergency, phase2, followed, unitToUnit, conventional, patch, eligible, hang, waiting;
     volatile boolean ended;
     // voice diagnostics

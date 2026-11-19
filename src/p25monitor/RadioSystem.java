@@ -14,6 +14,12 @@ public class RadioSystem {
     public static final String TRUNKED = "trunked", CONVENTIONAL = "conventional";
     /** DMR Tier II conventional, and DMR trunking (Tier III / Capacity Plus / Connect Plus / XPT). Both untested on air. */
     public static final String DMR = "dmr", DMR_TRUNK = "dmr-trunk";
+    /** NXDN conventional, and NXDN Type-C trunking (NEXEDGE). NXDN48 and NXDN96 are told apart automatically. Untested on air. */
+    public static final String NXDN = "nxdn", NXDN_TRUNK = "nxdn-trunk";
+    /** Analog FM conventional channels, with optional CTCSS (PL) tone squelch. Untested on air. */
+    public static final String ANALOG = "analog";
+    /** Motorola Type II (SmartNet / SmartZone) trunking: 3600 bit/s control channel, analog FM or P25 voice. Untested on air. */
+    public static final String TYPE2 = "type2";
 
     /** One fixed channel on a conventional system. A blank NAC uses the system's NAC; a blank name is just the frequency. */
     public static final class Channel {
@@ -42,6 +48,18 @@ public class RadioSystem {
     public int colorCode = -1;
     /** DMR timeslot 0 (both), 1 or 2. */
     public int timeslot;
+    /**
+     * NXDN trunking, channel-number notation: channel number -> MHz, saved as "nxdnChannels=1=451.0125,2=451.0250".
+     * Sites using direct frequency assignment (DFA) announce their own frequencies and need no table.
+     */
+    public java.util.Map<Integer, Double> nxdnChannels = new java.util.TreeMap<>();
+    /** Analog FM noise squelch level 1 (opens easiest) to 10 (strongest signal only); 5 is the default. */
+    public int squelch = p25monitor.analog.FmReceiver.SQUELCH_DEFAULT;
+    /** Motorola Type II band plan: auto, 800reband, 800standard, 800splinter, 900 or obt (VHF/UHF, uses the three values below). */
+    public String type2Plan = "auto";
+    /** VHF/UHF (OBT) band plan: first receive frequency, channel spacing, and the channel number of the first receive channel. */
+    public double obtBaseMHz, obtSpacingKHz;
+    public int obtOffset = 380;
     public List<Double> controlChannelsMHz = new ArrayList<>();
     /** Conventional channels. Empty on a trunked system. */
     public List<Channel> channels = new ArrayList<>();
@@ -79,7 +97,34 @@ public class RadioSystem {
     /** Either DMR mode. Both are untested on a real radio. */
     public boolean dmr() { return dmrConventional() || dmrTrunk(); }
     /** Fixed channels with no control channel: P25 conventional or DMR conventional. */
-    public boolean fixedChannels() { return conventional() || dmrConventional(); }
+    public boolean fixedChannels() { return conventional() || dmrConventional() || nxdnConventional() || analog(); }
+    public boolean analog() { return ANALOG.equalsIgnoreCase(kind); }
+
+    /**
+     * Analog: the CTCSS tone a channel needs, in Hz, or 0 for carrier squelch. A channel's own tone (155.2500:100.0)
+     * wins over the system's tone (the NAC box, labelled CTCSS for analog systems).
+     */
+    public double toneFor(long hz) {
+        Channel c = channelAt(hz);
+        double t = c == null ? 0 : p25monitor.analog.FmReceiver.parseTone(c.nac);
+        if (t > 0) return t;
+        t = p25monitor.analog.FmReceiver.parseTone(nac);
+        return Math.max(0, t);
+    }
+    public boolean nxdnConventional() { return NXDN.equalsIgnoreCase(kind); }
+    public boolean nxdnTrunk() { return NXDN_TRUNK.equalsIgnoreCase(kind); }
+    /** Either NXDN mode. Both are untested on a real radio. */
+    public boolean nxdn() { return nxdnConventional() || nxdnTrunk(); }
+    /** Motorola Type II SmartNet / SmartZone (untested). */
+    public boolean type2() { return TYPE2.equalsIgnoreCase(kind); }
+
+    public p25monitor.motorola.Type2BandPlan type2BandPlan() {
+        return new p25monitor.motorola.Type2BandPlan(p25monitor.motorola.Type2BandPlan.Kind.of(type2Plan),
+                Math.round(obtBaseMHz * 1e6), Math.round(obtSpacingKHz * 1e3), obtOffset);
+    }
+
+    /** NXDN channel number to Hz from {@link #nxdnChannels}, or 0. */
+    public long nxdnChannelHz(int channel) { Double m = nxdnChannels.get(channel); return m == null ? 0 : Math.round(m * 1e6); }
 
     public String aliasListName() { return name.replaceAll("[\"<>&]", "").trim(); }
 
@@ -143,6 +188,10 @@ public class RadioSystem {
     /** Top of the glass while this system is not running, or before a channel has been heard. */
     public String idleCaption() {
         if (dmrTrunk()) return freqText().isBlank() ? "" : "DMR CC " + freqText();
+        if (nxdnTrunk()) return freqText().isBlank() ? "" : "NXDN CC " + freqText();
+        if (type2()) return freqText().isBlank() ? "" : "TYPE II CC " + freqText();
+        if (analog()) return channels.isEmpty() ? "" : channels.size() == 1 ? channelCaption(Math.round(channels.get(0).mhz * 1e6)) : channels.size() + " analog channels";
+        if (nxdnConventional()) return channels.isEmpty() ? "" : channels.size() == 1 ? channelCaption(Math.round(channels.get(0).mhz * 1e6)) : channels.size() + " NXDN channels";
         if (dmrConventional()) {
             if (channels.isEmpty()) return "";
             if (channels.size() == 1) return channelCaption(Math.round(channels.get(0).mhz * 1e6)) + colorNote();
@@ -197,6 +246,10 @@ public class RadioSystem {
     public String kindLabel() {
         if (dmrConventional()) return "DMR conventional (untested)";
         if (dmrTrunk()) return "DMR trunked (untested)";
+        if (nxdnConventional()) return "NXDN conventional (untested)";
+        if (analog()) return "Analog FM (untested)";
+        if (nxdnTrunk()) return "NXDN trunked (untested)";
+        if (type2()) return "Motorola Type II (untested)";
         if (conventional()) return "Conventional (untested)";
         return "Trunked";
     }
@@ -244,14 +297,34 @@ public class RadioSystem {
         for (String piece : text.split("[,;\\n\\r]+")) {
             piece = piece.trim();
             if (piece.isEmpty()) continue;
+            piece = joinTones(piece.replaceFirst("^([0-9.]+)\\s*:\\s*", "$1:"));   // "154.8225: 206.5" and "154.8225 206.5" mean 154.8225:206.5
             String[] tokens = piece.split("\\s+");
             boolean allFreq = tokens.length > 1;
-            if (allFreq) for (String t : tokens) if (!t.matches("(?i)[0-9]+(?:\\.[0-9]+)?(?::(?:\\$|0x)?[0-9a-f]{1,3})?")) { allFreq = false; break; }
+            if (allFreq) for (String t : tokens) if (!t.matches("(?i)[0-9]+(?:\\.[0-9]+)?(?::(?:(?:\\$|0x)?[0-9a-f]{1,3}|[0-9]{2,3}\\.[0-9]{1,2}))?")) { allFreq = false; break; }
             if (allFreq) { for (String t : tokens) out.add(oneChannel(t, "")); continue; }
             String name = tokens.length > 1 ? piece.substring(tokens[0].length()).trim() : "";
+            // "155.3700:206.5 PL Fire": PL (RadioReference's tone suffix) belongs to the tone, not to the channel name
+            if (tokens[0].matches("[^:]+:[0-9]{2,3}\\.[0-9]{1,2}")) name = name.replaceFirst("(?i)^(pl|hz|ctcss)\\b\\s*", "");
             out.add(oneChannel(tokens[0], name));
         }
         return out;
+    }
+
+    /**
+     * A frequency followed by a space and a standard CTCSS tone written with one or two decimals ({@code 154.8225 206.5})
+     * becomes {@code 154.8225:206.5}, instead of a second channel at 206.5 MHz.
+     */
+    static String joinTones(String piece) {
+        String[] t = piece.split("\\s+");
+        List<String> out = new ArrayList<>();
+        for (int i = 0; i < t.length; i++) {
+            if (i + 1 < t.length && t[i].matches("[0-9]+(?:\\.[0-9]+)?") && t[i + 1].matches("[0-9]{2,3}\\.[0-9]{1,2}")
+                    && p25monitor.analog.FmReceiver.parseTone(t[i + 1]) > 0) {
+                out.add(t[i] + ":" + t[i + 1]);
+                i++;
+            } else out.add(t[i]);
+        }
+        return String.join(" ", out);
     }
 
     /** {@code freq} or {@code freq:nac}, plus an optional channel name. */
@@ -269,6 +342,10 @@ public class RadioSystem {
                 if (cc > 15) throw new NumberFormatException(nac + " is not a DMR colour code (0-15)");
                 nac = String.valueOf(cc);
                 slot = Integer.parseInt(ps[1]);
+            } else if (nac.contains(".")) {   // analog CTCSS tone, e.g. 100.0
+                double tone = p25monitor.analog.FmReceiver.parseTone(nac);
+                if (tone <= 0) throw new NumberFormatException(nac + " is not a standard CTCSS tone (for example 100.0)");
+                nac = String.format(Locale.ROOT, "%.1f", tone);
             } else {
                 if (parseNac(nac) < 0) throw new NumberFormatException(nac + " is not a NAC (use hex, like 2D5)");
                 nac = nac.replaceFirst("(?i)^(\\$|0x)", "").toUpperCase(Locale.ROOT);
@@ -318,6 +395,18 @@ public class RadioSystem {
             p.setProperty("colorCode", String.valueOf(colorCode));
             p.setProperty("timeslot", String.valueOf(timeslot));
         }
+        if (analog()) p.setProperty("squelch", String.valueOf(squelch));
+        if (type2()) {
+            p.setProperty("type2Plan", type2Plan == null ? "auto" : type2Plan);
+            p.setProperty("obtBase", fmt(obtBaseMHz));
+            p.setProperty("obtSpacing", String.valueOf(obtSpacingKHz));
+            p.setProperty("obtOffset", String.valueOf(obtOffset));
+        }
+        if (nxdnTrunk() && !nxdnChannels.isEmpty()) {
+            StringJoiner j = new StringJoiner(",");
+            for (var en : nxdnChannels.entrySet()) j.add(en.getKey() + "=" + fmt(en.getValue()));
+            p.setProperty("nxdnChannels", j.toString());
+        }
         p.setProperty("nac", nac);
         p.setProperty("wacn", wacn);
         p.setProperty("sysId", sysId);
@@ -356,6 +445,16 @@ public class RadioSystem {
         s.dmrFlavor = p.getProperty("dmrFlavor", "tier3");
         try { s.colorCode = Integer.parseInt(p.getProperty("colorCode", "-1").trim()); } catch (Exception ignored) {}
         try { s.timeslot = Integer.parseInt(p.getProperty("timeslot", "0").trim()); } catch (Exception ignored) {}
+        try { s.squelch = Math.max(p25monitor.analog.FmReceiver.SQUELCH_MIN, Math.min(p25monitor.analog.FmReceiver.SQUELCH_MAX,
+                Integer.parseInt(p.getProperty("squelch", String.valueOf(p25monitor.analog.FmReceiver.SQUELCH_DEFAULT)).trim()))); } catch (Exception ignored) {}
+        s.type2Plan = p25monitor.motorola.Type2BandPlan.Kind.of(p.getProperty("type2Plan", "auto")).key;
+        try { s.obtBaseMHz = Double.parseDouble(p.getProperty("obtBase", "0").trim()); } catch (Exception ignored) {}
+        try { s.obtSpacingKHz = Double.parseDouble(p.getProperty("obtSpacing", "0").trim()); } catch (Exception ignored) {}
+        try { s.obtOffset = Integer.parseInt(p.getProperty("obtOffset", "380").trim()); } catch (Exception ignored) {}
+        for (String pair : p.getProperty("nxdnChannels", "").split(",")) {
+            String[] kv = pair.split("=");
+            if (kv.length == 2) try { s.nxdnChannels.put(Integer.parseInt(kv[0].trim()), Double.parseDouble(kv[1].trim())); } catch (NumberFormatException ignored) {}
+        }
         s.nac = p.getProperty("nac", "");
         s.wacn = p.getProperty("wacn", "");
         s.sysId = p.getProperty("sysId", "");
@@ -381,6 +480,10 @@ public class RadioSystem {
         if (k == null) return TRUNKED;
         if (DMR_TRUNK.equalsIgnoreCase(k)) return DMR_TRUNK;
         if (DMR.equalsIgnoreCase(k)) return DMR;
+        if (NXDN_TRUNK.equalsIgnoreCase(k)) return NXDN_TRUNK;
+        if (NXDN.equalsIgnoreCase(k)) return NXDN;
+        if (ANALOG.equalsIgnoreCase(k)) return ANALOG;
+        if (TYPE2.equalsIgnoreCase(k)) return TYPE2;
         if (CONVENTIONAL.equalsIgnoreCase(k)) return CONVENTIONAL;
         return TRUNKED;
     }

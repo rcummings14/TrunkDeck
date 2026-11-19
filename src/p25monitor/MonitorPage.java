@@ -59,6 +59,11 @@ public class MonitorPage extends JPanel {
     final JCheckBox backlight = new JCheckBox("Backlight on calls");
     final JButton customize = new JButton("Colors\u2026");
     final JCheckBox tintApp = new JCheckBox("Tint the whole app in these colours");
+    /** Analog systems only (shown while one is running): Hold the channel being heard, Scan to go back to all. */
+    final JButton holdBtn = MainFrame.button("Hold", null, Theme.CYAN), scanBtn = MainFrame.button("Scan", null, Theme.CYAN),
+            downBtn = MainFrame.button("Down", null, Theme.CYAN), upBtn = MainFrame.button("Up", null, Theme.CYAN);
+    final JLabel holdLbl = new JLabel();
+    final JPanel holdBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
     final JComboBox<String> speakerBox = new JComboBox<>(new String[]{"One call at a time (priority)", "Mix all calls", "Hold one talkgroup", "Queue all calls (one after another)"});
     /** Countdown shown when a system will auto-start after TrunkDeck opens. Hidden otherwise. */
     final JPanel autoStartBar = new JPanel(new BorderLayout(12, 0));
@@ -83,6 +88,20 @@ public class MonitorPage extends JPanel {
         north.setOpaque(false);
         north.add(autoStartBar, BorderLayout.NORTH);
         north.add(f.display, BorderLayout.CENTER);
+        holdBar.setOpaque(false);
+        holdBar.add(holdBtn); holdBar.add(scanBtn); holdBar.add(downBtn); holdBar.add(upBtn); holdBar.add(holdLbl);
+        downBtn.setToolTipText("Hold the previous channel in the system's list");
+        upBtn.setToolTipText("Hold the next channel in the system's list");
+        downBtn.addActionListener(e -> { String why = f.nativeEngine.stepAnalog(-1); if (why != null) f.toast(why); refreshHold(); });
+        upBtn.addActionListener(e -> { String why = f.nativeEngine.stepAnalog(1); if (why != null) f.toast(why); refreshHold(); });
+        holdLbl.setForeground(Theme.AMBER);
+        holdLbl.setFont(Theme.ui(Font.BOLD, 13f));
+        holdBtn.setToolTipText("Stay on the analog channel you are hearing (or the last one heard): only it plays until you press Scan. Other channels are still recorded.");
+        scanBtn.setToolTipText("Go back to scanning every channel");
+        holdBtn.addActionListener(e -> { String why = f.nativeEngine.holdAnalog(); if (why != null) f.toast(why); refreshHold(); });
+        scanBtn.addActionListener(e -> { f.nativeEngine.scanAnalog(); refreshHold(); });
+        holdBar.setVisible(false);
+        north.add(holdBar, BorderLayout.SOUTH);
         add(north, BorderLayout.NORTH);
 
         // live log
@@ -294,7 +313,7 @@ public class MonitorPage extends JPanel {
         asp.setPreferredSize(new Dimension(600, 262));
         asp.setMinimumSize(new Dimension(200, 70));
         activeCard.add(asp, BorderLayout.CENTER);
-        new javax.swing.Timer(250, e -> { refreshActive(); holdForLive(); }).start();
+        new javax.swing.Timer(250, e -> { refreshActive(); holdForLive(); refreshHold(); }).start();
         refreshActive();
 
         activeCard.setMinimumSize(new Dimension(300, 110));
@@ -576,6 +595,17 @@ public class MonitorPage extends JPanel {
         long[] q = f.nativeEngine.isRunning() ? f.nativeEngine.speakerQueueStatus() : null;
         activeTitle.setToolTipText(q == null ? null : "Speaker queue: " + q[0] + " call(s) waiting, playing " + Math.round(q[1] / 1000.0) + " s behind live, "
                 + q[2] + " call(s) skipped by the " + f.nativeEngine.speakerQueueMaxDelay() + " s limit. The list below shows the live calls.");
+    }
+
+    /** Analog systems only: Hold / Scan under the display, and which channel is held. */
+    void refreshHold() {
+        boolean on = f.nativeEngine.analogRunning();
+        long hf = on ? f.nativeEngine.holdFreq() : 0;
+        if (holdBar.isVisible() != on) { holdBar.setVisible(on); holdBar.revalidate(); }
+        holdBtn.setEnabled(on && hf == 0);
+        scanBtn.setEnabled(hf > 0);
+        String name = hf > 0 ? f.nativeEngine.channelName(hf) : "";
+        holdLbl.setText(hf > 0 ? "HOLDING " + (name.isEmpty() ? "" : name.toUpperCase() + "  ") + p25monitor.nativeengine.NativeEngine.mhzText(hf) + " MHz" : "");
     }
 
     /** "QUEUE  ·  2 WAITING  ·  +4 s" (1.4.2). */
