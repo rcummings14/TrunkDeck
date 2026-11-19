@@ -7,7 +7,8 @@ public final class PpmMeterTests {
     static int pass, fail;
     static void check(boolean ok, String what) { if (ok) pass++; else fail++; System.out.println((ok ? "  ok    " : "  FAIL  ") + what); }
 
-    static final double RATE = 1_024_000, OFFSET = 150_000;
+    static double RATE = 1_024_000;
+    static final double OFFSET = 150_000;
 
     /** A C4FM-like control channel (random symbols at +-600 / +-1800 Hz, 4800 baud) at {@code errHz} from the reference, plus noise. */
     static void signal(PpmMeter m, double errHz, double snrDb, double seconds, boolean on, long seed) {
@@ -69,6 +70,17 @@ public final class PpmMeterTests {
             float[] s = m.spectrumDb();
             int mid = m.bins / 2;
             check(s[mid] > s[5] + 15, String.format(Locale.ROOT, "the spectrum shows the signal at the centre (%.0f dB) above the edge (%.0f dB)", s[mid], s[5]));
+
+            // SoapySDR receivers are opened at 2.5 MS/s: a bigger FFT keeps the same resolution, spectra are capped at ~60/s
+            RATE = 2_500_000;
+            PpmMeter h = new PpmMeter(RATE, OFFSET, 20);
+            check(h.fft == 16384 && h.binHz < 160 && Math.abs(h.binOffsetHz(h.bins / 2)) < h.binHz, "2.5 MS/s: " + h.fft + "-point FFT, " + Math.round(h.binHz) + " Hz bins");
+            signal(h, -4200, 20, 2.0, true, 21);
+            PpmMeter.Estimate he = h.estimate();
+            check(he.found() && Math.abs(he.offsetHz() + 4200) < 80 && he.frames() >= 100 && he.frames() <= 130,
+                    String.format(Locale.ROOT, "2.5 MS/s: signal -4200 Hz off measured %+.1f Hz from %d spectra in 2 s", he.offsetHz(), he.frames()));
+            check(new PpmMeter(10e6, OFFSET, 20).fft == 65536 && new PpmMeter(20e6, OFFSET, 20).fft == 65536, "the FFT stops growing at 65536 points");
+            RATE = 1_024_000;
 
             // PPM arithmetic used by the popup: measured +5 ppm at PPM 0 -> suggest -5; at PPM -5 it sits on the line
             double measured = 5.0;

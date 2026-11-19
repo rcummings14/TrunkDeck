@@ -33,7 +33,8 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
 * **Set up from RadioReference** imports these system types now. DMR, NXDN and SmartNet / SmartZone systems become the
   matching kind. Analog trunked systems (EDACS, LTR, MPT, Passport) become analog FM channels, listened to directly.
 * **Analog Hold / Scan / Down / Up** on the Monitor page, for analog FM systems: see *Listening*.
-* **PPM calibration with a waterfall:** *Engine* page → **Calibrate…** next to each RTL-SDR. See *PPM calibration tips*.
+* **PPM calibration with a waterfall:** *Engine* page → **Calibrate…** next to each RTL-SDR (and each SoapySDR receiver,
+  untested). See *PPM calibration tips*.
 * **Paste a frequency table** into **Systems → Channels MHz** for a conventional kind (analog FM, P25, DMR, NXDN).
   Select the table on a RadioReference frequency page (with or without its header row) and copy it, or copy a CHIRP CSV
   or spreadsheet columns (frequency, name, tone, mode), then paste with Ctrl+V or right-click → Paste. The rows of the system's mode are added
@@ -592,8 +593,10 @@ which can swap if you plug them into different ports. To avoid that, give one a 
 ### PPM calibration tips
 A P25 channel is only 12.5 kHz wide, and a cheap dongle can be 20–60 PPM off (9–27 kHz at 453 MHz).
 
-**Calibrate… (waterfall)**, new in 1.7.5: on the *Engine* page, each RTL-SDR has a **Calibrate…** button. It opens a
-live waterfall around a signal that is always on the air, with a green line where that signal should be.
+**Calibrate… (waterfall)**, new in 1.7.5: on the *Engine* page, each RTL-SDR has a **Calibrate…** button, and so does
+each SDRplay, HackRF, LimeSDR or USRP receiver (untested with those). It opens a live waterfall around a signal that is
+always on the air, with a green line where that signal should be. Airspy receivers don't need it: they have an accurate
+built-in reference.
 * Pick the **Reference**: your system's control channel is listed first, then the NOAA weather stations
   (162.400–162.550 MHz). You can type any frequency and press Enter.
 * Turn **PPM** until the signal sits on the green line, or press **Auto** when a suggestion shows. The text under the

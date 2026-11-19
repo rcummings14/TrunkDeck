@@ -398,7 +398,7 @@ public class NativePage extends JPanel {
                 cal.setFont(Theme.ui(Font.PLAIN, 11f));
                 cal.setMargin(new Insets(1, 8, 1, 8));
                 cal.setToolTipText("Set this dongle's PPM with a live waterfall. Monitoring pauses while it is open and starts again when you close it.");
-                cal.addActionListener(e -> PpmCalibrator.open(f, d, this::rescan));
+                cal.addActionListener(e -> PpmCalibrator.open(f, PpmCalibrator.rtl(f.app, d), this::rescan));
                 g.gridwidth = 1; g.gridx = 3; g.fill = GridBagConstraints.NONE; g.anchor = GridBagConstraints.EAST;
                 tunerRows.add(cal, g);
                 g.fill = GridBagConstraints.HORIZONTAL; g.anchor = GridBagConstraints.WEST;
@@ -596,6 +596,12 @@ public class NativePage extends JPanel {
             tag.setFont(Theme.ui(Font.BOLD, 12f)); tag.setForeground(Theme.AMBER);
             tag.setToolTipText(SoapyDriver.UNTESTED_NOTE);
             nameRow.add(n); nameRow.add(tag);
+            JButton cal = new JButton("Calibrate\u2026");
+            cal.setFont(Theme.ui(Font.PLAIN, 11f));
+            cal.setMargin(new Insets(1, 8, 1, 8));
+            cal.setToolTipText("Set this receiver's PPM with a live waterfall (untested with this receiver). Monitoring pauses while it is open and starts again when you close it.");
+            cal.addActionListener(e -> PpmCalibrator.open(f, PpmCalibrator.soapy(f.app, a), this::rescan));
+            nameRow.add(Box.createHorizontalStrut(10)); nameRow.add(cal);
             nameRow.setMinimumSize(new Dimension(70, n.getPreferredSize().height));
             tunerRows.add(nameRow, g);
             g.weightx = 0; g.gridwidth = 1; g.gridy = y++; g.insets = new Insets(2, 2, 3, 6);

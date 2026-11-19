@@ -58,7 +58,8 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   The rows of that system's mode are added with their names and tones (CTCSS for analog, NAC for P25, colour code for
   DMR). Other modes and channels already listed are left out, and a message says how many were added. Paste several
   tables to build one system. Nothing is downloaded: TrunkDeck only reads what you copied.
-* **PPM calibration with a waterfall** (Engine page → **Calibrate…** next to each RTL-SDR): a live waterfall around a
+* **PPM calibration with a waterfall** (Engine page → **Calibrate…** next to each RTL-SDR, and each SDRplay / HackRF /
+  LimeSDR / USRP receiver, untested with those): a live waterfall around a
   control channel or a NOAA weather station, with a line where the signal should be. Turn PPM until the signal sits on
   the line, or press Auto, then Save & close. Monitoring pauses while it's open and starts again when it closes.
 * **Easier tone entry for analog channels:** `154.8225 206.5` and `154.8225: 206.5` are now read the same as

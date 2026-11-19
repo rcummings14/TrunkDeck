@@ -4,6 +4,7 @@ import p25monitor.dsp.PpmMeter;
 import p25monitor.nativeengine.NativeEngine;
 import p25monitor.sdr.IqSource;
 import p25monitor.sdr.RtlSdr;
+import p25monitor.sdr.SoapySdr;
 
 import javax.swing.*;
 import java.awt.*;
@@ -14,7 +15,7 @@ import java.util.*;
 import java.util.List;
 
 /**
- * PPM calibration popup (Engine page, Calibrate... next to an RTL-SDR). A live waterfall around a known, always-on
+ * PPM calibration popup (Engine page, Calibrate... next to an RTL-SDR or a SoapySDR receiver). A live waterfall around a known, always-on
  * signal (a control channel or NOAA weather) with a line where it should be. The user turns PPM until the signal sits
  * on the line, or presses Auto; Save &amp; close stores it for that dongle. Monitoring pauses while it is open and
  * resumes when it closes. TrunkDeck's own code.
@@ -23,20 +24,62 @@ import java.util.List;
  * the picture, the same shift the driver makes ({@link NativeEngine#suggestedPpm}: signals 5 ppm high need PPM -5).
  */
 final class PpmCalibrator extends JDialog {
-    static final double RATE = 1_024_000, OFFSET = 150_000;
+    static final double RATE = 1_024_000, SOAPY_RATE = 2_500_000, OFFSET = 150_000;
     static final double[] NOAA = {162.400, 162.425, 162.450, 162.475, 162.500, 162.525, 162.550};
 
+    /** The receiver being calibrated: how to open it at PPM 0, describe it, and save its PPM. */
+    abstract static class Target {
+        final String label;
+        final int ppm;
+        final double rate;
+        Target(String label, int ppm, double rate) { this.label = label; this.ppm = ppm; this.rate = rate; }
+        /** Opens the receiver with no PPM correction, ready to tune and start. */
+        abstract IqSource open() throws Exception;
+        abstract String describe(IqSource s);
+        abstract void savePpm(App app, int ppm);
+        /** Preview and tests: nothing is opened, the caller feeds the meter. */
+        boolean preview() { return false; }
+    }
+
+    static Target rtl(App app, RtlSdr.Info d) {
+        NativeEngine.TunerSettings ts = NativeEngine.TunerSettings.load(app.settings, d.key());
+        return new Target(d.label(), ts.ppm, RATE) {
+            IqSource open() throws Exception {
+                RtlSdr r = new RtlSdr(d);
+                r.setSampleRate(RATE);
+                r.open();
+                try { r.configure(0, ts.gainTenths, ts.biasTee); } catch (RuntimeException e) { r.stop(); throw e; }
+                return r;
+            }
+            String describe(IqSource s) { return d.label() + "  " + ((RtlSdr) s).tunerName() + "  gain " + (ts.gainTenths < 0 ? "auto" : ts.gainTenths / 10.0 + " dB"); }
+            void savePpm(App app, int v) { NativeEngine.TunerSettings t = NativeEngine.TunerSettings.load(app.settings, d.key()); t.ppm = v; t.save(app.settings, d.key()); }
+            boolean preview() { return d.index < 0; }
+        };
+    }
+
+    static Target soapy(App app, SoapySdr.Info d) {
+        NativeEngine.SoapySettings ss = NativeEngine.SoapySettings.load(app.settings, d.key(), d.driver);
+        return new Target(d.tagged(), ss.ppm, SOAPY_RATE) {
+            IqSource open() {
+                SoapySdr r = new SoapySdr(d);
+                r.open(SOAPY_RATE, ss.gain, 0, ss.biasTee, ss.antenna);
+                return r;
+            }
+            String describe(IqSource s) { return d.label() + "  " + ((SoapySdr) s).configReport; }
+            void savePpm(App app, int v) { NativeEngine.SoapySettings t = NativeEngine.SoapySettings.load(app.settings, d.key(), d.driver); t.ppm = v; t.save(app.settings, d.key()); }
+        };
+    }
+
     final App app;
-    final RtlSdr.Info dev;
-    final NativeEngine.TunerSettings ts;
-    final PpmMeter meter = new PpmMeter(RATE, OFFSET, 20);
-    final Waterfall wf = new Waterfall(meter);
+    final Target dev;
+    volatile PpmMeter meter;
+    final Waterfall wf;
     final JComboBox<String> ref = new JComboBox<>();
     final JSpinner ppm;
     final JLabel reading = new JLabel(" "), status = new JLabel(" ");
     final JButton auto = new JButton("Auto"), save = new JButton("Save & close"), cancel = new JButton("Cancel");
     final javax.swing.Timer timer;
-    volatile RtlSdr rtl;
+    volatile IqSource rtl;
     /** Samples are arriving (the dongle started, or a test feeds the meter). */
     volatile boolean live;
     volatile long refHz;
@@ -45,11 +88,12 @@ final class PpmCalibrator extends JDialog {
     boolean saved;
     int savedPpm;
 
-    PpmCalibrator(Window owner, App app, RtlSdr.Info dev, List<String> refs) {
-        super(owner, "Calibrate PPM - " + dev.label(), ModalityType.APPLICATION_MODAL);
+    PpmCalibrator(Window owner, App app, Target dev, List<String> refs) {
+        super(owner, "Calibrate PPM - " + dev.label, ModalityType.APPLICATION_MODAL);
         this.app = app; this.dev = dev;
-        this.ts = NativeEngine.TunerSettings.load(app.settings, dev.key());
-        ppm = new JSpinner(new SpinnerNumberModel(Math.max(-200, Math.min(200, ts.ppm)), -200, 200, 1));
+        meter = new PpmMeter(dev.rate, OFFSET, 20);
+        wf = new Waterfall(meter);
+        ppm = new JSpinner(new SpinnerNumberModel(Math.max(-200, Math.min(200, dev.ppm)), -200, 200, 1));
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
         JPanel root = new JPanel(new BorderLayout(0, 10));
@@ -72,7 +116,7 @@ final class PpmCalibrator extends JDialog {
         row.add(Box.createHorizontalStrut(16));
         row.add(bold("PPM"));
         ((JSpinner.DefaultEditor) ppm.getEditor()).getTextField().setColumns(4);
-        ppm.setToolTipText("Frequency correction for this dongle's crystal. The picture moves as you change it.");
+        ppm.setToolTipText("Frequency correction for this receiver's crystal. The picture moves as you change it.");
         row.add(ppm);
         auto.setToolTipText("Set PPM to the measured value.");
         auto.setEnabled(false);
@@ -106,8 +150,7 @@ final class PpmCalibrator extends JDialog {
         auto.addActionListener(e -> { if (suggested != Integer.MIN_VALUE) ppm.setValue(Math.max(-200, Math.min(200, suggested))); });
         save.addActionListener(e -> {
             savedPpm = (Integer) ppm.getValue();
-            ts.ppm = savedPpm;
-            ts.save(app.settings, dev.key());
+            dev.savePpm(app, savedPpm);
             app.saveSettings();
             saved = true;
             dispose();
@@ -154,7 +197,7 @@ final class PpmCalibrator extends JDialog {
         if (hz == refHz && tunedAt != 0) return;
         refHz = hz;
         wf.setShiftHz((Integer) ppm.getValue() * (refHz / 1e6));
-        RtlSdr r = rtl;
+        IqSource r = rtl;
         if (r != null) {
             if (!r.tune(Math.round(hz - OFFSET))) { status.setText("Could not tune to " + RadioSystem.fmt(hz / 1e6) + " MHz."); return; }
             meter.reset(); wf.clear(); tunedAt = System.currentTimeMillis(); suggested = Integer.MIN_VALUE;
@@ -162,30 +205,39 @@ final class PpmCalibrator extends JDialog {
     }
 
     void startDevice() {
-        if (dev.index < 0) return;   // preview / tests: the caller feeds the meter
-        status.setText("Opening " + dev.label() + "...");
+        if (dev.preview()) return;   // preview / tests: the caller feeds the meter
+        status.setText("Opening " + dev.label + "...");
         Thread t = new Thread(() -> {
-            RtlSdr r = new RtlSdr(dev);
-            r.setSampleRate(RATE);
+            IqSource r = null;
             Exception last = null;
-            for (int i = 0; i < 12; i++) {   // the scanner may still be letting go of the dongle
-                try { r.open(); last = null; break; } catch (Exception e) { last = e; try { Thread.sleep(300); } catch (InterruptedException ie) { return; } }
+            for (int i = 0; i < 12; i++) {   // the scanner may still be letting go of the receiver
+                try { r = dev.open(); last = null; break; } catch (Exception e) { last = e; try { Thread.sleep(300); } catch (InterruptedException ie) { return; } }
             }
-            if (last != null) { String msg = last.getMessage(); SwingUtilities.invokeLater(() -> { reading.setForeground(Theme.RED); reading.setText("Could not open the dongle."); status.setText(msg); }); return; }
+            if (last != null || r == null) {
+                String msg = last == null ? "" : last.getMessage();
+                SwingUtilities.invokeLater(() -> { reading.setForeground(Theme.RED); reading.setText("Could not open the receiver."); status.setText(msg); });
+                return;
+            }
+            IqSource src = r;
             try {
-                r.configure(0, ts.gainTenths, ts.biasTee);
+                if (Math.abs(src.sampleRate() - meter.rate) >= 1) {   // the driver chose another rate
+                    PpmMeter m = new PpmMeter(src.sampleRate(), OFFSET, 20);
+                    meter = m;
+                    SwingUtilities.invokeLater(() -> wf.setMeter(m));
+                }
                 long hz = refHz > 0 ? refHz : Math.round(NOAA[NOAA.length - 1] * 1e6);
-                r.tune(Math.round(hz - OFFSET));
-                r.start(new IqSource.Listener() { public void samples(float[] i, float[] q, int n) { meter.feed(i, q, n); } });
+                src.tune(Math.round(hz - OFFSET));
+                src.start(new IqSource.Listener() { public void samples(float[] i, float[] q, int n) { meter.feed(i, q, n); } });
             } catch (Exception e) {
-                r.stop();
-                SwingUtilities.invokeLater(() -> { reading.setForeground(Theme.RED); reading.setText("The dongle did not start."); status.setText(String.valueOf(e.getMessage())); });
+                src.stop();
+                SwingUtilities.invokeLater(() -> { reading.setForeground(Theme.RED); reading.setText("The receiver did not start."); status.setText(String.valueOf(e.getMessage())); });
                 return;
             }
             SwingUtilities.invokeLater(() -> {
-                if (!isDisplayable()) { r.stop(); return; }
-                rtl = r; live = true; tunedAt = System.currentTimeMillis();
-                status.setText(dev.label() + "  " + r.tunerName() + "  gain " + (ts.gainTenths < 0 ? "auto" : ts.gainTenths / 10.0 + " dB") + "  (opened at PPM 0; the PPM box is applied to the picture)");
+                if (!isDisplayable()) { src.stop(); return; }
+                rtl = src; live = true; tunedAt = System.currentTimeMillis();
+                status.setText(dev.describe(src) + "  (opened at PPM 0; the PPM box is applied to the picture)");
+                status.setToolTipText(status.getText());
                 save.setEnabled(true);
             });
         }, "ppm-calibrate");
@@ -229,7 +281,7 @@ final class PpmCalibrator extends JDialog {
     /** Lets go of the dongle. */
     void shutdown() {
         timer.stop();
-        RtlSdr r = rtl;
+        IqSource r = rtl;
         rtl = null;
         if (r != null) r.stop();
     }
@@ -238,14 +290,14 @@ final class PpmCalibrator extends JDialog {
      * Opens the popup for one dongle (Engine page). A running scan using RTL-SDR dongles pauses while it is open and
      * starts again when it closes, with the new PPM.
      */
-    static void open(MainFrame f, RtlSdr.Info d, Runnable after) {
+    static void open(MainFrame f, Target d, Runnable after) {
         NativeEngine ne = f.nativeEngine;
-        boolean paused = ne.isRunning() && ne.mode() == NativeEngine.Mode.RTL;
-        if (paused) { ne.log("Pausing to calibrate PPM on " + d.label()); ne.stop(true); }   // feeds stay connected
+        boolean paused = ne.isRunning() && ne.mode() == NativeEngine.Mode.RTL;   // RTL mode = real receivers of every kind
+        if (paused) { ne.log("Pausing to calibrate PPM on " + d.label); ne.stop(true); }   // feeds stay connected
         PpmCalibrator c = new PpmCalibrator(f, f.app, d, refs(f.app.current));
         c.setVisible(true);   // modal: returns when it closes
         c.shutdown();
-        if (c.saved) { ne.log("PPM for " + d.label() + " set to " + c.savedPpm + " (calibration)"); f.toast("PPM for " + d.label() + " set to " + c.savedPpm + "."); }
+        if (c.saved) { ne.log("PPM for " + d.label + " set to " + c.savedPpm + " (calibration)"); f.toast("PPM for " + d.label + " set to " + c.savedPpm + "."); }
         if (paused) { f.startMonitoring(); if (!f.running()) ne.stop(); }
         if (after != null) after.run();
     }
@@ -253,19 +305,16 @@ final class PpmCalibrator extends JDialog {
     /** Waterfall with the averaged spectrum on top, the reference line, the channel edges and the measured centre. */
     static final class Waterfall extends JComponent {
         static final int HISTORY = 300, SPECTRUM_H = 90, AXIS_H = 20, RANGE_DB = 45;
-        final PpmMeter m;
-        final BufferedImage img;
-        final int[] px;
-        final int w;
+        PpmMeter m;
+        BufferedImage img;
+        int[] px;
+        int w;
         final int[] lut = new int[256];
         double floorDb = Double.NaN;
         volatile double shiftHz, markHz = Double.NaN;
 
         Waterfall(PpmMeter m) {
-            this.m = m;
-            w = m.bins;
-            img = new BufferedImage(w, HISTORY, BufferedImage.TYPE_INT_RGB);
-            px = ((DataBufferInt) img.getRaster().getDataBuffer()).getData();
+            use(m);
             int[] stops = {0x061015, 0x0B3D91, 0x00A6C8, 0x2BFF88, 0xFFB300, 0xFF4D5E};
             for (int i = 0; i < 256; i++) {
                 double t = i / 255.0 * (stops.length - 1);
@@ -283,6 +332,16 @@ final class PpmCalibrator extends JDialog {
             int bl = (int) Math.round((a & 255) * (1 - t) + (b & 255) * t);
             return (r << 16) | (g << 8) | bl;
         }
+
+        void use(PpmMeter meter) {
+            m = meter;
+            w = meter.bins;
+            img = new BufferedImage(w, HISTORY, BufferedImage.TYPE_INT_RGB);
+            px = ((DataBufferInt) img.getRaster().getDataBuffer()).getData();
+        }
+
+        /** The receiver runs at another sample rate than expected: start a picture of the new size. */
+        void setMeter(PpmMeter meter) { use(meter); clear(); }
 
         void clear() { Arrays.fill(px, lut[0]); floorDb = Double.NaN; repaint(); }
         void setShiftHz(double hz) { shiftHz = hz; repaint(); }

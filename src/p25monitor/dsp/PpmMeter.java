@@ -14,7 +14,8 @@ import java.util.ArrayList;
  * the averaged spectrum measures the frequency error to a small fraction of one FFT bin.
  */
 public final class PpmMeter {
-    public static final int FFT = 8192;
+    /** Spectra worked out per second at most (more only costs CPU; the average is just as good). */
+    static final double MAX_FRAMES_PER_SECOND = 60;
     /** Shown either side of the reference. */
     public static final double SPAN_HZ = 50_000;
     /** Where the signal is looked for, either side of the reference (about 50 ppm at 900 MHz). */
@@ -27,14 +28,15 @@ public final class PpmMeter {
     static final int MIN_FRAMES = 40;
 
     public final double rate, offsetHz, binHz;
+    /** FFT size: grows with the sample rate so one bin stays about 125-160 Hz. */
+    public final int fft;
     /** First FFT bin shown and how many are shown (reference in the middle). */
     public final int lo, bins;
-    final float[] re = new float[FFT], im = new float[FFT], win = new float[FFT];
-    final float[] cos = new float[FFT / 2], sin = new float[FFT / 2];
-    final int[] rev = new int[FFT];
+    final float[] re, im, win, cos, sin;
+    final int[] rev;
     final double[] avg, acc;
-    final int rowEvery;
-    int fill, accN, frames;
+    final int rowEvery, skipSamples;
+    int fill, accN, frames, skipping;
     final ArrayDeque<float[]> rows = new ArrayDeque<>();
 
     /** Where the signal is, relative to the reference, as measured with the dongle at the PPM it was opened with. */
@@ -49,16 +51,28 @@ public final class PpmMeter {
      * @param rowsPerSecond waterfall rows wanted per second (spectra are averaged into each row)
      */
     public PpmMeter(double rate, double offsetHz, double rowsPerSecond) {
-        this.rate = rate; this.offsetHz = offsetHz; this.binHz = rate / FFT;
+        this.rate = rate; this.offsetHz = offsetHz;
+        fft = fftSize(rate);
+        binHz = rate / fft;
+        re = new float[fft]; im = new float[fft]; win = new float[fft]; cos = new float[fft / 2]; sin = new float[fft / 2]; rev = new int[fft];
         if (offsetHz + SPAN_HZ >= rate / 2 || offsetHz - SPAN_HZ <= 0) throw new IllegalArgumentException("reference must sit inside the positive half of the band");
         lo = (int) Math.round((offsetHz - SPAN_HZ) / binHz);
         bins = (int) Math.round(2 * SPAN_HZ / binHz) + 1;
         avg = new double[bins]; acc = new double[bins];
-        rowEvery = Math.max(1, (int) Math.round(rate / FFT / rowsPerSecond));
-        for (int i = 0; i < FFT; i++) win[i] = (float) (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (FFT - 1)));
-        for (int i = 0; i < FFT / 2; i++) { cos[i] = (float) Math.cos(-2 * Math.PI * i / FFT); sin[i] = (float) Math.sin(-2 * Math.PI * i / FFT); }
-        int bitsN = Integer.numberOfTrailingZeros(FFT);
-        for (int i = 0; i < FFT; i++) rev[i] = Integer.reverse(i) >>> (32 - bitsN);
+        double fps = Math.min(rate / fft, MAX_FRAMES_PER_SECOND);
+        skipSamples = (int) Math.max(0, Math.round(rate / fps - fft));
+        rowEvery = Math.max(1, (int) Math.round(fps / rowsPerSecond));
+        for (int i = 0; i < fft; i++) win[i] = (float) (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (fft - 1)));
+        for (int i = 0; i < fft / 2; i++) { cos[i] = (float) Math.cos(-2 * Math.PI * i / fft); sin[i] = (float) Math.sin(-2 * Math.PI * i / fft); }
+        int bitsN = Integer.numberOfTrailingZeros(fft);
+        for (int i = 0; i < fft; i++) rev[i] = Integer.reverse(i) >>> (32 - bitsN);
+    }
+
+    /** Power of two giving bins of at most 160 Hz, from 8192 to 65536 points. */
+    static int fftSize(double rate) {
+        int n = 8192;
+        while (n < 65536 && rate / n > 160) n <<= 1;
+        return n;
     }
 
     /** Frequency of shown bin {@code k}, relative to the reference, in Hz. */
@@ -66,7 +80,7 @@ public final class PpmMeter {
 
     /** Starts over (new reference frequency): the average and queued rows are dropped. */
     public synchronized void reset() {
-        fill = 0; accN = 0; frames = 0;
+        fill = 0; accN = 0; frames = 0; skipping = 0;
         Arrays.fill(avg, 0); Arrays.fill(acc, 0);
         rows.clear();
     }
@@ -74,9 +88,10 @@ public final class PpmMeter {
     /** I/Q samples from the dongle (any block size). */
     public synchronized void feed(float[] i, float[] q, int n) {
         for (int k = 0; k < n; k++) {
+            if (skipping > 0) { int s = Math.min(skipping, n - k); skipping -= s; k += s - 1; continue; }
             re[fill] = i[k] * win[fill];
             im[fill] = q[k] * win[fill];
-            if (++fill == FFT) { fill = 0; frame(); }
+            if (++fill == fft) { fill = 0; frame(); skipping = skipSamples; }
         }
     }
 
@@ -154,13 +169,13 @@ public final class PpmMeter {
 
     /** In-place radix-2 complex FFT. */
     void fft(float[] xr, float[] xi) {
-        for (int i = 0; i < FFT; i++) {
+        for (int i = 0; i < fft; i++) {
             int j = rev[i];
             if (j > i) { float t = xr[i]; xr[i] = xr[j]; xr[j] = t; t = xi[i]; xi[i] = xi[j]; xi[j] = t; }
         }
-        for (int size = 2; size <= FFT; size <<= 1) {
-            int half = size >> 1, step = FFT / size;
-            for (int start = 0; start < FFT; start += size) {
+        for (int size = 2; size <= fft; size <<= 1) {
+            int half = size >> 1, step = fft / size;
+            for (int start = 0; start < fft; start += size) {
                 for (int k = 0; k < half; k++) {
                     float wr = cos[k * step], wi = sin[k * step];
                     int a = start + k, b = a + half;
