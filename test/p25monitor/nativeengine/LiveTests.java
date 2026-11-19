@@ -84,7 +84,7 @@ public final class LiveTests {
 
     /** Synthetic: no false breaks on a clean signal; 1.1.2-style block losses reproduce the field signature; reported gaps never give garbage. */
     public static int[] lossTest() throws Exception {
-        List<byte[]> bank = BusySite.imbeFrames();
+        List<byte[]> bank = DemodTests.bank();   // the sample recording's frames when present, else random IMBE frames
         Random rnd = new Random(21);
         List<byte[]> sent = new ArrayList<>();
         int[] dib = DemodBench.voiceDibits(bank, 40, sent, rnd);

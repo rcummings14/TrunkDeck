@@ -140,9 +140,34 @@ public final class TalkgroupCsv {
     public static void writeAtomic(Path path, String text) throws IOException {
         Path abs = path.toAbsolutePath();
         Files.createDirectories(abs.getParent());
-        Path tmp = Files.createTempFile(abs.getParent(), abs.getFileName() + ".", ".tmp");   // unique: two saves never share it
-        Files.writeString(tmp, text, StandardCharsets.UTF_8);
-        try { Files.move(tmp, abs, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
-        catch (AtomicMoveNotSupportedException e) { Files.move(tmp, abs, StandardCopyOption.REPLACE_EXISTING); }
+        synchronized (SAVING.computeIfAbsent(abs, k -> new Object())) {   // one save of a file at a time (Windows can't rename over a rename)
+            Path tmp = Files.createTempFile(abs.getParent(), abs.getFileName() + ".", ".tmp");   // unique: two saves never share it
+            try {
+                Files.writeString(tmp, text, StandardCharsets.UTF_8);
+                replace(tmp, abs);
+            } finally { Files.deleteIfExists(tmp); }
+        }
+    }
+
+    private static final java.util.concurrent.ConcurrentHashMap<Path, Object> SAVING = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Renames {@code tmp} over {@code target}. Windows refuses to replace a file that something has open at that moment
+     * (another TrunkDeck thread reading it, antivirus, the search indexer); that is brief, so try again for up to about a
+     * second before giving up. Linux and macOS replace it at once.
+     */
+    public static void replace(Path tmp, Path target) throws IOException {
+        for (int i = 0; ; i++) {
+            try {
+                try { Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
+                catch (AtomicMoveNotSupportedException e) { Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING); }
+                return;
+            } catch (NoSuchFileException e) {
+                throw e;
+            } catch (FileSystemException e) {
+                if (i >= 20) throw e;
+                try { Thread.sleep(5 + 5L * i); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw e; }
+            }
+        }
     }
 }

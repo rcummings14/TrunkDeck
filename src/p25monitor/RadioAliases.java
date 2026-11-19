@@ -99,8 +99,7 @@ public final class RadioAliases {
         Files.createDirectories(dir);
         Path tmp = dir.resolve(FILE + ".tmp");
         write(tmp);
-        try { Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
-        catch (AtomicMoveNotSupportedException x) { Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING); }
+        TalkgroupCsv.replace(tmp, p);   // retries briefly if Windows has radios.csv open elsewhere
         dirty = false;
     }
 
