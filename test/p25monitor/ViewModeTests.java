@@ -109,8 +109,8 @@ public final class ViewModeTests {
         boolean[] logShown = new boolean[2], meters = new boolean[2];
         edt(() -> { f.setSimple(false); f.show("Talkgroups"); adv[0] = String.join("|", headers(f.talkgroups.table)); f.show("Monitor"); advA[0] = String.join("|", headers(f.monitor.activeTable)); logShown[0] = f.monitor.table.isShowing(); meters[0] = !f.display.simple; });
         edt(() -> { f.setSimple(true); f.show("Talkgroups"); simp[0] = String.join("|", headers(f.talkgroups.table)); f.show("Monitor"); simpA[0] = String.join("|", headers(f.monitor.activeTable)); logShown[1] = f.monitor.table.isShowing(); meters[1] = !f.display.simple; });
-        check(adv[0].equals("\u2605|Mute|Rec|Decimal|Hex|Alpha tag|Mode|Description|Tag|Category|Priority|Streams|Calls|Last heard"), "Advanced talkgroup columns = 1.4.4 (" + adv[0] + ")");
-        check(simp[0].equals("\u2605|Mute|Rec|Decimal|Alpha tag|My Feed|Calls"), "Simple talkgroup columns: fav, mute, rec, TG, name + a checkbox per stream (" + simp[0] + ")");
+        check(adv[0].equals("\u2605|Mute|Rec|Decimal|Hex|Alpha tag|Mode|Description|Tag|Category|Priority|Streams|Calls|Last heard|Color"), "Advanced talkgroup columns (" + adv[0] + ")");
+        check(simp[0].equals("\u2605|Mute|Rec|Decimal|Alpha tag|Color|My Feed|Calls"), "Simple talkgroup columns: fav, mute, rec, TG, name, colour + a checkbox per stream (" + simp[0] + ")");
         check(advA[0].equals("|TG|Alias|Freq MHz|Tuner|State|Time|Level|Bit errors/frame"), "Advanced active calls = 1.4.4 (" + advA[0] + ")");
         check(simpA[0].equals("|Talkgroup|TG|Radio|State"), "Simple active calls: talkgroup, TG, radio, state (" + simpA[0] + ")");
         check(logShown[0] && !logShown[1], "live call log: Advanced only");

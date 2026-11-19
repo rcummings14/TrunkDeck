@@ -2,6 +2,8 @@ package p25monitor.nativeengine;
 
 import p25monitor.App;
 import p25monitor.CallEvent;
+import p25monitor.RadioSystem;
+import p25monitor.p25.MotorolaAlias;
 import p25monitor.p25.P25Framer;
 import p25monitor.p25.P2Mac;
 import java.util.*;
@@ -21,7 +23,13 @@ final class VoiceCallDecoder {
     static final int AMBE_NOISE = 5;
 
     final NativeEngine e;
+    /** One Motorola alias train per frequency. A conventional terminator ends the call before the next block arrives. */
+    final Map<Long, MotorolaAlias> motorola = new HashMap<>();
     VoiceCallDecoder(NativeEngine e) { this.e = e; }
+
+    MotorolaAlias motorola(long freq) {
+        synchronized (motorola) { return motorola.computeIfAbsent(freq, k -> new MotorolaAlias()); }
+    }
 
     void start(ActiveCall c, Tuner t) {
         long now = System.currentTimeMillis();
@@ -41,8 +49,16 @@ final class VoiceCallDecoder {
             if (c.imbe == null && e.ambeMissingLogged.compareAndSet(false, true))
                 e.log("Phase 2 call TG " + c.tg + ": the AMBE+2 voice codec is not available (it needs JMBE 2.x built by the installer, see START-HERE) - calls are followed but silent.");
             e.phase2Calls++;
+        } else if (c.type2 && c.analogVoice) {
+            vd = new ChannelDecoder(t.decoderRate(), t.decoderCenter(c.freq), c.freq, new P25Framer.Listener() {}, afc);
+            vd.analog = new p25monitor.analog.FmReceiver(0, new p25monitor.analog.FmReceiver.Listener() {
+                public void start(double toneHz) {}
+                public void audio(float[] pcm) { onType2Audio(call, pcm); }
+                public void end() {}
+            });
         } else vd = new ChannelDecoder(t.decoderRate(), t.decoderCenter(c.freq), c.freq, new P25Framer.Listener() {
             public void ldu(int nac, int duid, byte[][] imbe, P25Framer.LinkControl lc, P25Framer.EncryptionSync ess) { onVoice(call, imbe, lc, ess); }
+            public void tdulc(int nac, P25Framer.LinkControl lc) { onTrunkTdulc(call, lc); }
             public void terminator(int nac, int duid) { onVoiceEnd(call); }
             public void nidError() { onVoiceLost(call); }
         }, afc, e.modulation(), e.preferLsm(), NativeEngine.parseNac(e.sys.nac));
@@ -78,9 +94,11 @@ final class VoiceCallDecoder {
         if (c.ended) return;
         long now = System.currentTimeMillis();
         c.ldus++;
+        acceptAlias(c, c.freq, lc);
+        if (lc != null && !c.conventional) e.cc.voiceChannelUpdate(lc);
         if (lc != null && lc.isGroupVoice() && !c.unitToUnit && !c.conventional) {
             c.lastLcTg = lc.talkgroup();
-            if (lc.talkgroup() != c.tg && !c.patch) {
+            if (lc.talkgroup() != c.tg && !c.patch && !c.type2) {
                 c.lcMismatch++;
                 c.unconfirmed.clear();
                 if (++c.mismatchRun >= 2) {
@@ -96,17 +114,22 @@ final class VoiceCallDecoder {
                 return;
             }
             c.mismatchRun = 0;
-            if (lc.source() > 0 && lc.source() != c.src) { c.src = lc.source(); c.ev.from = String.valueOf(c.src); c.ev.radioId = c.src; e.listener.callUpdated(c.ev); e.logTalker(c); }
+            if (lc.source() > 0 && lc.source() != c.src) {
+                if (c.src > 0) resetP25AliasParts(c);
+                c.src = lc.source(); c.ev.from = String.valueOf(c.src); c.ev.radioId = c.src;
+                publishP25Alias(c); e.listener.callUpdated(c.ev); e.logTalker(c);
+            }
             if (lc.encrypted()) markEncrypted(c, "LC");
         }
         if (c.mismatchRun > 0) return;
         if (lc != null && c.conventional && lc.isGroupVoice()) {
             c.lastLcTg = lc.talkgroup();
             if (c.tg != lc.talkgroup() || c.src != lc.source()) {
+                if (c.src > 0 && c.src != lc.source()) resetP25AliasParts(c);
                 c.tg = lc.talkgroup(); c.src = lc.source(); c.t = e.tg(c.tg);
                 if (c.t != null) c.priority = c.t.priority;
                 c.ev.to = String.valueOf(c.tg); c.ev.talkgroup = c.tg; c.ev.from = String.valueOf(c.src); c.ev.radioId = c.src;
-                e.listener.callUpdated(c.ev); e.logTalker(c);
+                publishP25Alias(c); e.listener.callUpdated(c.ev); e.logTalker(c);
             } else if (c.t == null) { c.t = e.tg(c.tg); if (c.t != null) c.priority = c.t.priority; }
             if (lc.encrypted()) markEncrypted(c, "LC");
             if (e.conventional) applyListenPolicy(c);
@@ -132,6 +155,100 @@ final class VoiceCallDecoder {
         }
         while (!c.unconfirmed.isEmpty()) playFrames(c, c.unconfirmed.poll());
         playFrames(c, imbe);
+    }
+
+    /** Motorola talker alias (MFID 0x90) and the standard P25 user-alias pair. An on-air name replaces a typed one. */
+    private void acceptAlias(ActiveCall c, long freq, P25Framer.LinkControl lc) {
+        if (lc == null) return;
+        MotorolaAlias.Decoded mot = motorola(freq).feed(lc);
+        if (mot != null) publishOta(c, mot);
+        if (c != null) learnP25Alias(c, lc);
+    }
+
+    /** Link control from a trunked voice channel's TDULC. The terminator callback still ends the transmission. */
+    void onTrunkTdulc(ActiveCall c, P25Framer.LinkControl lc) {
+        if (c != null) acceptAlias(c, c.freq, lc);
+        if (c != null && !c.conventional) e.cc.voiceChannelUpdate(lc);
+    }
+
+    /** Link control from a conventional channel. The call may already be gone; the radio ID is in the payload. */
+    void onConventionalLc(long f, P25Framer.LinkControl lc) {
+        ActiveCall c;
+        synchronized (e) { c = e.callMap.get("C" + f); }
+        acceptAlias(c, f, lc);
+    }
+
+    private void publishOta(ActiveCall c, MotorolaAlias.Decoded d) {
+        RadioSystem system = e.sys;
+        if (system == null || d == null) return;
+        int radio = d.radioId();
+        String clean = p25monitor.RadioAliases.clean(d.alias());
+        if (!p25monitor.RadioAliases.validId(radio) || clean.isEmpty()) return;
+        String before = system.radios.alias(radio);
+        if (!system.radios.setOverTheAir(radio, clean)) return;
+        String after = system.radios.alias(radio);
+        try { e.app.saveRadioAliases(system); }
+        catch (Exception ex) { e.log("Could not save learned radio alias for " + radio + ": " + ex.getMessage()); }
+        if (before.equals(after)) return;
+        e.log("Learned P25 over-the-air radio alias " + after + " for radio " + radio);
+        if (c == null || c.ended || c.ev == null || (c.src > 0 && c.src != radio)) return;
+        if (c.src <= 0) { c.src = radio; c.ev.from = String.valueOf(radio); c.ev.radioId = radio; }
+        c.loggedSrc = -1;
+        e.listener.callUpdated(c.ev);
+        e.logTalker(c);
+    }
+
+    /** Reassembles the standard P25 FDMA User Alias A/B pair for the current talker. */
+    private void learnP25Alias(ActiveCall c, P25Framer.LinkControl lc) {
+        if (c.phase2) return;
+        int op = lc.opcode();
+        if (op < 0x32 || op > 0x35) return;
+        if (lc.mfid != 0xA4) {
+            e.log(String.format(Locale.ROOT, "P25 alias opcode 0x%02X seen with MFID 0x%02X; this format is not supported", op, lc.mfid));
+            return;
+        }
+        String part = lc.userAliasPart();
+        if (part.isEmpty()) {
+            e.log(String.format(Locale.ROOT, "P25 alias part 0x%02X received but its ASCII payload was invalid", op));
+            return;
+        }
+        e.log(String.format(Locale.ROOT, "P25 alias part 0x%02X received%s", op, c.src > 0 ? " for radio " + c.src : " before a talker radio ID was available"));
+        String alias = null;
+        switch (op) {
+            case 0x32 -> { c.p25AliasOddA = part; c.p25AliasOddB = null; }
+            case 0x33 -> { c.p25AliasOddB = part; if (c.p25AliasOddA != null) alias = c.p25AliasOddA + part; }
+            case 0x34 -> { c.p25AliasEvenA = part; c.p25AliasEvenB = null; }
+            case 0x35 -> { c.p25AliasEvenB = part; if (c.p25AliasEvenA != null) alias = c.p25AliasEvenA + part; }
+            default -> { return; }
+        }
+        if (alias == null) return;
+        c.p25AliasComplete = alias;
+        publishP25Alias(c);
+    }
+
+    private void publishP25Alias(ActiveCall c) {
+        if (c.src <= 0 || c.p25AliasComplete == null) return;
+        RadioSystem system = e.sys;
+        if (system == null) return;
+        String clean = p25monitor.RadioAliases.clean(c.p25AliasComplete);
+        if (clean.isEmpty()) return;
+        c.p25AliasComplete = null;
+        String before = system.radios.alias(c.src);
+        if (!system.radios.setOverTheAir(c.src, clean)) return;
+        try { e.app.saveRadioAliases(system); }
+        catch (Exception ex) { e.log("Could not save learned radio alias for " + c.src + ": " + ex.getMessage()); }
+        String after = system.radios.alias(c.src);
+        if (!after.equals(before)) {
+            c.loggedSrc = -1;
+            e.listener.callUpdated(c.ev);
+            e.log("Learned P25 over-the-air radio alias " + after + " for radio " + c.src);
+            e.logTalker(c);
+        }
+    }
+
+    private static void resetP25AliasParts(ActiveCall c) {
+        c.p25AliasOddA = c.p25AliasOddB = c.p25AliasEvenA = c.p25AliasEvenB = null;
+        c.p25AliasComplete = null;
     }
 
     void playFrames(ActiveCall c, byte[][] imbe) {
@@ -323,4 +440,216 @@ final class VoiceCallDecoder {
     }
 
     void onConventionalEnd(long f) { synchronized (e) { ActiveCall c = e.callMap.get("C" + f); if (c != null) e.calls.endCall(c, "end of transmission"); } }
+
+    /** A DMR group or private call. Encrypted calls are not started. Audio uses the Phase 2 AMBE+2 codec when it is installed. */
+    void onDmr(long f, int slot, int color, int tg, int src, boolean group, byte[][] ambe) {
+        ActiveCall c;
+        synchronized (e) {
+            c = e.callMap.get("D" + f + "/" + slot);
+            if (c == null) {
+                c = new ActiveCall();
+                c.conventional = true; c.phase2 = true; c.freq = f; c.slot = slot - 1;
+                c.start = System.currentTimeMillis(); c.lastSeen = c.start; c.followStart = c.start; c.lastVoice = c.start;
+                c.tg = tg; c.src = src; c.t = e.tg(tg); c.followed = true; c.eligible = true; c.tuner = e.tunerFor(f);
+                c.imbe = EngineLibs.newAmbe();
+                if (c.imbe == null && e.ambeMissingLogged.compareAndSet(false, true))
+                    e.log("DMR call TG " + tg + ": the AMBE+2 voice codec is not available (it needs JMBE 2.x) - the call is followed but silent. DMR is untested.");
+                CallEvent ev = new CallEvent();
+                ev.timestamp = e.ts.format(new Date()); ev.protocol = "DMR"; ev.event = group ? "Group Call" : "Private Call";
+                ev.to = String.valueOf(tg); ev.talkgroup = tg; ev.from = src > 0 ? String.valueOf(src) : ""; ev.radioId = src;
+                ev.frequencyMHz = f / 1e6; ev.timeslot = "TS" + slot + (color >= 0 ? "  CC " + color : "");
+                ev.details = "DMR (untested) " + ev.timeslot;
+                c.ev = ev;
+                e.callMap.put("D" + f + "/" + slot, c);
+                e.listener.callStarted(ev);
+                e.log("DMR (untested) TG " + tg + " slot " + slot + " colour code " + color + " on " + NativeEngine.mhz(f) + " MHz");
+            }
+        }
+        if (ambe != null && ambe.length > 0) onVoice(c, codecFrames(ambe), null, null);
+    }
+
+    /** Each DMR frame is rewritten as the 9-byte AMBE word JMBE's getAudio(byte[]) decodes. */
+    private static byte[][] codecFrames(byte[][] ambe) {
+        byte[][] out = new byte[ambe.length][];
+        for (int i = 0; i < ambe.length; i++) out[i] = p25monitor.dmr.DmrAmbe.forCodec(ambe[i]);
+        return out;
+    }
+
+    void onDmrEncrypted(long f, int slot, int color) {
+        e.log("DMR encrypted call on " + NativeEngine.mhz(f) + " MHz slot " + slot + " colour code " + color + " - skipped");
+        ActiveCall c;
+        synchronized (e) { c = e.callMap.get("D" + f + "/" + slot); }
+        if (c != null && !c.ended) { if (c.ev.event.equals("Private Call")) c.ev.event = "Encrypted Private Call"; markEncrypted(c, "DMR"); }
+    }
+
+    /** Emergency bit in a DMR call's link control (or its grant): the call is shown as an emergency call. */
+    void onDmrEmergency(long f, int slot) {
+        ActiveCall c;
+        synchronized (e) { c = e.callMap.get("D" + f + "/" + slot); }
+        if (c == null || c.ended || c.emergency) return;
+        c.emergency = true;
+        if (!c.ev.event.startsWith("Emergency")) c.ev.event = "Emergency " + c.ev.event;
+        e.listener.callUpdated(c.ev);
+    }
+
+    /**
+     * End of a DMR transmission on one slot. A call on the other slot of the frequency keeps going while it has voice;
+     * one with no voice for 1.5 s (a grant whose slot label never matched) is ended with it.
+     */
+    void onDmrEnd(long f, int slot) {
+        long now = System.currentTimeMillis();
+        synchronized (e) {
+            java.util.List<ActiveCall> end = new java.util.ArrayList<>();
+            for (var en : e.callMap.entrySet()) {
+                if (!en.getKey().startsWith("D" + f + "/")) continue;
+                boolean same = en.getKey().equals("D" + f + "/" + slot);
+                if (same || slot != 1 && slot != 2 || now - en.getValue().lastVoice > 1500) end.add(en.getValue());
+            }
+            for (ActiveCall c : end) e.calls.endCall(c, "end of transmission");
+        }
+    }
+
+    void onDmrEnd(long f) { onDmrEnd(f, 0); }
+
+    private String lastDmrGrant = ""; private long lastDmrGrantLog;
+    void onDmrGrant(p25monitor.dmr.DmrTrunk.Grant g) {
+        if (g == null) return;
+        long now = System.currentTimeMillis();
+        Long ended = e.recentlyEnded.get("G" + g.talkgroup);
+        if (ended != null && now - ended < 4000) return;   // repeat of a grant for a call that just ended
+        String sig = g.talkgroup + "/" + g.hz + "/" + g.slot;
+        if (!sig.equals(lastDmrGrant) || now - lastDmrGrantLog > 10_000) {
+            lastDmrGrant = sig; lastDmrGrantLog = now;
+            e.log("DMR " + (g.group ? "grant TG " : "private call grant to ") + g.talkgroup + " -> " + NativeEngine.mhz(g.hz) + " MHz slot " + g.slot + (g.emergency ? " EMERGENCY" : ""));
+        }
+        onDmr(g.hz, g.slot, -1, g.talkgroup, g.source, g.group, new byte[0][]);
+        if (g.emergency) onDmrEmergency(g.hz, g.slot);
+    }
+
+    // ------------------------------------------------------------------ NXDN (untested on air)
+    /**
+     * An NXDN voice call header (FACCH1 or SACCH VCALL) or a Type-C voice channel assignment, on {@code f}. A call that
+     * already runs on the channel with a different talkgroup or source ends first. Encrypted calls are followed but muted.
+     */
+    void onNxdnCall(long f, p25monitor.nxdn.NxdnMessage m) {
+        int tg = m.destination(), src = m.source();
+        boolean group = m.group();
+        ActiveCall c;
+        synchronized (e) {
+            c = e.callMap.get("N" + f);
+            if (c != null && !c.ended && c.tg > 0 && (c.tg != tg || src > 0 && c.src > 0 && c.src != src)) { e.calls.endCall(c, "new transmission"); c = null; }
+            if (c == null || c.ended) c = newNxdnCall(f, tg, src, group);
+            else if (c.tg <= 0) {   // started from voice before its header: fill in the IDs now
+                c.tg = tg; c.src = src; c.t = e.tg(tg);
+                c.ev.to = String.valueOf(tg); c.ev.talkgroup = tg; c.ev.from = src > 0 ? String.valueOf(src) : ""; c.ev.radioId = src;
+                c.ev.event = group ? "Group Call" : "Private Call";
+                e.listener.callUpdated(c.ev);
+            }
+        }
+        if (m.emergency() && !c.emergency) {
+            c.emergency = true;
+            if (!c.ev.event.startsWith("Emergency")) c.ev.event = "Emergency " + c.ev.event;
+            e.listener.callUpdated(c.ev);
+        }
+        if (m.isCall() && m.cipher() != 0 && !c.encrypted) markEncrypted(c, "NXDN");
+    }
+
+    private ActiveCall newNxdnCall(long f, int tg, int src, boolean group) {
+        ActiveCall c = new ActiveCall();
+        c.conventional = true; c.phase2 = true; c.freq = f; c.slot = -1;
+        c.start = System.currentTimeMillis(); c.lastSeen = c.start; c.followStart = c.start; c.lastVoice = c.start;
+        c.tg = tg; c.src = src; c.t = e.tg(tg); c.followed = true; c.eligible = true; c.tuner = e.tunerFor(f);
+        c.imbe = EngineLibs.newAmbe();
+        if (c.imbe == null && e.ambeMissingLogged.compareAndSet(false, true))
+            e.log("NXDN call TG " + tg + ": the AMBE+2 voice codec is not available (it needs JMBE 2.x) - the call is followed but silent. NXDN is untested.");
+        CallEvent ev = new CallEvent();
+        ev.timestamp = e.ts.format(new Date()); ev.protocol = "NXDN"; ev.event = group ? "Group Call" : "Private Call";
+        ev.to = tg > 0 ? String.valueOf(tg) : ""; ev.talkgroup = tg; ev.from = src > 0 ? String.valueOf(src) : ""; ev.radioId = src;
+        ev.frequencyMHz = f / 1e6;
+        ev.details = "NXDN (untested)";
+        c.ev = ev;
+        e.callMap.put("N" + f, c);
+        e.listener.callStarted(ev);
+        e.log("NXDN (untested) " + (group ? "TG " : "private call to ") + tg + " from " + src + " on " + NativeEngine.mhz(f) + " MHz");
+        return c;
+    }
+
+    /** NXDN voice: 72-bit AMBE+2 frames, the same air format as DMR, so the same Golay repair feeds JMBE. */
+    void onNxdnVoice(long f, byte[][] ambe) {
+        ActiveCall c;
+        synchronized (e) {
+            c = e.callMap.get("N" + f);
+            if (c == null || c.ended) c = newNxdnCall(f, 0, -1, true);   // joined mid-call: the SACCH fills in the IDs
+        }
+        if (ambe != null && ambe.length > 0) onVoice(c, codecFrames(ambe), null, null);
+    }
+
+    /** NXDN transmission release or disconnect, or lost sync. */
+    void onNxdnEnd(long f) {
+        synchronized (e) { ActiveCall c = e.callMap.get("N" + f); if (c != null && !c.ended) e.calls.endCall(c, "end of transmission"); }
+    }
+
+    // ------------------------------------------------------------------ analog FM (untested on air)
+    /** An analog transmission opened the squelch (and matched the channel's CTCSS tone, when it has one). */
+    void onAnalogStart(long f, double tone) {
+        synchronized (e) {
+            ActiveCall old = e.callMap.get("A" + f);
+            if (old != null && !old.ended) return;
+            ActiveCall c = new ActiveCall();
+            c.conventional = true; c.freq = f; c.slot = -1;
+            c.start = System.currentTimeMillis(); c.lastSeen = c.start; c.followStart = c.start; c.lastVoice = c.start;
+            c.tg = 0; c.src = -1; c.followed = true; c.eligible = true; c.tuner = e.tunerFor(f);
+            CallEvent ev = new CallEvent();
+            RadioSystem.Channel ch = e.sys == null ? null : e.sys.channelAt(f);
+            String name = ch != null && ch.name != null && !ch.name.isBlank() ? ch.name : NativeEngine.mhz(f) + " MHz";
+            ev.timestamp = e.ts.format(new Date()); ev.protocol = "Analog FM"; ev.event = "Analog Call";
+            ev.to = name; ev.talkgroup = 0; ev.from = ""; ev.radioId = -1; ev.frequencyMHz = f / 1e6;
+            ev.details = "ANALOG FM" + toneText(tone);
+            c.ev = ev;
+            e.callMap.put("A" + f, c);
+            e.listener.callStarted(ev);
+            e.log("Analog (untested) " + name + toneText(tone).toLowerCase(Locale.ROOT));
+        }
+    }
+
+    static String toneText(double tone) { return tone > 0 ? String.format(Locale.ROOT, "  PL %.1f", tone) : ""; }
+
+    /** The CTCSS tone of a running carrier-squelch transmission was identified: shown on the call. */
+    void onAnalogTone(long f, double tone) {
+        ActiveCall c;
+        synchronized (e) { c = e.callMap.get("A" + f); }
+        if (c == null || c.ended) return;
+        c.ev.details = "ANALOG FM" + toneText(tone);
+        e.listener.callUpdated(c.ev);
+    }
+
+    /** 20 ms of analog audio at 8 kHz on a Motorola Type II voice channel. */
+    void onType2Audio(ActiveCall c, float[] pcm) {
+        if (c.ended) return;
+        long now = System.currentTimeMillis();
+        ChannelDecoder vd = c.vd;
+        if (vd != null) vd.lastFrameAt = now;
+        if (c.hang) { c.hang = false; c.ptts++; }
+        c.lastVoice = now; c.lastSeen = Math.max(c.lastSeen, now);
+        c.voiceFrames++; c.imbeFrames++;
+        if (c.encrypted) return;
+        emit(c, pcm, pcm.length, new int[]{c.tg, c.lastLcTg, 0, 0});
+    }
+
+    /** 20 ms of analog audio at 8 kHz. */
+    void onAnalogAudio(long f, float[] pcm) {
+        ActiveCall c;
+        synchronized (e) { c = e.callMap.get("A" + f); }
+        if (c == null || c.ended) { onAnalogStart(f, 0); synchronized (e) { c = e.callMap.get("A" + f); } }
+        if (c == null || c.ended) return;
+        long now = System.currentTimeMillis();
+        c.lastVoice = now; c.lastSeen = Math.max(c.lastSeen, now);
+        c.voiceFrames++; c.imbeFrames++;
+        e.lastAnalogHeard = f;
+        emit(c, pcm, pcm.length, new int[]{c.tg, c.lastLcTg, 0, 0});
+    }
+
+    void onAnalogEnd(long f) {
+        synchronized (e) { ActiveCall c = e.callMap.get("A" + f); if (c != null && !c.ended) e.calls.endCall(c, "end of transmission"); }
+    }
 }

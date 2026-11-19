@@ -27,6 +27,7 @@ public class Main {
             MainFrame f = new MainFrame(app);
             f.setVisible(true);
             if (args.length > 1 && args[0].equals("--screenshot")) screenshot(f, args);
+            else f.maybeBeginAutoStart();
         });
     }
 

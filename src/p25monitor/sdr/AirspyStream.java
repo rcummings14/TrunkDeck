@@ -8,7 +8,7 @@ import java.util.concurrent.*;
 /**
  * The Airspy sample path after USB: raw 12-bit ADC blocks (as the receiver sends them, unpacked 16-bit words or packed
  * 3 bytes per 2 samples) are queued by the USB callback, and a worker thread unpacks them, removes the ADC's DC offset,
- * converts the real 20 MS/s (or 5 MS/s) stream to complex 10 MS/s (2.5 MS/s) I/Q ({@link RealToComplex}: Fs/4 shift +
+ * converts the real stream (twice the complex rate: 20, 12, 6 or 5 MS/s) to complex I/Q ({@link RealToComplex}: Fs/4 shift +
  * half-band decimation) and hands it to the engine. Blocks the engine could not take in time are dropped whole (the
  * USB side never waits) and counted; the engine is told about the gap so decoders re-sync.
  * <p>Two threads: one unpacks and converts, a second hands the I/Q to the engine (filter bank and decoders), so on a slow
@@ -16,7 +16,7 @@ import java.util.concurrent.*;
  * <p>Separate from {@link AirspyR2} so the simulated receiver in the tests runs exactly the same conversion code.
  */
 public final class AirspyStream {
-    /** Complex output rate (10e6 or 2.5e6). The ADC runs at twice this, real. */
+    /** Complex output rate. The ADC runs at twice this, real. */
     public final double complexRate;
     public final boolean packed;
     public final int blockBytes;

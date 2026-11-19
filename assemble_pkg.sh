@@ -16,7 +16,7 @@ cp -r stage/licenses "$P/licenses"
 # TrunkDeck's own licence (GPL-3.0-or-later). Same text as licenses/TrunkDeck-LICENSE.txt.
 cp LICENSE "$P/LICENSE"
 cp -r stage/linux "$P/linux" && cp -r stage/windows "$P/windows"
-cp -r src test lib build.sh assemble_pkg.sh make_zip.py "$P/source/"
+cp -r src test lib fonts build.sh assemble_pkg.sh make_zip.py "$P/source/"
 cp LICENSE "$P/source/LICENSE"
 cp stage/third-party/* "$P/source/third-party/"
 # never ship user data (radio-name files, settings) even if one was left in the tree

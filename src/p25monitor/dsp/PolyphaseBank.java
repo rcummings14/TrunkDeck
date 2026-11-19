@@ -1,23 +1,25 @@
 package p25monitor.dsp;
 
 /**
- * Wideband front end for tuners that see many channels at once (Airspy R2 at 10 or 2.5 MS/s): a 2x-oversampled
- * polyphase filter bank (weighted overlap-add / FFT channelizer) that splits the input into M sub-bands spaced
- * {@link #SPACING} apart, each decimated to 2 x SPACING (625 kS/s). Every channel decoder then works on the sub-band
- * that contains its frequency (at most SPACING/2 + 6.25 kHz off its centre) instead of the full-rate stream, so the
- * cost per voice channel no longer grows with the tuner's sample rate.
+ * Wideband front end for tuners that see many channels at once (Airspy R2 at 10 or 2.5 MS/s, Airspy Mini at 10, 6 or
+ * 3 MS/s): a 2x-oversampled polyphase filter bank (weighted overlap-add / FFT channelizer) that splits the input into
+ * M sub-bands. On an R2 (and a Mini at 10 MS/s) the bands are {@link #SPACING} apart and each is decimated to 625 kS/s.
+ * A Mini at 6 or 3 MS/s is not a multiple of that spacing, so the same bank uses a power-of-two band count whose output
+ * stays near 625 kS/s. Every channel decoder then works on the sub-band that contains its frequency instead of the
+ * full-rate stream, so the cost per voice channel no longer grows with the tuner's sample rate.
  * <p>Sub-band k is the input mixed down by k x SPACING (continuous phase), low-pass filtered by the prototype and
  * decimated by D = M/2. With the input window x[t-L+1 .. t] and the reversed prototype, the polyphase partial sums are
  * acc[q] = sum_r h[L-1-rM-q] x[t-L+1+rM+q]; their forward DFT gives every sub-band at once (one constant phase per band,
  * plus the (-1)^(k m) term of the half-length hop). Only the sub-bands a decoder needs are computed: by FFT when many
  * are, else by a direct DFT of those bands.
- * <p>Prototype: Kaiser, 6 taps per phase, flat to +/-180 kHz, &gt; 70 dB down from 445 kHz (so nothing aliases into
- * a channel at up to +/-172 kHz from a band centre after decimation to 625 kS/s).
+ * <p>Prototype: Kaiser, 6 taps per phase. At the R2 spacing it is flat to +/-180 kHz and &gt; 70 dB down from 445 kHz
+ * (nothing aliases into a channel at up to +/-172 kHz from a band centre after decimation to 625 kS/s). Mini 6 and 3 MS/s
+ * use the same shape with the cutoff set to their own band spacing.
  */
 public final class PolyphaseBank {
     public static final double SPACING = 312_500;
     public final int M, D, P, L;
-    public final double inRate, outRate;
+    public final double inRate, outRate, spacing;
     final float[] hr;                  // reversed prototype
     float[] xi = new float[0], xq = new float[0];
     int hist;                          // samples of history in xi/xq before the new block
@@ -31,19 +33,39 @@ public final class PolyphaseBank {
     public int outN;
     public volatile long fftFrames, dftFrames;
 
+    /** R2 rates (and 10 MS/s) are a power-of-two multiple of 312.5 kHz. Mini 6 and 3 MS/s are split the same way. */
     public static boolean supports(double rate) {
+        return standard(rate) || Math.abs(rate - 6_000_000) < 1 || Math.abs(rate - 3_000_000) < 1;
+    }
+
+    static boolean standard(double rate) {
         double m = rate / SPACING;
         long mi = Math.round(m);
         return Math.abs(m - mi) < 1e-9 && mi >= 4 && mi <= 256 && Long.bitCount(mi) == 1;
     }
 
+    /** Power-of-two band count whose output rate is nearest 625 kS/s (the R2 bank's output). */
+    static int bandsNear625(double rate) {
+        double target = 2 * rate / (2 * SPACING);
+        int lo = 4;
+        while (lo * 2 <= target && lo < 256) lo *= 2;
+        int hi = lo < 256 ? lo * 2 : lo;
+        int m = Math.abs(target - hi) < Math.abs(target - lo) ? hi : lo;
+        return m >= 4 && m <= 256 && Long.bitCount(m) == 1 ? m : 0;
+    }
+
     public PolyphaseBank(double rate) { this(rate, 6); }
 
     public PolyphaseBank(double rate, int tapsPerPhase) {
-        if (!supports(rate)) throw new IllegalArgumentException("PolyphaseBank needs a power-of-two multiple of 312.5 kHz, not " + rate);
-        inRate = rate; M = (int) Math.round(rate / SPACING); D = M / 2; P = tapsPerPhase; L = P * M;
+        if (!supports(rate)) throw new IllegalArgumentException("PolyphaseBank cannot split " + rate);
+        inRate = rate;
+        boolean std = standard(rate);
+        M = std ? (int) Math.round(rate / SPACING) : bandsNear625(rate);
+        if (M < 4) throw new IllegalArgumentException("PolyphaseBank cannot split " + rate);
+        spacing = std ? SPACING : rate / M;
+        D = M / 2; P = tapsPerPhase; L = P * M;
         outRate = rate / D;
-        double[] h = Fir.kaiserLowpass(L, SPACING, rate, 72);
+        double[] h = Fir.kaiserLowpass(L, spacing, rate, 72);
         hr = new float[L];
         for (int n = 0; n < L; n++) hr[n] = (float) h[L - 1 - n];
         accR = new float[M]; accI = new float[M]; fr = new float[M]; fi = new float[M];
@@ -59,16 +81,16 @@ public final class PolyphaseBank {
     }
 
     /** Sub-band index (0..M-1) whose centre is nearest to the given offset from the tuner centre. */
-    public int band(double offsetHz) { return Math.floorMod((int) Math.round(offsetHz / SPACING), M); }
+    public int band(double offsetHz) { return Math.floorMod((int) Math.round(offsetHz / spacing), M); }
 
     /** Offset of the centre of the band nearest to offsetHz (signed, Hz). */
     public long bandCentre(double offsetHz) {
-        long k = Math.round(offsetHz / SPACING);
-        return Math.round(k * SPACING);
+        long k = Math.round(offsetHz / spacing);
+        return Math.round(k * spacing);
     }
 
     /** Offset of band k's centre (signed: bands above M/2 are negative frequencies). */
-    public double centreOf(int k) { return (k < M / 2 ? k : k - M) * SPACING; }
+    public double centreOf(int k) { return (k < M / 2 ? k : k - M) * spacing; }
 
     public int maxOut(int n) { return n / D + 2; }
 

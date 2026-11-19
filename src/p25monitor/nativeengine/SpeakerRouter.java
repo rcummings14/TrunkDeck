@@ -19,6 +19,8 @@ final class SpeakerRouter {
     volatile ActiveCall speaker, last;
     volatile NativeEngine.SpeakerMode mode = NativeEngine.SpeakerMode.PRIORITY;
     volatile int holdTg = -1;
+    /** Analog Hold (Monitor page): only the channel on this frequency (Hz) reaches the speaker; 0 = every channel. */
+    volatile long holdFreq;
     final CallMixer mix = new CallMixer(CallMixer.Mode.MIX, 3000, 1600, System::currentTimeMillis);
     static final long QUEUE_DEFAULT_MS = 30_000, QUEUE_MAX_MS = 600_000, QUEUE_MIN_MS = 5_000;
     /** QUEUE: silence longer than this inside a call's audio is not queued (lost / muted frames, gaps). */
@@ -106,6 +108,8 @@ final class SpeakerRouter {
 
     /** One block of a call's audio for the speaker (or the speaker mix). Returns true if it was played/mixed. */
     boolean play(ActiveCall c, float[] a, int n) {
+        long hf = holdFreq;
+        if (hf > 0 && c.freq != hf) return false;   // analog Hold: another channel (still recorded)
         if (c.endAfterTx || (c.t != null && c.t.muted)) return false;   // muted while being followed (1.4.4)
         if (take(c)) { e.audio.play(c.id, a, n); return true; }
         NativeEngine.SpeakerMode m = mode;
@@ -186,6 +190,16 @@ final class SpeakerRouter {
     /** Drops everything queued (engine stopped or mode changed). */
     void clearQueue() {
         queue.clear(); queued.clear(); skipped.clear();
+    }
+
+    /** Analog Hold on this frequency, or 0 to scan again. A different channel on the speaker is cut off at once. */
+    void holdFrequency(long hz) {
+        synchronized (lock) {
+            holdFreq = hz;
+            ActiveCall s = speaker;
+            if (hz > 0 && s != null && s.freq != hz) { speaker = null; e.audio.clear(); }
+            if (hz > 0 && mode == NativeEngine.SpeakerMode.QUEUE) { e.audio.clear(); clearQueue(); }
+        }
     }
 
     void setMode(NativeEngine.SpeakerMode m, int tg) {

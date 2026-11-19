@@ -430,7 +430,7 @@ public class NativePage extends JPanel {
         updateCodec();
     }
 
-    /** Airspy R2 receivers: role, sample rate, gain preset, bias-T and an optional fixed centre. */
+    /** Airspy R2 and Mini receivers: role, sample rate, gain preset, bias-T and an optional fixed centre. */
     void addAirspyRows(GridBagConstraints g, boolean busy) {
         List<AirspyR2.Info> spies = new ArrayList<>();
         String err = null;
@@ -440,8 +440,9 @@ public class NativePage extends JPanel {
         }
         int y = tunerRows.getComponentCount() + 10;
         g.gridwidth = 4; g.gridx = 0; g.weightx = 1; g.gridy = y++; g.insets = new Insets(12, 2, 0, 6);
-        JLabel h = new JLabel("AIRSPY R2  (wideband, ~9 MHz)");
-        h.setToolTipText("One Airspy decodes the control channel and every voice channel inside its ~9 MHz window at the same time");
+        JLabel h = new JLabel("AIRSPY  (R2 and Mini, wideband)");
+        h.setToolTipText("One Airspy decodes the control channel and every voice channel in its window at the same time. "
+                + "An R2 at 10 MS/s covers about 8.8 MHz (or 2.2 MHz at 2.5). A Mini at 10, 6 or 3 MS/s covers about 8.8, 5.3 or 2.6 MHz.");
         h.setFont(Theme.mono(Font.BOLD, 10f)); h.setForeground(Theme.DIM);
         tunerRows.add(h, g);
         if (spies.isEmpty()) {
@@ -465,9 +466,13 @@ public class NativePage extends JPanel {
             JComboBox<String> role = new JComboBox<>(new String[]{"auto", "control", "voice", "off"});
             role.setSelectedItem(as.role);
             role.setToolTipText("auto/control: the Airspy takes the control channel and decodes every voice channel in its window; RTL dongles then roam for the rest");
-            JComboBox<String> rate = new JComboBox<>(new String[]{"10 MS/s", "2.5 MS/s"});
-            rate.setSelectedIndex(as.rate == 2.5e6 ? 1 : 0);
-            rate.setToolTipText("10 MS/s covers about 8.8 MHz (needs USB 2.0 at 40 MB/s); 2.5 MS/s covers about 2.2 MHz and uses less CPU");
+            double[] choices = a.rateChoices();
+            double use = AirspyR2.chooseRate(as.rate, a.rates.length > 0 ? a.rates : choices);
+            JComboBox<String> rate = new JComboBox<>();
+            int sel = 0;
+            for (int i = 0; i < choices.length; i++) { rate.addItem(AirspyR2.rateLabel(choices[i])); if (Math.abs(choices[i] - use) < 1) sel = i; }
+            rate.setSelectedIndex(sel);
+            rate.setToolTipText(AirspyR2.rateTip(choices));
             JComboBox<String> gain = new JComboBox<>();
             List<String> codes = new ArrayList<>();
             for (int v = 21; v >= 0; v--) { gain.addItem("Linearity " + v); codes.add("lin:" + v); }
@@ -482,7 +487,7 @@ public class NativePage extends JPanel {
             centre.putClientProperty("JTextField.placeholderText", "centre MHz: automatic");
             centre.setToolTipText("Leave empty: TrunkDeck centres the Airspy on the control channels and the site's voice band. Or type a fixed centre, e.g. 853.4");
             Runnable save = () -> {
-                as.role = (String) role.getSelectedItem(); as.rate = rate.getSelectedIndex() == 1 ? 2.5e6 : 10e6;
+                as.role = (String) role.getSelectedItem(); as.rate = choices[Math.max(0, rate.getSelectedIndex())];
                 as.gain = codes.get(Math.max(0, gain.getSelectedIndex())); as.biasTee = bias.isSelected(); as.center = centre.getText().trim();
                 as.save(f.app.settings, a.key()); f.app.saveSettings();
                 if (f.nativeEngine.isRunning()) f.toast("Airspy settings saved - press STOP / START to apply.");

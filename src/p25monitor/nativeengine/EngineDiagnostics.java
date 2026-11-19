@@ -19,7 +19,7 @@ final class EngineDiagnostics {
         String alias = c.alias().isEmpty() ? "" : "  " + c.alias();
         r.add(new String[]{"Talkgroup", (c.conventional ? "conventional " : "") + c.tg + alias + (c.priority < 100 ? "  (priority " + c.priority + ")" : "")});
         r.add(new String[]{"Status", status});
-        r.add(new String[]{"Channel", mhz(c.freq) + " MHz  " + (c.phase2 ? "Phase 2 TDMA slot " + (c.slot + 1) : "Phase 1 FDMA") + (c.conventional ? "" : "  ch " + (c.channel >> 12) + "-" + (c.channel & 0xfff)) + (c.tuner != null ? "  on tuner T" + c.tuner.id : "")});
+        r.add(new String[]{"Channel", mhz(c.freq) + " MHz  " + (c.type2 && c.analogVoice ? "analog FM" : c.phase2 ? "Phase 2 TDMA slot " + (c.slot + 1) : "Phase 1 FDMA") + (c.conventional ? "" : c.type2 ? String.format("  Type II ch %03X", c.channel) : "  ch " + (c.channel >> 12) + "-" + (c.channel & 0xfff)) + (c.tuner != null ? "  on tuner T" + c.tuner.id : "")});
         if (vd != null) {
             r.add(new String[]{"Frequency offset", String.format(Locale.ROOT, "%+.0f Hz measured (filter correction %+.0f Hz, FLL %d / AFC %d steps)", vd.frequencyError(), vd.afcHz, vd.fllSteps, vd.afcSteps)});
             r.add(new String[]{"Demodulator", vd.demodSummary() + (vd.demodSwitches > 0 ? "  (" + vd.demodSwitches + " switches)" : "")});
@@ -134,7 +134,7 @@ final class EngineDiagnostics {
     List<String[]> tunerRows() {
         List<String[]> r = new ArrayList<>();
         long now = System.currentTimeMillis();
-        for (ChannelDecoder d : e.ccDecoders) r.add(tunerRow("Control T1", d, now));
+        for (ChannelDecoder d : e.ccDecoders) r.add(tunerRow(d.dmr != null && now - d.lastTsbkAt > 5000 ? "Repeater T1" : "Control T1", d, now));
         for (Tuner t : e.tuners) for (ChannelDecoder d : t.decoders) r.add(tunerRow("Voice T" + t.id, d, now));
         return r;
     }
@@ -143,7 +143,7 @@ final class EngineDiagnostics {
         boolean lk = d.locked(now);
         double err = d.frequencyError();
         String fe = !lk ? "- (no signal)" : d.freqHz > 0 ? String.format(Locale.ROOT, "%+.0f Hz (%+.1f ppm)", err, err / (d.freqHz / 1e6)) : String.format(Locale.ROOT, "%+.0f Hz", err);
-        return new String[]{role, mhz(d.freqHz), lk ? "LOCKED  " + d.demod().name() : "searching", String.format(Locale.ROOT, "%.1f dB", d.power), fe};
+        return new String[]{role, mhz(d.freqHz), lk ? "LOCKED  " + d.demodName() : "searching", String.format(Locale.ROOT, "%.1f dB", d.power), fe};
     }
 
     /** Measured ppm error of a tuner: a locked decoder on it, else what earlier calls measured (NaN if unknown). */

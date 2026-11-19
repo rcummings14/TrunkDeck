@@ -96,10 +96,12 @@ final class ChannelDecoder {
         Demod(boolean lsm, int nac) {
             framer = new P25Framer(new P25Framer.Listener() {
                 public void nid(int n, int duid, int e) { lastFrameAt = System.currentTimeMillis(); lastNidSampleAt = samples; if (active == Demod.this) out.nid(n, duid, e); }
-                public void tsbk(Tsbk t) { if (fresh(t, Demod.this)) { lastTsbkAt = System.currentTimeMillis(); out.tsbk(t); } }
+                public void tsbk(Tsbk t) { if (fresh(t.b, Demod.this)) { lastTsbkAt = System.currentTimeMillis(); out.tsbk(t); } }
+                public void pdu(Pdu p) { if (fresh(p.data.length > 0 ? p.data : p.header, Demod.this)) { lastTsbkAt = System.currentTimeMillis(); out.pdu(p); } }
                 public void tsbkError() { if (active == Demod.this) out.tsbkError(); }
                 public void ldu(int n, int duid, byte[][] imbe, P25Framer.LinkControl lc, P25Framer.EncryptionSync ess) { if (active == Demod.this) out.ldu(n, duid, imbe, lc, ess); }
                 public void hdu(int n) { if (active == Demod.this) out.hdu(n); }
+                public void tdulc(int n, P25Framer.LinkControl lc) { if (active == Demod.this) out.tdulc(n, lc); }
                 public void terminator(int n, int duid) { if (active == Demod.this) out.terminator(n, duid); }
                 public void nidError() { if (active == Demod.this) out.nidError(); }
             });
@@ -173,11 +175,12 @@ final class ChannelDecoder {
      * Drops the second demodulator's copy of a TSBK. Control channels repeat identical blocks back to back, so a block
      * is forwarded as many times as the path that decoded it most often did within ~100 ms, not just once.
      */
-    synchronized boolean fresh(Tsbk t, Demod from) {
+    synchronized boolean fresh(byte[] m, Demod from) {
         if (paths.length == 1) return true;
         long a = 0, b = 0;
-        for (int k = 0; k < 8; k++) a = (a << 8) | (t.b[k] & 0xff);
-        for (int k = 8; k < t.b.length && k < 16; k++) b = (b << 8) | (t.b[k] & 0xff);
+        for (int k = 0; k < 8 && k < m.length; k++) a = (a << 8) | (m[k] & 0xff);
+        for (int k = 8; k < m.length && k < 16; k++) b = (b << 8) | (m[k] & 0xff);
+        for (int k = 16; k < m.length; k++) b = b * 31 + (m[k] & 0xff);
         while (!recentTsbk.isEmpty() && samples - recentTsbk.peekFirst()[2] > 4800) recentTsbk.pollFirst();
         int idx = from == paths[0] ? 0 : 1, mine = 1, other = 0;
         for (long[] r : recentTsbk) if (r[0] == a && r[1] == b) { if (r[3] == idx) mine++; else other++; }
@@ -202,6 +205,14 @@ final class ChannelDecoder {
 
     /** Tests: run at the start of every block (fault injection). */
     volatile Runnable faultHook;
+    /** DMR demod on this same 48 kHz channel. Null on a P25 channel. */
+    p25monitor.dmr.DmrReceiver dmr;
+    /** NXDN demod (both rates) on this same 48 kHz channel. Null unless the system is NXDN. */
+    p25monitor.nxdn.NxdnDemod nxdn;
+    /** Analog FM receiver (squelch, CTCSS) on this same 48 kHz channel. Null unless the system is analog. */
+    p25monitor.analog.FmReceiver analog;
+    /** Motorola Type II control channel receiver on this same 48 kHz channel. Null unless this is a Type II control channel. */
+    p25monitor.motorola.Type2Demod type2;
 
     void process(float[] i, float[] q, int n) {
         if (!enabled) return;
@@ -247,6 +258,10 @@ final class ChannelDecoder {
             jumpSamples += m;
         } else if (m > 0) { jpi = oi[m - 1]; jpq = oq[m - 1]; }
         for (Demod pa : paths) pa.demod.process(oi, oq, m);
+        if (dmr != null && m > 0) dmr.baseband(oi, oq, m);
+        if (nxdn != null && m > 0) nxdn.baseband(oi, oq, m);
+        if (analog != null && m > 0) analog.baseband(oi, oq, m);
+        if (type2 != null && m > 0) type2.baseband(oi, oq, m);
         samples += m;
         fll();
         if (samples - windowAt >= WINDOW) { windowAt = samples; compare(); }
@@ -306,6 +321,13 @@ final class ChannelDecoder {
     }
 
     SymbolDemod demod() { return active.demod; }
+    /** Demodulator name for display: a DMR channel is 4FSK, not C4FM. */
+    String demodName() {
+        if (type2 != null) return "2FSK (Motorola Type II)";
+        if (analog != null) return "FM (analog)" + (analog.tone() > 0 ? String.format(java.util.Locale.ROOT, " PL %.1f", analog.tone()) : "");
+        if (nxdn != null) { String m = nxdn.mode(); return "4FSK (" + (m == null ? "NXDN" : m) + ")"; }
+        return dmr != null ? "4FSK (DMR)" : active.demod.name();
+    }
     P25Framer framer() { return active.framer; }
     long syncs() { long s = 0; for (Demod p : paths) s = Math.max(s, p.demod.syncs); return s; }
     long nidOk() { if (p2 != null) return p2.fragments; long s = 0; for (Demod p : paths) s = Math.max(s, p.framer.nidOk); return s; }
@@ -339,10 +361,14 @@ final class ChannelDecoder {
 
     /** Total measured carrier offset in Hz (AFC + residual). */
     double frequencyError() { return afcHz + active.demod.freqErrorHz; }
-    boolean locked(long now) { return now - lastFrameAt < 2500; }
+    boolean locked(long now) { return now - lastFrameAt < 2500 || (dmr != null && dmr.synced()) || (nxdn != null && nxdn.synced()) || (analog != null && analog.open()) || (type2 != null && type2.locked()); }
 
+    /** Resets since the last frame lock. Drives the trunked "give up after 8" rule, and goes back to 0 when sync returns. */
     int syncResets;
+    /** Every demodulator reset this session. The log uses this, so it does not go back to 1 after a brief lock. */
+    int syncResetTotal;
     long lastSyncResetAt;
+    long lastSyncResetLogAt;
 
     /**
      * The channel is still at about the level it had while frames were decoding, but nothing has framed for a long
@@ -363,6 +389,7 @@ final class ChannelDecoder {
         if (!carrierWithoutFrame(now) || (lastSyncResetAt != 0 && now - lastSyncResetAt < 60_000)) return false;
         lastSyncResetAt = now;
         syncResets++;
+        syncResetTotal++;
         double back = 0;
         java.util.function.DoubleSupplier as = anchor;
         if (as != null) { double a = as.getAsDouble(); if (!Double.isNaN(a)) back = a; }

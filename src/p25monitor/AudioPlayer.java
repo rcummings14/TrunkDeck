@@ -235,7 +235,7 @@ public final class AudioPlayer {
     }
 
     static void applyVolume(byte[] src, int off, byte[] dst, int n) {
-        float g = (float) volume;
+        float g = TouchControls.silenceAll ? 0f : (float) volume;
         if (g > 0.999f) { System.arraycopy(src, off, dst, 0, n); return; }
         for (int i = 0; i < n; i += 2) {
             int s = (src[off + i] & 0xff) | (src[off + i + 1] << 8);

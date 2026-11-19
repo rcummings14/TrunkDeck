@@ -59,13 +59,50 @@ public class MonitorPage extends JPanel {
     final JCheckBox backlight = new JCheckBox("Backlight on calls");
     final JButton customize = new JButton("Colors\u2026");
     final JCheckBox tintApp = new JCheckBox("Tint the whole app in these colours");
+    /** Analog systems only (shown while one is running): Hold the channel being heard, Scan to go back to all. */
+    final JButton holdBtn = MainFrame.button("Hold", null, Theme.CYAN), scanBtn = MainFrame.button("Scan", null, Theme.CYAN),
+            downBtn = MainFrame.button("Down", null, Theme.CYAN), upBtn = MainFrame.button("Up", null, Theme.CYAN);
+    final JLabel holdLbl = new JLabel();
+    final JPanel holdBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
     final JComboBox<String> speakerBox = new JComboBox<>(new String[]{"One call at a time (priority)", "Mix all calls", "Hold one talkgroup", "Queue all calls (one after another)"});
+    /** Countdown shown when a system will auto-start after TrunkDeck opens. Hidden otherwise. */
+    final JPanel autoStartBar = new JPanel(new BorderLayout(12, 0));
+    final JLabel autoStartLbl = new JLabel();
+    final JButton autoStartCancel = MainFrame.button("Cancel", Theme.Glyph.STOP, Theme.AMBER);
 
     MonitorPage(MainFrame f) {
         super(new BorderLayout(0, 12));
         this.f = f;
         setBackground(Theme.BG);
-        add(f.display, BorderLayout.NORTH);
+        autoStartBar.setOpaque(true);
+        autoStartBar.setBackground(new Color(0x1A2A22));
+        autoStartBar.setBorder(new CompoundBorder(new LineBorder(Theme.GREEN, 1, true), new EmptyBorder(8, 12, 8, 12)));
+        autoStartLbl.setFont(Theme.ui(Font.BOLD, 15f));
+        autoStartLbl.setForeground(Theme.GREEN);
+        autoStartCancel.setToolTipText("Do not start this system automatically");
+        autoStartCancel.addActionListener(e -> f.cancelAutoStart());
+        autoStartBar.add(autoStartLbl, BorderLayout.CENTER);
+        autoStartBar.add(autoStartCancel, BorderLayout.EAST);
+        autoStartBar.setVisible(false);
+        JPanel north = new JPanel(new BorderLayout(0, 8));
+        north.setOpaque(false);
+        north.add(autoStartBar, BorderLayout.NORTH);
+        north.add(f.display, BorderLayout.CENTER);
+        holdBar.setOpaque(false);
+        holdBar.add(holdBtn); holdBar.add(scanBtn); holdBar.add(downBtn); holdBar.add(upBtn); holdBar.add(holdLbl);
+        downBtn.setToolTipText("Hold the previous channel in the system's list");
+        upBtn.setToolTipText("Hold the next channel in the system's list");
+        downBtn.addActionListener(e -> { String why = f.nativeEngine.stepAnalog(-1); if (why != null) f.toast(why); refreshHold(); });
+        upBtn.addActionListener(e -> { String why = f.nativeEngine.stepAnalog(1); if (why != null) f.toast(why); refreshHold(); });
+        holdLbl.setForeground(Theme.AMBER);
+        holdLbl.setFont(Theme.ui(Font.BOLD, 13f));
+        holdBtn.setToolTipText("Stay on the analog channel you are hearing (or the last one heard): only it plays until you press Scan. Other channels are still recorded.");
+        scanBtn.setToolTipText("Go back to scanning every channel");
+        holdBtn.addActionListener(e -> { String why = f.nativeEngine.holdAnalog(); if (why != null) f.toast(why); refreshHold(); });
+        scanBtn.addActionListener(e -> { f.nativeEngine.scanAnalog(); refreshHold(); });
+        holdBar.setVisible(false);
+        north.add(holdBar, BorderLayout.SOUTH);
+        add(north, BorderLayout.NORTH);
 
         // live log
         JPanel logCard = MainFrame.card("Live call log");
@@ -276,7 +313,7 @@ public class MonitorPage extends JPanel {
         asp.setPreferredSize(new Dimension(600, 262));
         asp.setMinimumSize(new Dimension(200, 70));
         activeCard.add(asp, BorderLayout.CENTER);
-        new javax.swing.Timer(250, e -> { refreshActive(); holdForLive(); }).start();
+        new javax.swing.Timer(250, e -> { refreshActive(); holdForLive(); refreshHold(); }).start();
         refreshActive();
 
         activeCard.setMinimumSize(new Dimension(300, 110));
@@ -560,6 +597,17 @@ public class MonitorPage extends JPanel {
                 + q[2] + " call(s) skipped by the " + f.nativeEngine.speakerQueueMaxDelay() + " s limit. The list below shows the live calls.");
     }
 
+    /** Analog systems only: Hold / Scan under the display, and which channel is held. */
+    void refreshHold() {
+        boolean on = f.nativeEngine.analogRunning();
+        long hf = on ? f.nativeEngine.holdFreq() : 0;
+        if (holdBar.isVisible() != on) { holdBar.setVisible(on); holdBar.revalidate(); }
+        holdBtn.setEnabled(on && hf == 0);
+        scanBtn.setEnabled(hf > 0);
+        String name = hf > 0 ? f.nativeEngine.channelName(hf) : "";
+        holdLbl.setText(hf > 0 ? "HOLDING " + (name.isEmpty() ? "" : name.toUpperCase() + "  ") + p25monitor.nativeengine.NativeEngine.mhzText(hf) + " MHz" : "");
+    }
+
     /** "QUEUE  ·  2 WAITING  ·  +4 s" (1.4.2). */
     String queueText() {
         long[] q = f.nativeEngine.isRunning() ? f.nativeEngine.speakerQueueStatus() : null;
@@ -586,7 +634,7 @@ public class MonitorPage extends JPanel {
     void playCall(Row row) {
         String why = RecordingFiles.unavailable(row.e);
         if (why != null) { f.toast(why); return; }
-        Path p = RecordingFiles.find(App.recordingDir(), row.e.timestamp, row.e.talkgroup, row.e.radioId);
+        Path p = RecordingFiles.find(App.recordingSearchDirs(), row.e.timestamp, row.e.talkgroup, row.e.radioId);
         if (p == null) { f.toast(RecordingFiles.missing(row.e)); return; }
         if (AudioPlayer.same(p.toFile())) AudioPlayer.togglePause();
         else {
@@ -609,7 +657,7 @@ public class MonitorPage extends JPanel {
         logPlay.setIcon(Theme.icon(showPause ? Theme.Glyph.PAUSE : Theme.Glyph.PLAY, 16, Theme.GREEN));
         boolean replayThis = false;
         if (on && currentTg != null) {
-            Path latest = RecordingFiles.latest(App.recordingDir(), currentTg.decimal);
+            Path latest = RecordingFiles.latest(App.recordingSearchDirs(), currentTg.decimal);
             replayThis = latest != null && AudioPlayer.same(latest.toFile());
         }
         if (replayThis && !AudioPlayer.paused()) {
@@ -625,7 +673,31 @@ public class MonitorPage extends JPanel {
         table.repaint();
     }
 
+    /** The talkgroup to mute from the touch button: the one on the display, or the latest call if the display is idle. */
+    int touchMuteTarget() {
+        int shown = f.display.shownTalkgroup();
+        if (shown > 0) return shown;
+        for (Row r : live.rows) if (r.e != null && r.e.isVoiceCall() && r.e.talkgroup > 0) return r.e.talkgroup;
+        return currentTg == null ? -1 : currentTg.decimal;
+    }
+
+    /** The talkgroup to hold: only the one on the air right now. */
+    int touchHoldTarget() { return f.display.shownTalkgroup(); }
+
     void updated() { live.fireTableDataChanged(); }
+
+    void showAutoStart(String name, int seconds) {
+        autoStartLbl.setText(App.autoStartMessage(name, seconds));
+        autoStartBar.setVisible(true);
+        revalidate();
+        repaint();
+    }
+
+    void hideAutoStart() {
+        autoStartBar.setVisible(false);
+        revalidate();
+        repaint();
+    }
 
     void reset() { live.rows.clear(); live.fireTableDataChanged(); hotModel.clear(); focus(null); }
 

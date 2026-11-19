@@ -1,0 +1,49 @@
+TrunkDeck 1.7.5 beta
+Changes from TrunkDeck 1.7.4
+
+This is a beta. TrunkDeck 1.7.4 stays the regular release.
+
+This release updates the scanner display and teaches TrunkDeck to learn P25 Phase 1 radio names from the air.
+
+Display
+- Display only (the header button, or Ctrl+D) drops the title bar and shows just the big scanner display. Drag the panel to move it. Drag an edge or a corner to resize it. The display grows with the window. Double-click the panel, press Esc, or press Ctrl+D to bring the full window back. A double-click on a touch button does not.
+- Right-click the display for Exit Display-Only, Always on top, Mute speaker, Minimize to tray, and Close TrunkDeck. The window's size, place, and Always on top are remembered.
+- The close button and minimize button can each be set to Quit, the system tray, or Display only. The tray menu can also open Display only.
+- Large buttons sit inside the bottom of the display: Mute all, Mute talkgroup, Hold, and Muted list. Mute all silences this PC only. Calls are still decoded, logged, recorded, and streamed. Mute talkgroup mutes the talkgroup on the glass, or the latest call if the display is idle, and lists it so you can tap the name to unmute it. Hold stays on the talkgroup that is on the air until you tap it again, and is not remembered the next time TrunkDeck opens. These buttons are only on Display only. The main Monitor window and the home-network page do not show them.
+- While a call is on the glass, that talkgroup's colour from the Color column is used for its name and number. Default keeps the theme colour. The same colour is used on the Monitor, Display only, and the home-network page. The talkgroup list itself stays the usual colours.
+- A favourite is marked with a yellow FAV outline.
+- The signal meter's lit bars stay amber on every display theme. While TrunkDeck is scanning, the control channel on the display shows the meter and a level in dB.
+- The bottom row shows the channel (control channel while scanning, voice channel during a call), the frequency, the call time or the last call, and the event.
+- Black or None draws no coloured rim and no glow. Any other border colour is used. The buttons follow the display theme.
+
+Over-the-air radio names
+- A standard P25 user-alias message in a voice frame is still saved.
+- A Motorola talker alias is now decoded too. Those names arrive as a short series of link-control words, often in the terminator at the end of a transmission. TrunkDeck reassembles the series, checks it, and saves the name only when the check passes. A partial or bad message is ignored.
+- The radio's own ID is inside the message, so the name can be saved even if the call has already ended.
+- The name is stored as an over-the-air name in that system's radios.csv and shown as NAME (ID).
+- An over-the-air name replaces a name you typed or imported. On the Radio IDs screen, the note says that a name heard over the air replaces the one you type.
+- Phase 2 talker aliases are not decoded.
+- A DMR talker alias is still only written to the log. It is not saved, because that message does not carry a separate radio ID that is safe to store.
+
+DSD+ radio files
+- Importing a DSDPlus.radios file now uses only the heard-name column (the P25 talker alias).
+- The name you typed in DSD+ is ignored. A line with no heard name is skipped.
+- The imported heard name is stored as an over-the-air name, so it replaces a name already saved for that radio. TrunkDeck does not ask you to keep the typed name.
+- The file still has to match the system's WACN and System ID. DMR, NXDN, Fusion, and other P25 systems in the file are still skipped.
+- A normal CSV import is unchanged: a name you typed is kept unless you choose Overwrite.
+
+Also in this package
+- A system can be set to start by itself when TrunkDeck opens. The Monitor page counts down for 10 seconds, and Cancel stops it. The home-network page can show that countdown but cannot change the choice.
+- The Engine page keeps a decoded-message log with the time, frequency, and message.
+
+What else is the same
+- The DMR decoder was already in the 1.7.4 download. It is still marked untested. Choose DMR conventional or DMR trunked on the Systems page, then set the colour code and timeslot. RadioReference still will not import a DMR system.
+- Your systems, talkgroups, settings, and recordings stay in %APPDATA%\TrunkDeck. Installing 1.7.5 does not erase them.
+
+RadioReference
+- Set up from RadioReference uses your own RadioReference Premium username and password.
+- The TrunkDeck app key is included in this download, the same way it is in 1.7.4. You do not paste a key.
+
+Install
+- Unzip TrunkDeck-1.7.5-windows.zip, open TrunkDeck\windows, and double-click Install.bat.
+- Read TrunkDeck-1.7.5-changes.txt in the TrunkDeck folder for this list.

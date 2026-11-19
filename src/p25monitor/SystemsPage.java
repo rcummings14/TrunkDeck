@@ -10,20 +10,48 @@ public class SystemsPage extends JPanel {
     final MainFrame f;
     final DefaultListModel<RadioSystem> listModel = new DefaultListModel<>();
     final JList<RadioSystem> list = new JList<>(listModel);
-    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)"});
+    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)", "DMR (conventional, untested)", "DMR trunked (untested)", "NXDN (conventional, untested)", "NXDN trunked (untested)", "Analog FM (conventional, untested)", "Motorola Type II SmartNet / SmartZone (untested)"});
+    /** Motorola Type II band plan; the last entry uses {@link #obtPlan}. Order matches {@link #TYPE2_PLANS}. */
+    final JComboBox<String> type2Plan = new JComboBox<>(new String[]{"Auto (800 / 900 MHz)", "800 MHz rebanded", "800 MHz standard", "800 MHz splinter", "900 MHz", "VHF / UHF (custom)"});
+    static final String[] TYPE2_PLANS = {"auto", "800reband", "800standard", "800splinter", "900", "obt"};
+    /** VHF/UHF Type II band plan: "base MHz, spacing kHz, offset". */
+    final JTextField obtPlan = new JTextField(16);
+    final JComboBox<String> dmrFlavor = new JComboBox<>(new String[]{"Tier III", "Capacity Plus", "Connect Plus", "XPT"});
+    final JComboBox<String> dmrSlot = new JComboBox<>(new String[]{"Both timeslots", "Timeslot 1", "Timeslot 2"});
+    /** Analog FM noise squelch level, 1 (opens easiest) to 10 (strongest signal only). */
+    final JSpinner squelch = new JSpinner(new SpinnerNumberModel(p25monitor.analog.FmReceiver.SQUELCH_DEFAULT,
+            p25monitor.analog.FmReceiver.SQUELCH_MIN, p25monitor.analog.FmReceiver.SQUELCH_MAX, 1));
     /** Shown under Kind, the same way an untested receiver is marked on the Engine page. */
-    final JLabel untestedNote = new JLabel("<html><span style='color:#FFB300;font-size:11px'>P25 conventional has not been tested on a real radio system yet. If something doesn't work, please report it on GitHub Issues ("
-            + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").</span></html>");
-    final JTextField name = new JTextField(), site = new JTextField(), cc = new JTextField(), nac = new JTextField(), wacn = new JTextField(),
+    final JLabel untestedNote = new JLabel();
+    final JTextField name = new JTextField(), site = new JTextField(),
+            /** Channels box: a pasted frequency table (RadioReference page, spreadsheet, CHIRP CSV) becomes channels. */
+            cc = new JTextField() { @Override public void paste() { if (!pasteTable(this)) super.paste(); } }, nac = new JTextField(), wacn = new JTextField(),
             sysId = new JTextField(), rfss = new JTextField(), siteNo = new JTextField(), tuner = new JTextField();
     final JLabel freqLabel = new JLabel("Control channel(s) MHz");
     final JLabel freqHelp = new JLabel();
+    final JLabel demodLabel = new JLabel("Demodulator");
+    final JLabel demodHelp = new JLabel();
+    final JLabel idsLabel = new JLabel("IDs (optional)");
+    final JLabel idsHelp = new JLabel();
+    final JLabel nacLabel = new JLabel("NAC");
+    final JLabel wacnLabel = new JLabel("WACN");
+    final JLabel sysLabel = new JLabel("Sys ID");
+    final JLabel dmrLabel = new JLabel("DMR");
+    final JLabel dmrHelp = new JLabel();
+    final JPanel dmrOpts = new JPanel(new GridLayout(1, 1, 8, 0));
     final JPanel trunkIds = new JPanel(new GridLayout(1, 0, 6, 0));
+    final JPanel wacnBox = new JPanel(new BorderLayout(4, 0));
+    final JPanel sysBox = new JPanel(new BorderLayout(4, 0));
+    final JPanel rfssBox = new JPanel(new BorderLayout(4, 0));
+    final JPanel siteBox = new JPanel(new BorderLayout(4, 0));
     final JComboBox<String> modulation = new JComboBox<>(new String[]{"C4FM (normal)", "CQPSK / LSM (simulcast)"});
     final JComboBox<String> nativeMod = new JComboBox<>(new String[]{"Auto - try C4FM and LSM, use the better one", "C4FM only", "LSM / CQPSK only (simulcast)"});
     final JSpinner traffic = new JSpinner(new SpinnerNumberModel(20, 1, 32, 1));
     final JCheckBox ignoreData = new JCheckBox("Ignore data calls (recommended)"), recordAll = new JCheckBox("Record every call (MP3)"),
-            meter = new JCheckBox("Control-channel decode meter (writes a message log)");
+            meter = new JCheckBox("Control-channel decode meter (writes a message log)"),
+            autoStart = new JCheckBox("Auto-start when TrunkDeck opens");
+    /** True while the form is being filled, so ticking Auto-start is not saved twice. */
+    boolean loadingAuto;
     final JTextArea notes = new JTextArea(3, 20);
     RadioSystem editing;
     /** 1.6.0: only for a system set up from RadioReference. */
@@ -62,8 +90,9 @@ public class SystemsPage extends JPanel {
                 RadioSystem r = (RadioSystem) v;
                 setBorder(new EmptyBorder(8, 10, 8, 10));
                 setText("<html><b style='color:#DCE6F0'>" + MonitorPage.esc(r.name) + "</b><br><span style='color:#7D8FA3'>"
-                        + (r.conventional() ? "Conventional" : "Trunked") + " \u00b7 " + r.displayFreqs() + " MHz \u00b7 " +
-                        r.talkgroups.size() + " talkgroups</span></html>");
+                        + r.kindLabel() + " \u00b7 " + r.displayFreqs() + " MHz \u00b7 " +
+                        r.talkgroups.size() + " talkgroups"
+                        + (f.app.isAutoStart(r) ? " \u00b7 Auto-start" : "") + "</span></html>");
                 return this;
             }
         });
@@ -83,7 +112,22 @@ public class SystemsPage extends JPanel {
         int y = 0;
         cc.setFont(Theme.mono(Font.BOLD, 15f));
         tuner.putClientProperty("JTextField.placeholderText", "optional - e.g. Airspy 0x26A464DC2B5A7C9F (see Setup & Help \u2192 Tuners)");
-        kindBox.addActionListener(e -> showKind(kindBox.getSelectedIndex() == 1));
+        kindBox.addActionListener(e -> showKind(kindBox.getSelectedIndex()));
+        dmrFlavor.addActionListener(e -> { if (kindBox.getSelectedIndex() == 3) showKind(3); });
+        type2Plan.addActionListener(e -> { if (kindBox.getSelectedIndex() == 7) showKind(7); });
+        obtPlan.putClientProperty("JTextField.placeholderText", "base MHz, spacing kHz, offset - e.g. 136.0000, 12.5, 380");
+        dmrFlavor.setPrototypeDisplayValue("Capacity Plus");
+        dmrSlot.setPrototypeDisplayValue("Both timeslots");
+        JSpinner.DefaultEditor trafficEditor = (JSpinner.DefaultEditor) traffic.getEditor();
+        JTextField trafficText = trafficEditor.getTextField();
+        trafficText.setColumns(3);
+        trafficText.setOpaque(true);
+        trafficText.setForeground(new Color(220, 228, 236));
+        traffic.setValue(20);
+        JTextField squelchText = ((JSpinner.DefaultEditor) squelch.getEditor()).getTextField();
+        squelchText.setColumns(3);
+        squelchText.setOpaque(true);
+        squelchText.setForeground(new Color(220, 228, 236));
         y = row(g, c, y, "Kind", kindBox, "Trunked follows a control channel. Conventional stays on the frequencies you type. There is no control channel.");
         c.gridy = y; c.gridx = 1; c.weightx = 1; c.gridwidth = 1;
         c.insets = new Insets(0, 4, 8, 8);
@@ -93,20 +137,31 @@ public class SystemsPage extends JPanel {
         y = row(g, c, y, "System name", name, null);
         y = row(g, c, y, "Site name", site, null);
         y = freqRow(g, c, y);
-        y = row(g, c, y, "Demodulator", nativeMod, "Auto runs both demodulators (C4FM and LSM/CQPSK for simulcast) on every channel and uses the one with fewer bit errors (shown on the Engine page).");
-        JPanel nacOnly = idBox("NAC", nac);
+        y = row(g, c, y, demodLabel, nativeMod, demodHelp);
+        idLine(wacnBox, wacnLabel, wacn);
+        idLine(sysBox, sysLabel, sysId);
+        idLine(rfssBox, new JLabel("RFSS"), rfss);
+        idLine(siteBox, new JLabel("Site #"), siteNo);
         trunkIds.setOpaque(false);
-        for (Object[] o : new Object[][]{{"WACN", wacn}, {"Sys ID", sysId}, {"RFSS", rfss}, {"Site #", siteNo}}) trunkIds.add(idBox((String) o[0], (JComponent) o[1]));
+        JPanel nacOnly = idBox(nacLabel, nac);
         JPanel ids = new JPanel(new BorderLayout(6, 0));
         ids.setOpaque(false);
         ids.add(nacOnly, BorderLayout.WEST);
         ids.add(trunkIds, BorderLayout.CENTER);
-        y = row(g, c, y, "IDs (optional)", ids, "On a trunked system, sites with the same WACN and System ID share one talkgroup list. A conventional system keeps its own list. NAC makes the receiver ignore other traffic on the same frequency.");
+        y = row(g, c, y, idsLabel, ids, idsHelp);
+        dmrOpts.setOpaque(false);
+        y = row(g, c, y, dmrLabel, dmrOpts, dmrHelp);
         y = row(g, c, y, "Max simultaneous calls", traffic, "How many calls the engine decodes at the same time (each uses about 4% of one CPU core). Calls must also fall inside a dongle's window.");
         JPanel checks = new JPanel(new GridLayout(0, 1));
         checks.setOpaque(false);
-        for (JCheckBox b : new JCheckBox[]{recordAll}) { b.setOpaque(false); checks.add(b); }
-        y = row(g, c, y, "Options", checks, null);
+        autoStart.setToolTipText("The next time TrunkDeck opens, this system starts after a short countdown on the Monitor page. Only one system can be set. You can press Cancel during the countdown. The home-network page can show the countdown but cannot change this.");
+        autoStart.addActionListener(e -> {
+            if (loadingAuto || editing == null) return;
+            f.app.setAutoStart(autoStart.isSelected() ? editing : null);
+            refreshList();
+        });
+        for (JCheckBox b : new JCheckBox[]{recordAll, autoStart}) { b.setOpaque(false); checks.add(b); }
+        y = row(g, c, y, "Options", checks, "Auto-start starts this system after a short countdown the next time TrunkDeck opens. Only one system can be set.");
         notes.setLineWrap(true); notes.setWrapStyleWord(true);
         y = row(g, c, y, "Notes", new JScrollPane(notes), null);
         c.gridy = y; c.gridx = 0; c.weighty = 1; g.add(Box.createGlue(), c);
@@ -130,29 +185,46 @@ public class SystemsPage extends JPanel {
     }
 
     int row(JPanel g, GridBagConstraints c, int y, String label, JComponent comp, String help) {
+        return row(g, c, y, new JLabel(label), comp, help == null ? null : new JLabel(helpHtml(help)));
+    }
+
+    int row(JPanel g, GridBagConstraints c, int y, JLabel l, JComponent comp, JLabel help) {
         c.gridy = y; c.gridx = 0; c.weightx = 0; c.gridwidth = 1;
-        JLabel l = new JLabel(label);
         l.setFont(Theme.ui(Font.BOLD, 12f));
-        Jargon.explain(l, label);
-        if (Jargon.tip(label) != null) comp.setToolTipText(l.getToolTipText());
+        Jargon.explain(l, l.getText());
+        if (Jargon.tip(l.getText()) != null) comp.setToolTipText(l.getToolTipText());
         g.add(l, c);
         c.gridx = 1; c.weightx = 1;
         g.add(comp, c);
         if (help != null) {
             c.gridy = ++y; c.gridx = 1;
-            JLabel h = new JLabel("<html><span style='color:#7D8FA3;font-size:10px'>" + help + "</span></html>");
+            if (!help.getText().startsWith("<html>")) help.setText(helpHtml(help.getText()));
             c.insets = new Insets(0, 4, 6, 8);
-            g.add(h, c);
+            g.add(help, c);
             c.insets = new Insets(5, 4, 5, 8);
         }
         return y + 1;
     }
 
-    static JPanel idBox(String label, JComponent field) {
-        JPanel p = new JPanel(new BorderLayout(4, 0)); p.setOpaque(false);
-        JLabel l = new JLabel(label); l.setForeground(Theme.DIM);
-        Jargon.explain(l, label); field.setToolTipText(l.getToolTipText());
-        p.add(l, BorderLayout.WEST); p.add(field, BorderLayout.CENTER);
+    static String helpHtml(String text) { return helpHtml(text, "#7D8FA3", 10); }
+
+    /** A table width is what Swing's HTML actually wraps. A CSS width on the body was clipped at the card edge. */
+    static String helpHtml(String text, String color, int px) {
+        return "<html><table width='340' cellpadding='0' cellspacing='0'><tr><td><span style='color:" + color + ";font-size:" + px + "px'>" + text + "</span></td></tr></table></html>";
+    }
+
+    static void idLine(JPanel p, JLabel label, JComponent field) {
+        p.setOpaque(false);
+        label.setForeground(Theme.DIM);
+        Jargon.explain(label, label.getText());
+        field.setToolTipText(label.getToolTipText());
+        p.add(label, BorderLayout.WEST);
+        p.add(field, BorderLayout.CENTER);
+    }
+
+    static JPanel idBox(JLabel label, JComponent field) {
+        JPanel p = new JPanel(new BorderLayout(4, 0));
+        idLine(p, label, field);
         return p;
     }
 
@@ -166,19 +238,88 @@ public class SystemsPage extends JPanel {
         c.insets = new Insets(0, 4, 6, 8);
         g.add(freqHelp, c);
         c.insets = new Insets(5, 4, 5, 8);
-        showKind(false);
+        showKind(0);
         return y + 1;
     }
 
-    void showKind(boolean conventional) {
-        freqLabel.setText(conventional ? "Channels MHz" : "Control channel(s) MHz");
-        Jargon.explain(freqLabel, conventional ? "Channels MHz" : "Control channel(s) MHz");
+    void showKind(int kind) {
+        boolean fixed = kind == 1 || kind == 2 || kind == 4 || kind == 6;
+        boolean analog = kind == 6;
+        boolean dmr = kind == 2 || kind == 3;
+        boolean nxdn = kind == 4 || kind == 5;
+        boolean type2 = kind == 7;
+        boolean obt = type2 && type2Plan.getSelectedIndex() == 5;
+        freqLabel.setText(fixed ? "Channels MHz" : "Control channel(s) MHz");
+        Jargon.explain(freqLabel, fixed ? "Channels MHz" : "Control channel(s) MHz");
         cc.setToolTipText(freqLabel.getToolTipText());
-        cc.putClientProperty("JTextField.placeholderText", conventional ? "e.g. 155.2500, 155.3700:2D5" : "e.g. 851.0125, 851.5125");
-        freqHelp.setText("<html><span style='color:#7D8FA3;font-size:10px'>" + (conventional
+        cc.putClientProperty("JTextField.placeholderText", kind == 2 ? "e.g. 450.0000:1/1 Sample" : kind == 4 ? "e.g. 451.0125, 451.0250" : analog ? "e.g. 155.2500, 155.3700:100.0 Fire" : kind == 5 ? "e.g. 451.0000, 37=451.0125" : fixed ? "e.g. 155.2500, 155.3700:2D5" : "e.g. 851.0125, 851.5125");
+        freqHelp.setText(helpHtml((analog
+                ? "Analog FM channels, separated by commas, each with an optional name. Add a CTCSS (PL) tone after a colon when one channel uses its own, for example 155.3700:100.0. (untested)"
+                : kind == 4
+                ? "NXDN channels, separated by commas. NXDN48 and NXDN96 are detected automatically. (untested)"
+                : type2
+                ? "Control channel(s), primary first. Calls are followed from the control channel; their voice is analog FM or P25, as each grant says. (untested)"
+                : kind == 5
+                ? "Control channel(s) first. Sites that announce their frequencies (DFA) need nothing else. For a site that uses channel numbers, add each voice channel as number=MHz, for example 37=451.0125. (untested)"
+                : kind == 2
+                ? "DMR channels, separated by commas. Colour code and timeslot after a colon: 450.0000:1/2. The colour code below applies when a channel does not set its own. (untested)"
+                : fixed
                 ? "The frequencies to listen on, separated by commas. Add a NAC after a colon when one channel uses its own, for example 155.2500:2D5. The NAC below applies to every channel without its own."
-                : "Primary first; add alternate control channels separated by commas. TrunkDeck rotates through them until one locks.") + "</span></html>");
-        trunkIds.setVisible(!conventional);
+                : "Primary first; add alternate control channels separated by commas. TrunkDeck rotates through them until one locks.")
+                + (pasteMode(kind) != null ? " You can also paste a frequency table copied from a RadioReference page, a spreadsheet or a CHIRP CSV." : "")));
+        boolean tier3 = kind == 3 && dmrFlavor.getSelectedIndex() == 0;
+        demodLabel.setVisible(!dmr && !nxdn && !analog);
+        nativeMod.setVisible(!dmr && !nxdn && !analog);
+        demodHelp.setVisible(!dmr && !nxdn && !analog);
+        demodHelp.setText(helpHtml("Auto runs both demodulators (C4FM and LSM/CQPSK for simulcast) on every channel and uses the one with fewer bit errors (shown on the Engine page)."));
+        idsLabel.setText(dmr ? "Colour code" : analog ? "Tone squelch" : "IDs (optional)");
+        nacLabel.setText(dmr ? "CC" : analog ? "CTCSS" : "NAC");
+        wacnLabel.setText(tier3 ? "Network" : "WACN");
+        sysLabel.setText(tier3 ? "Site" : "Sys ID");
+        trunkIds.removeAll();
+        if (kind == 0) { trunkIds.add(wacnBox); trunkIds.add(sysBox); trunkIds.add(rfssBox); trunkIds.add(siteBox); }
+        else if (tier3) { trunkIds.add(wacnBox); trunkIds.add(sysBox); }
+        trunkIds.setVisible(kind == 0 || tier3);
+        idsHelp.setText(helpHtml(analog
+                ? "CTCSS (PL) tone in Hz, for example 100.0: only transmissions with that tone are played. Leave blank to hear everything that opens the squelch; the tone heard is then shown on the call."
+                : nxdn || type2
+                ? "Not used for " + (type2 ? "Motorola Type II" : "NXDN") + ": leave blank."
+                : kind == 2
+                ? "Colour code 0-15. Bursts with a different colour code are ignored. A channel can set its own after the frequency, for example 450.0000:3/1."
+                : tier3
+                ? "Colour code 0-15. Network and Site are optional Tier III identifiers. Bursts with a different colour code are ignored. (untested)"
+                : kind == 3
+                ? "Colour code 0-15. Bursts with a different colour code are ignored. (untested)"
+                : "On a trunked system, sites with the same WACN and System ID share one talkgroup list. A conventional system keeps its own list. NAC makes the receiver ignore other traffic on the same frequency."));
+        dmrOpts.removeAll();
+        if (kind == 3) dmrOpts.add(dmrFlavor);
+        if (kind == 2) dmrOpts.add(dmrSlot);
+        if (analog) dmrOpts.add(squelch);
+        if (type2) { dmrOpts.add(type2Plan); if (obt) dmrOpts.add(obtPlan); }
+        dmrLabel.setText(type2 ? "Band plan" : analog ? "Squelch" : kind == 2 ? "Timeslot" : "Trunking");
+        dmrLabel.setVisible(dmr || analog || type2);
+        dmrOpts.setVisible(dmr || analog || type2);
+        dmrHelp.setVisible(dmr || analog || type2);
+        dmrHelp.setText(helpHtml(type2
+                ? (obt ? "VHF/UHF systems use their own band plan: copy the base frequency, spacing and offset from the system's RadioReference page. (untested)"
+                       : "Turns the channel numbers in grants into frequencies. Auto picks 800 or 900 MHz from the control channel and checks the 800 MHz variant against the channel number the site announces. (untested)")
+                : analog
+                ? "1 opens on the weakest signals, 10 needs a strong, clean signal. Raise it if static opens the squelch; lower it if weak transmissions are missed. 5 is the default."
+                : kind == 2
+                ? "Listen to timeslot 1, timeslot 2, or both. (untested)"
+                : "Tier III follows a control-channel grant. Capacity Plus and XPT follow the rest channel. Connect Plus follows a voice grant. (untested)"));
+        String note = kind == 1 ? "P25 conventional has not been tested on a real radio system yet."
+                : kind == 2 ? "DMR conventional has not been tested on a real radio system yet."
+                : kind == 3 ? "DMR trunking (Tier III, Capacity Plus, Connect Plus and XPT) has not been tested on a real radio system yet."
+                : analog ? "Analog FM with CTCSS has not been tested on a real radio system yet."
+                : kind == 4 ? "NXDN conventional has not been tested on a real radio system yet."
+                : kind == 5 ? "NXDN Type-C trunking has not been tested on a real radio system yet."
+                : type2 ? "Motorola Type II (SmartNet / SmartZone) has not been tested on a real radio system yet."
+                : "";
+        untestedNote.setText(note.isEmpty() ? " " : helpHtml(note + " If something doesn't work, please report it on GitHub Issues ("
+                + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").", "#FFB300", 11));
+        revalidate();
+        repaint();
     }
 
     void refreshList() {
@@ -192,43 +333,107 @@ public class SystemsPage extends JPanel {
     void edit(RadioSystem s) {
         editing = s;
         name.setText(s.name); site.setText(s.site);
-        kindBox.setSelectedIndex(s.conventional() ? 1 : 0);
-        showKind(s.conventional());
-        cc.setText(s.conventional() ? s.channelText() : s.freqText());
-        nac.setText(s.nac); wacn.setText(s.wacn); sysId.setText(s.sysId); rfss.setText(s.rfss); siteNo.setText(s.siteNumber);
+        int kind = s.type2() ? 7 : s.analog() ? 6 : s.nxdnTrunk() ? 5 : s.nxdnConventional() ? 4 : s.dmrTrunk() ? 3 : s.dmrConventional() ? 2 : s.conventional() ? 1 : 0;
+        kindBox.setSelectedIndex(kind);
+        showKind(kind);
+        cc.setText(s.fixedChannels() ? s.channelText() : s.freqText() + nxdnTableText(s));
+        dmrFlavor.setSelectedIndex(switch (s.dmrFlavor == null ? "" : s.dmrFlavor) {
+            case "capplus" -> 1; case "conplus" -> 2; case "xpt" -> 3; default -> 0; });
+        dmrSlot.setSelectedIndex(s.timeslot == 1 ? 1 : s.timeslot == 2 ? 2 : 0);
+        squelch.setValue(Math.max(p25monitor.analog.FmReceiver.SQUELCH_MIN, Math.min(p25monitor.analog.FmReceiver.SQUELCH_MAX, s.squelch)));
+        type2Plan.setSelectedIndex(Math.max(0, java.util.Arrays.asList(TYPE2_PLANS).indexOf(p25monitor.motorola.Type2BandPlan.Kind.of(s.type2Plan).key)));
+        obtPlan.setText(s.obtBaseMHz > 0 ? RadioSystem.fmt(s.obtBaseMHz) + ", " + s.obtSpacingKHz + ", " + s.obtOffset : "");
+        showKind(kind);
+        nac.setText(s.dmr() && s.colorCode >= 0 ? String.valueOf(s.colorCode) : s.nac);
+        wacn.setText(s.wacn); sysId.setText(s.sysId); rfss.setText(s.rfss); siteNo.setText(s.siteNumber);
         modulation.setSelectedIndex("CQPSK".equals(s.modulation) ? 1 : 0);
         nativeMod.setSelectedIndex(s.nativeModulation.startsWith("c4") ? 1 : s.nativeModulation.startsWith("lsm") ? 2 : 0);
         traffic.setValue(Math.max(1, Math.min(32, s.trafficChannels)));
         tuner.setText(s.preferredTuner);
         ignoreData.setSelected(s.ignoreDataCalls); recordAll.setSelected(s.recordAll); meter.setSelected(s.decodeMeter);
+        loadingAuto = true;
+        autoStart.setSelected(f.app.isAutoStart(s));
+        loadingAuto = false;
         notes.setText(s.notes);
         notes.setCaretPosition(0);
         rrRefresh.setVisible(s.rrSid > 0);
     }
 
+    /** NXDN Type-C channel table, appended to the control channels as ", 37=451.0125". */
+    static String nxdnTableText(RadioSystem s) {
+        if (!s.nxdnTrunk() || s.nxdnChannels.isEmpty()) return "";
+        StringBuilder b = new StringBuilder();
+        for (var en : s.nxdnChannels.entrySet()) b.append(", ").append(en.getKey()).append('=').append(RadioSystem.fmt(en.getValue()));
+        return b.toString();
+    }
+
+    /**
+     * NXDN trunked: takes the "number=MHz" entries out of the control-channel text into {@code table} and returns the
+     * rest (the control channels). Throws NumberFormatException with a readable message on a bad entry.
+     */
+    static String splitNxdnTable(String text, java.util.Map<Integer, Double> table) {
+        StringBuilder rest = new StringBuilder();
+        for (String tok : text.split("[,;\\s]+")) {
+            if (tok.isBlank()) continue;
+            int eq = tok.indexOf('=');
+            if (eq < 0) { rest.append(tok).append(", "); continue; }
+            int ch; double mhz;
+            try { ch = Integer.parseInt(tok.substring(0, eq).trim()); mhz = Double.parseDouble(tok.substring(eq + 1).trim()); }
+            catch (NumberFormatException ex) { ch = -1; mhz = 0; }
+            if (ch < 1 || ch > 1023 || mhz < 30 || mhz > 1000) throw new NumberFormatException("channel " + tok + " should be number=MHz, for example 37=451.0125");
+            table.put(ch, mhz);
+        }
+        return rest.toString();
+    }
+
     boolean readForm(RadioSystem s) {
-        boolean conventional = kindBox.getSelectedIndex() == 1;
+        int kind = kindBox.getSelectedIndex();
+        boolean fixed = kind == 1 || kind == 2 || kind == 4 || kind == 6;
+        if (kind == 6 && p25monitor.analog.FmReceiver.parseTone(nac.getText()) < 0) {
+            JOptionPane.showMessageDialog(f, "CTCSS: " + nac.getText().trim() + " is not a standard tone.\nExample: 100.0", "Check the tone", JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+        double[] obt = null;
+        if (kind == 7 && type2Plan.getSelectedIndex() == 5) {
+            obt = parseObt(obtPlan.getText());
+            if (obt == null) {
+                JOptionPane.showMessageDialog(f, "VHF/UHF band plan: enter base MHz, spacing kHz and offset.\nExample: 136.0000, 12.5, 380", "Check the band plan", JOptionPane.WARNING_MESSAGE);
+                return false;
+            }
+        }
+        java.util.Map<Integer, Double> table = new java.util.TreeMap<>();
         try {
-            if (conventional) {
+            if (fixed) {
                 java.util.List<RadioSystem.Channel> ch = RadioSystem.parseChannelText(cc.getText());
                 if (ch.isEmpty()) throw new NumberFormatException("enter at least one channel");
                 s.channels = ch;
                 s.controlChannelsMHz = new ArrayList<>();
             } else {
-                java.util.List<Double> fr = RadioSystem.parseFreqs(cc.getText());
+                String text = cc.getText();
+                if (kind == 5) text = splitNxdnTable(text, table);
+                java.util.List<Double> fr = RadioSystem.parseFreqs(text);
                 if (fr.isEmpty()) throw new NumberFormatException("enter at least one control channel");
                 s.controlChannelsMHz = fr;
                 s.channels = new ArrayList<>();
             }
         } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(f, (conventional ? "Channel: " : "Control channel: ") + ex.getMessage()
-                    + (conventional ? "\nExample: 155.2500, 155.3700:2D5" : "\nExample: 851.0125, 851.5125"), "Check the frequency", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(f, (fixed ? "Channel: " : "Control channel: ") + ex.getMessage()
+                    + (kind == 2 ? "\nExample: 450.0000:1/2" : fixed ? "\nExample: 155.2500, 155.3700:2D5" : "\nExample: 851.0125, 851.5125"), "Check the frequency", JOptionPane.WARNING_MESSAGE);
             return false;
         }
         if (name.getText().isBlank()) { JOptionPane.showMessageDialog(f, "Give the system a name."); return false; }
-        s.kind = conventional ? RadioSystem.CONVENTIONAL : RadioSystem.TRUNKED;
+        s.kind = switch (kind) { case 1 -> RadioSystem.CONVENTIONAL; case 2 -> RadioSystem.DMR; case 3 -> RadioSystem.DMR_TRUNK; case 4 -> RadioSystem.NXDN; case 5 -> RadioSystem.NXDN_TRUNK; case 6 -> RadioSystem.ANALOG; case 7 -> RadioSystem.TYPE2; default -> RadioSystem.TRUNKED; };
+        s.type2Plan = TYPE2_PLANS[Math.max(0, type2Plan.getSelectedIndex())];
+        if (obt != null) { s.obtBaseMHz = obt[0]; s.obtSpacingKHz = obt[1]; s.obtOffset = (int) obt[2]; }
+        s.nxdnChannels = table;
+        s.dmrFlavor = switch (dmrFlavor.getSelectedIndex()) { case 1 -> "capplus"; case 2 -> "conplus"; case 3 -> "xpt"; default -> "tier3"; };
+        s.timeslot = dmrSlot.getSelectedIndex();
+        s.squelch = (Integer) squelch.getValue();
         s.name = name.getText().trim(); s.site = site.getText().trim();
-        s.nac = nac.getText().trim(); s.wacn = wacn.getText().trim(); s.sysId = sysId.getText().trim(); s.rfss = rfss.getText().trim(); s.siteNumber = siteNo.getText().trim();
+        s.nac = nac.getText().trim();
+        s.colorCode = -1;
+        if (s.dmr()) try { if (!s.nac.isBlank()) s.colorCode = Integer.parseInt(s.nac.trim()); } catch (NumberFormatException ignored) {}
+        s.wacn = wacn.getText().trim(); s.sysId = sysId.getText().trim(); s.rfss = rfss.getText().trim(); s.siteNumber = siteNo.getText().trim();
         s.modulation = modulation.getSelectedIndex() == 1 ? "CQPSK" : "C4FM";
         s.nativeModulation = switch (nativeMod.getSelectedIndex()) { case 1 -> "c4fm"; case 2 -> "lsm"; default -> "auto"; };
         s.trafficChannels = (Integer) traffic.getValue();
@@ -238,8 +443,58 @@ public class SystemsPage extends JPanel {
         return true;
     }
 
+    /** Kind (Systems page index) -> the channel mode a pasted table is filtered by; null for trunked kinds. */
+    static p25monitor.rr.RrImport.ConvMode pasteMode(int kind) {
+        return switch (kind) {
+            case 1 -> p25monitor.rr.RrImport.ConvMode.P25;
+            case 2 -> p25monitor.rr.RrImport.ConvMode.DMR;
+            case 4 -> p25monitor.rr.RrImport.ConvMode.NXDN;
+            case 6 -> p25monitor.rr.RrImport.ConvMode.FM;
+            default -> null;
+        };
+    }
+
+    /**
+     * Paste (Ctrl+V, Shift+Insert or the right-click menu) in the Channels box of a conventional kind: a copied frequency
+     * table becomes channels of this kind, added to what is there. Returns false for an ordinary paste.
+     */
+    boolean pasteTable(JTextField field) {
+        p25monitor.rr.RrImport.ConvMode mode = pasteMode(kindBox.getSelectedIndex());
+        if (mode == null || !field.isEditable()) return false;
+        String clip;
+        try { clip = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(java.awt.datatransfer.DataFlavor.stringFlavor); }
+        catch (Exception e) { return false; }
+        java.util.List<RadioSystem.Channel> have;
+        try { have = RadioSystem.parseChannelText(field.getText()); } catch (RuntimeException e) { have = java.util.List.of(); }
+        p25monitor.rr.ChannelTable.Result r = p25monitor.rr.ChannelTable.convert(clip, mode, have);
+        if (r == null) return false;
+        String left = r.skipped() > 0 ? " " + r.skipped() + " row" + (r.skipped() == 1 ? "" : "s") + " left out (another mode, or already listed)." : "";
+        if (r.added() == 0) { f.toast("No new " + mode.label + " channels in the pasted text." + left); return true; }
+        String text = field.getText();
+        String before = text.substring(0, field.getSelectionStart()).stripTrailing(), after = text.substring(field.getSelectionEnd()).stripLeading();
+        String sep1 = before.isEmpty() ? "" : before.endsWith(",") ? " " : ", ";
+        String sep2 = after.isEmpty() || after.startsWith(",") ? "" : ", ";
+        field.setText(before + sep1 + r.text() + sep2 + after);
+        field.setCaretPosition((before + sep1 + r.text()).length());
+        f.toast("Added " + r.added() + " " + mode.label + " channel" + (r.added() == 1 ? "" : "s") + " from the pasted text." + left + " Check them, then Save.");
+        return true;
+    }
+
+    /** "136.0000, 12.5, 380" -> {base MHz, spacing kHz, offset}, or null when it is not three sensible numbers. */
+    public static double[] parseObt(String text) {
+        String[] p = text == null ? new String[0] : text.trim().split("[,;\\s]+");
+        if (p.length != 3) return null;
+        try {
+            double base = Double.parseDouble(p[0]), sp = Double.parseDouble(p[1]);
+            int off = Integer.parseInt(p[2]);
+            if (base < 30 || base > 1000 || sp <= 0 || sp > 100 || off < 0 || off > 1023) return null;
+            return new double[]{base, sp, off};
+        } catch (NumberFormatException e) { return null; }
+    }
+
     /** The system settings the radio engine only reads when it starts (tuning plan, control-channel hunt or conventional channels, demodulator). */
-    static String restartKey(RadioSystem s) { return s.kind + "|" + s.controlChannelsMHz + "|" + s.channelsProperty() + "|" + s.nac.trim() + "|" + s.nativeModulation; }
+    static String restartKey(RadioSystem s) { return s.kind + "|" + s.controlChannelsMHz + "|" + s.nxdnChannels + "|" + s.channelsProperty() + "|" + s.nac.trim() + "|" + s.nativeModulation + "|" + (s.analog() ? s.squelch : 0)
+            + "|" + (s.type2() ? s.type2BandPlan().toString() : ""); }
 
     void save(boolean monitor) {
         if (editing == null) return;
@@ -254,7 +509,7 @@ public class SystemsPage extends JPanel {
             f.display.setSystem(editing);
         }
         f.reloadSystems();
-        f.toast("Saved " + editing.name + (needsRestart && editing == f.app.current && f.running() ? " - press Restart to apply the new frequencies / NAC / demodulator (feeds stay connected)" : ""));
+        f.toast("Saved " + editing.name + (needsRestart && editing == f.app.current && f.running() ? " - press Restart to apply the new frequencies / NAC / demodulator / squelch (feeds stay connected)" : ""));
         if (monitor) {
             if (f.app.current != editing) { f.systemBox.setSelectedItem(editing); if (f.app.current != editing) f.selectSystem(editing); }
             f.show("Monitor");
@@ -288,11 +543,14 @@ public class SystemsPage extends JPanel {
         s.nac = o.nac; s.wacn = o.wacn; s.sysId = o.sysId;
         s.rfss = o.rfss; s.siteNumber = o.siteNumber; s.modulation = o.modulation; s.nativeModulation = o.nativeModulation; s.trafficChannels = o.trafficChannels; s.ignoreDataCalls = o.ignoreDataCalls;
         s.preferredTuner = o.preferredTuner; s.recordAll = o.recordAll; s.decodeMeter = o.decodeMeter; s.notes = o.notes;
+        s.dmrFlavor = o.dmrFlavor; s.colorCode = o.colorCode; s.timeslot = o.timeslot; s.squelch = o.squelch;
+        s.type2Plan = o.type2Plan; s.obtBaseMHz = o.obtBaseMHz; s.obtSpacingKHz = o.obtSpacingKHz; s.obtOffset = o.obtOffset;
+        s.nxdnChannels = new java.util.TreeMap<>(o.nxdnChannels);
         s.rrSid = o.rrSid; s.rrSites = o.rrSites; s.rrUpdated = o.rrUpdated; s.rrSeen = o.rrSeen;
         for (Talkgroup t : o.talkgroups) {
             Talkgroup n = new Talkgroup();
             n.decimal = t.decimal; n.alphaTag = t.alphaTag; n.mode = t.mode; n.description = t.description; n.tag = t.tag; n.category = t.category;
-            n.favorite = t.favorite; n.muted = t.muted; n.record = t.record; n.priority = t.priority; n.streams.addAll(t.streams);
+            n.favorite = t.favorite; n.muted = t.muted; n.touchMuted = t.touchMuted; n.record = t.record; n.priority = t.priority; n.color = t.color; n.streams.addAll(t.streams);
             s.talkgroups.add(n);
         }
         s.radios = o.radios.copy();

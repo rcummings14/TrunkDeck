@@ -111,6 +111,7 @@ final class CallManager {
     /** Why a call can't / mustn't be followed, or null if it can. */
     String skipReason(ActiveCall c) {
         ListenMode lm = e.app.listenMode();
+        if (c.freq <= 0 && c.type2) return "channel " + c.channel + " not in the band plan";
         if (c.freq <= 0) return "channel " + (c.channel >> 12) + "-" + (c.channel & 0xfff) + " not in band plan yet";
         if (c.unitToUnit) return "unit-to-unit call (not followed)";
         if (c.t != null && c.t.muted) return "muted / locked out";
@@ -126,13 +127,13 @@ final class CallManager {
         String why = skipReason(c);
         CallEvent ev = new CallEvent();
         ev.timestamp = e.ts.format(new Date(c.start));
-        ev.protocol = "APCO-25";
+        ev.protocol = c.type2 ? (c.analogVoice ? "Motorola Type II (analog)" : "Motorola Type II (P25)") : "APCO-25";
         ev.event = (c.phase2 ? "Phase 2 " : "") + (c.emergency ? "Emergency " : "") + (c.encrypted ? "Encrypted " : "") + (c.unitToUnit ? "Unit To Unit Call" : c.patch ? "Patch Group Call" : "Group Call");
         ev.from = c.src > 0 ? String.valueOf(c.src) : "";
         ev.to = String.valueOf(c.tg);
         ev.talkgroup = c.unitToUnit ? -1 : c.tg;
         ev.radioId = c.src;
-        ev.channel = (c.channel >> 12) + "-" + (c.channel & 0xfff);
+        ev.channel = c.type2 ? String.format("%03X", c.channel) : (c.channel >> 12) + "-" + (c.channel & 0xfff);
         ev.frequencyMHz = c.freq / 1e6;
         ev.timeslot = c.phase2 ? "TS" + (e.map.timeslot(c.channel) + 1) : "";
         ev.details = why == null ? "" : why.toUpperCase();

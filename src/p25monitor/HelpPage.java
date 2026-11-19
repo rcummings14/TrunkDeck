@@ -81,13 +81,15 @@ public class HelpPage extends JPanel {
 
     void refresh() {
         int n = -1, a = 0;
+        java.util.List<p25monitor.sdr.AirspyR2.Info> spies = java.util.List.of();
         try { n = p25monitor.sdr.RtlSdr.list().size(); } catch (Throwable ignored) {}
-        try { a = p25monitor.sdr.AirspyR2.list().size(); } catch (Throwable ignored) {}
+        try { spies = p25monitor.sdr.AirspyR2.list(); a = spies.size(); } catch (Throwable ignored) {}
         int o = 0;   // SDRplay / HackRF / LimeSDR / USRP: the last background search (never blocks this page)
         if (p25monitor.nativeengine.NativeEngine.soapyEnabled(f.app.settings) && p25monitor.sdr.SoapySdr.available()) o = p25monitor.sdr.SoapySdr.lastFound().size();
-        String found = (a > 0 ? a + " Airspy R2" + (n > 0 ? " + " : "") : "") + (n > 0 ? n + " RTL-SDR dongle(s)" : "") + (o > 0 ? (a > 0 || n > 0 ? " + " : "") + o + " other receiver(s) (untested)" : "");
+        String air = a > 0 ? p25monitor.sdr.AirspyR2.describeFound(spies) : "";
+        String found = (a > 0 ? air + (n > 0 ? " + " : "") : "") + (n > 0 ? n + " RTL-SDR dongle(s)" : "") + (o > 0 ? (a > 0 || n > 0 ? " + " : "") + o + " other receiver(s) (untested)" : "");
         set(engineOk, n > 0 || a > 0 || o > 0, "TrunkDeck engine ready: " + found + " found",
-                n == 0 || a > 0 ? "No receiver found - plug in your Airspy R2 or RTL-SDR (Windows: WinUSB driver via Zadig; Linux: USB rules below)" : "RTL-SDR library could not be loaded - see the Engine page");
+                n == 0 || a > 0 ? "No receiver found - plug in your Airspy R2, Airspy Mini or RTL-SDR (Windows: WinUSB driver via Zadig; Linux: USB rules below)" : "RTL-SDR library could not be loaded - see the Engine page");
         boolean codec = p25monitor.nativeengine.EngineLibs.jmbeReady() || p25monitor.nativeengine.EngineLibs.findJmbe(f.app.profile, f.app.settings.getProperty("native.jmbe", "")) != null;
         set(codecOk, codec, "Voice codec (JMBE) installed", "Voice codec not installed yet - Engine page \u2192 Build voice codec (one time, about a minute)");
         RadioSystem s = f.app.current;
@@ -144,10 +146,12 @@ public class HelpPage extends JPanel {
 
     static String guideHtml() {
         return "<html><body style='color:#DCE6F0;font-family:sans-serif'>" +
-                "<h3 style='color:#00E5FF'>1. Plug in your Airspy R2 or RTL-SDR dongles (tested)</h3>" +
-                "<b>Airspy R2:</b> one Airspy at 10 MS/s covers about 8.8 MHz - the control channel and every voice channel in that window are decoded at the same time (on many UHF and 800 MHz sites: the whole site). " +
-                "Windows: install the <b>WinUSB</b> driver with Zadig (pick <b>AIRSPY</b>, USB ID 1D50 60A1). Linux/Fedora: run the USB setup (udev rules) and install <b>libusb1</b>. " +
-                "On the <b>Engine</b> page set its role, sample rate (10 or 2.5 MS/s), gain (Linearity presets recommended) and bias-T (off unless your antenna needs power). The centre frequency is chosen automatically. " +
+                "<h3 style='color:#00E5FF'>1. Plug in your Airspy R2, Airspy Mini or RTL-SDR dongles (tested)</h3>" +
+                "<b>Airspy R2 and Airspy Mini:</b> one Airspy at 10 MS/s covers about 8.8 MHz - the control channel and every voice channel in that window are decoded at the same time (on many UHF and 800 MHz sites: the whole site). " +
+                "The Mini also runs at 6 MS/s (about 5.3 MHz) and 3 MS/s (about 2.6 MHz). The R2 also runs at 2.5 MS/s (about 2.2 MHz). " +
+                "TrunkDeck asks the receiver which rates it supports and lists it as Airspy Mini or Airspy R2. " +
+                "Windows: install the <b>WinUSB</b> driver with Zadig (pick <b>AIRSPY</b>, USB ID 1D50 60A1; the R2 and the Mini use the same USB ID). Linux/Fedora: run the USB setup (udev rules) and install <b>libusb1</b>. " +
+                "On the <b>Engine</b> page set its role, sample rate, gain (Linearity presets recommended) and bias-T (off unless your antenna needs power). The centre frequency is chosen automatically. " +
                 "<br>" +
                 "<b>RTL-SDR:</b> " +
                 "One dongle decodes the control channel. Every voice call inside its window (about 2 MHz around its centre) is decoded too, all at the same time. " +
@@ -169,16 +173,21 @@ public class HelpPage extends JPanel {
                 "Pick one in the <b>SYSTEM</b> box at the top, or add your own on the <b>Systems</b> page: type the control channel in MHz (e.g. <b>851.0125</b>). " +
                 "For a <b>conventional</b> P25 system (fixed channels, no control channel), choose Conventional and type the channel frequencies. Add a NAC after a colon if one channel uses its own (<b>155.2500:2D5</b>). " +
                 "<span style='color:#FFB300'>(untested)</span> P25 conventional has not been tested on a real radio system yet. If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + "). " +
+                "DMR conventional and DMR trunking (Tier III, Capacity Plus, Connect Plus and XPT) are also <span style='color:#FFB300'>(untested)</span>. " +
+                "Choose DMR on the Systems page, set the colour code and timeslot, and report problems on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + "). " +
                 "<b>With a RadioReference Premium account:</b> Systems page (or Tools below) &rarr; <b>Set up from RadioReference</b> - sign in, pick your state, county, system, site and talkgroups, and TrunkDeck fills in the control channels and talkgroup names (builds with a RadioReference app key only). " +
-                "Add the alternate control channel after a comma: the site uses one at a time and TrunkDeck switches over by itself if the active one goes quiet.<br>" +
+                "Add the alternate control channel after a comma: the site uses one at a time and TrunkDeck switches over by itself if the active one goes quiet. " +
+                "Tick <b>Auto-start when TrunkDeck opens</b> on a system to start it after a short countdown the next time TrunkDeck opens (only one system; Cancel is on the Monitor page). The home-network page can show the countdown but cannot change this.<br>" +
                 "<h3 style='color:#00E5FF'>4. Add talkgroups (optional but recommended)</h3>" +
                 "Talkgroups page &rarr; <b>Import CSV</b>. Columns like Decimal, Hex, Alpha Tag, Mode, Description, Tag, Category are recognised automatically " +
                 "(RadioReference exports work as-is). Use <b>Save CSV template</b> to start your own. " +
-                "<b>Radio IDs\u2026</b> on the same page names the radios: import a DSD+ <i>.radios</i> file or a CSV (radio_id,alias), or right-click a radio ID on the Monitor page \u2192 <b>Name this radio\u2026</b>. "
+                "<b>Radio IDs\u2026</b> on the same page names the radios: import a DSD+ <i>.radios</i> file or a CSV (radio_id,alias), or right-click a radio ID on the Monitor page \u2192 <b>Name this radio\u2026</b>. " +
+                "P25 Phase 1 saves a radio name heard over the air, and that name is the one used. "
                 + "Sites of the same radio system share one talkgroup list. TrunkDeck matches a WACN plus System ID (leading zeros do not matter) or the same RadioReference system. "
-                + "A name, favorite, mute, record, priority or stream assignment is kept once: change it on any of those sites and the others follow. "
+                + "A name, favorite, mute, record, priority, colour or stream assignment is kept once: change it on any of those sites and the others follow. "
                 + "A site with none of those IDs keeps its own list, so two sites with blank IDs stay separate. A conventional system keeps its own list too. "
-                + "Adding another site of a system you already have starts from the list you already keep, and a RadioReference import merges names into it and leaves favorites, mutes, record, priority and streams as they are.<br>" +
+                + "Adding another site of a system you already have starts from the list you already keep, and a RadioReference import merges names into it and leaves favorites, mutes, record, priority and streams as they are. "
+                + "The <b>Color</b> column picks a colour for that talkgroup's name and number while it is on the air (or Default, which keeps the display theme). The list itself stays the usual colours. The same text colour is used on the Monitor, Display only, and the home-network page. Sites of the same system share it.<br>" +
                 "<h3 style='color:#00E5FF'>5. Press START MONITORING</h3>" +
                 "The scanner display shows the call you are hearing. While TrunkDeck is scanning, the control channel on that display has a signal meter (bars and a level in dB). " +
                 "On a conventional system the same meter shows the channel being listened to. " +
@@ -199,14 +208,23 @@ public class HelpPage extends JPanel {
                 "<h3 style='color:#FFB300'>Good to know</h3>" +
                 "<ul><li><b>Play a saved call</b>: on the Recordings page, double-click it (or Play / Pause). The live call log does the same: double-click a call, or Play, or <b>Replay last</b> on the selected talkgroup. "
                 + "The talkgroup name and time stay on screen. A live call on the speaker pauses the recording and it continues when that call is over. "
-                + "Scanning, uploads and feeds keep going. Encrypted calls are not saved as audio.</li>"
+                + "Scanning, uploads and feeds keep going. Encrypted calls are not saved as audio. "
+                + "<b>Choose folder...</b> on the Recordings page picks where new recordings are saved, and it takes effect right away. "
+                + "<b>Use default</b> puts new recordings back in the usual folder (your home folder, then TrunkDeck, then recordings). "
+                + "Recordings already saved stay where they are and can still be played. If the folder is missing or TrunkDeck can't save files there, new recordings go to the usual folder and the page says why. "
+                + "The home-network page cannot change this folder.</li>"
                 + "<li><b>System tray</b>: the window's X sends TrunkDeck to the system tray (notification area) - monitoring, the speaker, feeds and uploads keep running. "
                 + "Click the tray icon to open it again; right-click it for <b>Open TrunkDeck</b>, <b>Display only</b>, <b>Mute speaker</b> (this PC only) and <b>Quit</b> (stops everything cleanly). "
                 + "Monitor page \u2192 Listening: <b>Close (X)</b> = Quit (normal) / System tray (default) / Display only, and <b>Minimize</b> = Taskbar (normal, default) / System tray / Display only. "
                 + "If the desktop has no tray (stock Fedora / GNOME: install the <i>AppIndicator and KStatusNotifierItem Support</i> extension) <i>System tray</i> is greyed out and X quits as before.</li>"
-                + "<li><b>Display only</b> (header button, or Ctrl+D): the window shrinks to just the big display - resize it and the display grows with it, drag it by the display. "
-                + "Double-click it (or Esc, Ctrl+D) for the full window; right-click it for <b>Full window</b>, <b>Always on top</b>, <b>Mute speaker</b>, <b>Minimize to tray</b> and <b>Quit</b>. "
-                + "Its size, place and Always on top are remembered. Monitoring, the speaker, recordings, feeds and uploads keep running the whole time.</li>" +
+                + "<li><b>Display only</b> (header button, or Ctrl+D): the window drops its title bar and shows just the big display. Drag the panel to move it, and drag an edge or a corner to resize it; the display grows with the window. "
+                + "Double-click the panel for the full window (a double-click on the touch buttons does not). Esc and Ctrl+D do the same. Right-click for <b>Exit Display-Only</b>, <b>Always on top</b>, <b>Mute speaker</b>, <b>Minimize to tray</b> and <b>Close TrunkDeck</b>. "
+                + "Its size, place and Always on top are remembered. Monitoring, the speaker, recordings, feeds and uploads keep running the whole time. "
+                + "Large buttons along the bottom of the display, inside the panel: <b>Mute all</b> silences what you hear here and on Listen, while calls are still decoded, logged, recorded and streamed. "
+                + "<b>Mute talkgroup</b> mutes the talkgroup on the display (or the latest call if nothing is on the air) everywhere, and keeps it in the <b>Muted list</b>. "
+                + "Tap a name in that list to unmute it. Talkgroups muted from the main window are not listed there. "
+                + "<b>Hold</b> stays on the talkgroup that is on the air and ignores the others until you tap it again. It is not remembered the next time TrunkDeck opens. "
+                + "These buttons are only on Display only. The home-network page and the main Monitor window do not show them.</li>" +
                 "<li>Encrypted talkgroups (shown purple) cannot be heard by any scanner software.</li>" +
                 "<li>P25 Phase 2 (TDMA) calls are decoded too: one Phase 2 channel carries two talkgroups (TS1 / TS2) and both are decoded. Phase 2 audio needs JMBE 2.x (the version <b>Build from source</b> makes). Phase 2 has been confirmed on one live Phase 2 system so far; please report problems with Copy diagnostics.</li>" +
                 "<li>Calls on a frequency no dongle can reach at that moment are listed as <b>MISSED (out of tuner range)</b> on the Engine page.</li>" +

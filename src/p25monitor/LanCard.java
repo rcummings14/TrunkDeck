@@ -347,6 +347,7 @@ final class LanCard {
         boolean onCall = s.monitoring && lit == 2 && (cur != null || last.any);
         s.hang = s.monitoring && lit == 1;
         s.activity = !s.monitoring ? "stopped" : onCall ? "call" : "scanning";
+        s.reduceMotion = f.display.reduceMotion;
         s.engine = s.monitoring ? eng.state() : "STOPPED";
         s.system = sys == null ? "NO SYSTEM" : sys.name;
         s.site = sys == null ? "" : sys.site;
@@ -376,6 +377,15 @@ final class LanCard {
         s.holdTg = eng.holdTg();
         s.volume = eng.speakerVolume();
         s.speakerMuted = eng.speakerMuted();
+        boolean holding = f.touch.hold();
+        f.touchReconcileHold();
+        if (holding && !f.touch.hold() && f.displayOnly != null) f.displayOnly.refreshTouch();
+        if (onCall || s.hang) {
+            int liveTg = cur != null ? cur.tg : last.tg;
+            Talkgroup colored = sys == null || liveTg <= 0 ? null : sys.find(liveTg);
+            java.awt.Color col = TalkgroupColors.parse(colored == null ? null : colored.color);
+            if (col != null && !s.emergency && !s.encrypted) s.liveText = TalkgroupColors.hex(col);
+        }
         int decoding = 0;
         for (CallView c : s.monitoring ? eng.activeCalls() : java.util.List.<CallView>of()) {
             if (c.state == null || !c.state.startsWith("WAITING")) decoding++;
@@ -400,6 +410,8 @@ final class LanCard {
             }
         }
         synchronized (recent) { s.recent.addAll(recent); }
+        s.autoStartIn = f.autoStartSeconds();
+        s.autoStartName = f.autoStartName() == null ? "" : f.autoStartName();
         return s;
     }
 
@@ -467,12 +479,21 @@ final class LanCard {
         c.tgid = hex(p.get(DisplayPalette.Field.TGID));
         c.radio = hex(p.get(DisplayPalette.Field.RADIO));
         c.freq = hex(p.get(DisplayPalette.Field.FREQ));
+        c.event = hex(p.get(DisplayPalette.Field.EVENT));
+        c.calltime = hex(p.get(DisplayPalette.Field.CALLTIME));
         c.system = hex(p.get(DisplayPalette.Field.SYSTEM));
         c.scan = hex(p.get(DisplayPalette.Field.SCAN));
+        c.labels = hex(p.get(DisplayPalette.Field.LABELS));
         c.dark = hex(p.get(DisplayPalette.Field.DARK));
         c.lit = hex(p.get(DisplayPalette.Field.BACKGROUND));
         c.idle = hex(p.idleText);
         c.label = hex(p.get(DisplayPalette.Field.LABELBAR_TEXT));
+        c.accent = hex(p.accent);
+        Color border = p.get(DisplayPalette.Field.BORDER);
+        c.glow = ScannerDisplay.silentRim(border) ? "" : hex(border == null ? p.accent : border);
+        Color top = p.get(DisplayPalette.Field.TOPBAR), lab = p.get(DisplayPalette.Field.LABELBAR);
+        c.topbar = top == null ? "" : hex(top);
+        c.labelbar = lab == null ? "" : hex(lab);
         return c;
     }
 

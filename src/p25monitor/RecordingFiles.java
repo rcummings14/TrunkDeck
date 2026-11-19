@@ -2,7 +2,7 @@ package p25monitor;
 
 import java.io.IOException;
 import java.nio.file.*;
-import java.util.Comparator;
+import java.util.*;
 import java.util.regex.*;
 
 /** Finds a saved call file. Recordings are named date_time_TrunkDeck_TO_talkgroup_FROM_radio.mp3 (or .wav). */
@@ -68,6 +68,16 @@ public final class RecordingFiles {
         return t == null ? "TG " + tg : t.displayName();
     }
 
+    /** The file for this call in the first folder that has it, or null. The current folder is searched first. */
+    public static Path find(java.util.List<Path> dirs, String timestamp, int tg, int radioId) {
+        if (dirs == null) return null;
+        for (Path d : dirs) {
+            Path p = find(d, timestamp, tg, radioId);
+            if (p != null) return p;
+        }
+        return null;
+    }
+
     /** The file for this call, or null. Prefers the exact radio id, then any file for that talkgroup and second. */
     public static Path find(Path dir, String timestamp, int tg, int radioId) {
         if (dir == null || tg < 0 || !Files.isDirectory(dir)) return null;
@@ -89,6 +99,20 @@ public final class RecordingFiles {
         return null;
     }
 
+    /** Newest recording of this talkgroup across these folders, or null. */
+    public static Path latest(java.util.List<Path> dirs, int tg) {
+        Path best = null;
+        long bestTime = Long.MIN_VALUE;
+        if (dirs == null) return null;
+        for (Path d : dirs) {
+            Path p = latest(d, tg);
+            if (p == null) continue;
+            long t = p.toFile().lastModified();
+            if (best == null || t > bestTime) { best = p; bestTime = t; }
+        }
+        return best;
+    }
+
     /** Newest recording of this talkgroup, or null. */
     public static Path latest(Path dir, int tg) {
         if (dir == null || tg < 0 || !Files.isDirectory(dir)) return null;
@@ -99,6 +123,32 @@ public final class RecordingFiles {
                 return (low.endsWith(".mp3") || low.endsWith(".wav")) && tgOf(n) == tg;
             }).max(Comparator.comparingLong((Path p) -> p.toFile().lastModified())).orElse(null);
         } catch (IOException e) { return null; }
+    }
+
+    /** Audio files in these folders, newest first. The same path is listed once. Sub-folders (such as I/Q) are not included. */
+    public static java.util.List<Path> list(java.util.List<Path> dirs, String query, int limit) {
+        String q = query == null ? "" : query.trim().toLowerCase();
+        java.util.Map<Path, Long> times = new java.util.LinkedHashMap<>();
+        if (dirs != null) for (Path dir : dirs) {
+            if (dir == null || !Files.isDirectory(dir)) continue;
+            try (DirectoryStream<Path> ds = Files.newDirectoryStream(dir)) {
+                for (Path p : ds) {
+                    String n = p.getFileName().toString().toLowerCase();
+                    if (!(n.endsWith(".mp3") || n.endsWith(".wav")) || !(q.isEmpty() || n.contains(q))) continue;
+                    if (!Files.isRegularFile(p)) continue;
+                    Path abs = p.toAbsolutePath().normalize();
+                    if (times.containsKey(abs)) continue;
+                    long t = 0;
+                    try { t = Files.getLastModifiedTime(p).toMillis(); } catch (IOException ignored) {}
+                    times.put(abs, t);
+                }
+            } catch (IOException ignored) {}
+        }
+        return times.entrySet().stream()
+                .sorted(java.util.Map.Entry.<Path, Long>comparingByValue().reversed())
+                .limit(Math.max(0, limit))
+                .map(java.util.Map.Entry::getKey)
+                .toList();
     }
 
     /** True when the playing file is this call (same second and talkgroup). */

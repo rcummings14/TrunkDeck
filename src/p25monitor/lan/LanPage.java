@@ -13,6 +13,7 @@ final class LanPage {
 <meta name="referrer" content="no-referrer">
 <title>TrunkDeck</title>
 <style>
+/*DISPLAY_FONT*/
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: #0A0E13; color: #DCE6F0;
@@ -34,39 +35,50 @@ final class LanPage {
   .note { color: #7D8FA3; font-size: 12px; margin: 0 16px 8px; }
   .err { color: #FF4D5E; min-height: 1.1em; margin: 0 16px 8px; font-size: 13px; }
   main { padding: 0 16px 28px; }
-  .bezel { background: linear-gradient(#1A2430, #0B1118); border: 1px solid #243244; border-radius: 22px; padding: 14px; }
-  .glass { position: relative; overflow: hidden; min-height: 230px; border-radius: 16px; border: 1px solid rgba(0,229,255,.35);
-    background: var(--dark, #020608); color: var(--tg, #00E5FF); padding: 18px 18px 14px;
-    font-family: Consolas, "Cascadia Mono", ui-monospace, monospace; }
-  .glass.call { background: var(--lit, #0A3440); border-color: var(--tg, #00E5FF); }
-  .glass::after { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 16px;
-    background: repeating-linear-gradient(to bottom, rgba(255,255,255,.04) 0 1px, transparent 1px 4px); }
-  .grow-top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-end; position: relative; z-index: 1; }
+  .bezel { background: linear-gradient(#1A2430, #0B1118); border: 1px solid var(--glow, transparent); border-radius: 22px; padding: 14px;
+    box-shadow: 0 0 18px color-mix(in srgb, var(--glow, transparent) 45%, transparent); }
+  .glass { position: relative; overflow: hidden; min-height: 230px; border-radius: 16px; border: 1px solid var(--glow, transparent);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--glow, transparent) 55%, transparent);
+    background: var(--dark, #020608); color: #EAF7FF; padding: 18px 18px 14px;
+    font-family: "TrunkDeck UI", "Segoe UI", sans-serif; }
+  .glass.call { background: var(--lit, #0A3440); }
+  .grow-top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-end; position: relative; z-index: 1;
+    padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid color-mix(in srgb, var(--glow, #ffffff) 35%, transparent);
+    background: var(--topbar, transparent); border-radius: 10px; }
   .sys { color: var(--system, #7D8FA3); font-weight: 700; font-size: 12px; letter-spacing: .04em; }
   .cc { color: var(--system, #7D8FA3); font-weight: 700; font-size: 12px; white-space: nowrap; }
   .sig { display: inline-flex; align-items: flex-end; gap: 6px; margin-left: 12px; }
   .sig i { width: 5px; height: 11px; background: rgba(220,230,240,.28); display: inline-block; }
-  .sig i.on { background: var(--scan, #00E5FF); }
+  .sig i.on { background: #FF8C1A; }
   .sig b { color: var(--freq, #DCE6F0); font-size: 12px; font-weight: 700; }
-  .big { position: relative; z-index: 1; font-weight: 800; font-size: clamp(28px, 4.6vw, 56px); letter-spacing: .02em;
-    margin: 22px 0 6px; min-height: 1.15em; white-space: nowrap; overflow: hidden; }
+  .big { position: relative; z-index: 1; font-family: "TrunkDeck Name", "TrunkDeck UI", sans-serif; font-weight: 700;
+    font-size: clamp(36px, 5.4vw, 68px); letter-spacing: .01em; font-style: normal;
+    margin: 18px 0 4px; min-height: 1.05em; white-space: nowrap; overflow: hidden; color: var(--tg, #00E5FF);
+    text-shadow: 0 0 12px var(--glow, transparent), 0 0 24px var(--glow, transparent); }
   .big.scan { color: var(--scan, #00E5FF); }
   .big.idle { color: var(--idle, #2F5A66); }
-  .big .run { display: inline-block; padding-left: 8px; animation: tick 7s linear infinite; }
-  @keyframes tick { from { transform: translateX(8%); } to { transform: translateX(-55%); } }
-  .line2 { position: relative; z-index: 1; min-height: 1.4em; font-weight: 700; font-size: 17px; color: var(--tgid, #FFB300); }
-  .line2.dim { color: var(--label, #7D8FA3); }
-  .badges { position: relative; z-index: 1; display: flex; gap: 8px; min-height: 8px; margin: 6px 0 14px; }
+  .big .run { display: inline-block; white-space: nowrap; will-change: transform; animation: tick 14s linear infinite; }
+  .big.reduce .run { animation: none; }
+  @keyframes tick { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) { .big .run { animation: none; } }
+  .line2 { position: relative; z-index: 1; min-height: 1.4em; font-weight: 700; font-size: 16px; color: var(--tgid, #FFB300); margin: 8px 0 0; }
+  .line2.dim { color: var(--labels, #7D8FA3); }
+  .badges { position: relative; z-index: 1; display: flex; gap: 8px; min-height: 8px; margin: 10px 0 16px; }
   .badge { font-size: 11px; font-weight: 700; letter-spacing: .04em; border-radius: 9px; padding: 1px 7px; border: 1px solid; }
   .badge.hot { color: #FF4D5E; border-color: #FF4D5E; }
   .badge.enc { color: #B388FF; border-color: #B388FF; }
   .badge.fav { color: #FFB300; border-color: #FFB300; }
   .badge.mute { color: #7D8FA3; border-color: #7D8FA3; }
-  .fields { position: relative; z-index: 1; display: grid; grid-template-columns: 1.3fr 1.6fr .8fr 1.2fr; gap: 8px; }
+  .fields { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0;
+    margin-top: 4px; padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--glow, #ffffff) 28%, transparent);
+    background: var(--labbar, transparent); border-radius: 8px; }
+  .fields > div { border-left: 1px solid color-mix(in srgb, var(--glow, #ffffff) 22%, transparent); padding: 2px 16px; min-width: 0; }
+  .fields > div:first-child { border-left: 0; padding-left: 0; }
   .fields label { display: block; color: var(--label, #7D8FA3); font-size: 10px; letter-spacing: .06em; }
-  .fields b { display: block; font-size: 15px; font-weight: 700; color: var(--value, #8FA3B5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .fields b.on { color: var(--freq, #DCE6F0); }
-  .fields b.unit.on { color: var(--radio, #DCE6F0); }
+  .fields b { display: block; font-size: 15px; font-weight: 700; color: var(--freq, #DCE6F0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #unit { color: var(--radio, #DCE6F0); }
+  #ctime { color: var(--call, #DCE6F0); }
+  #event { color: var(--event, #DCE6F0); }
   .cols { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; margin-top: 12px; }
   .card { background: #111821; border: 1px solid #243244; border-radius: 12px; padding: 12px 14px; margin: 0 0 12px; }
   .card h2 { margin: 0 0 8px; color: #7D8FA3; font: 700 11px/1.2 Consolas, monospace; letter-spacing: .08em; }
@@ -106,6 +118,7 @@ final class LanPage {
   <span id="pill" class="pill">STOPPED</span>
 </div>
 <p class="note">Home network only. This is the same Monitor as on the TrunkDeck computer.</p>
+<p id="countdown" class="note" hidden></p>
 <p id="err" class="err"></p>
 <main id="app" hidden>
   <div class="bezel" id="bezel">
@@ -141,11 +154,11 @@ final class LanPage {
     </div>
     <div>
       <div class="card">
-        <h2>SPEAKER</h2>
+        <h2>REMOTE AUDIO</h2>
         <div class="speaker-row">
           <input id="vol" type="range" min="0" max="100" value="80">
           <span id="volLabel">80 %</span>
-          <button id="spkMute" type="button">Mute</button>
+          <button id="spkMute" type="button">Mute remote</button>
         </div>
         <select id="speaker">
           <option value="PRIORITY">One call at a time (priority)</option>
@@ -153,6 +166,7 @@ final class LanPage {
           <option value="HOLD">Hold one talkgroup</option>
           <option value="QUEUE">Queue all calls (one after another)</option>
         </select>
+        <p class="note" style="margin:8px 0 0">Remote volume and mute affect this browser only.</p>
       </div>
       <div class="card">
         <h2>SELECTED TALKGROUP</h2>
@@ -182,10 +196,16 @@ final class LanPage {
 </section>
 <script>
 const $ = (id) => document.getElementById(id);
-let timer = 0, listening = false, ctx = null, abort = null, nextAt = 0, spare = new Uint8Array(0);
+let timer = 0, listening = false, ctx = null, remoteGain = null, abort = null, nextAt = 0, spare = new Uint8Array(0);
+let remoteMuted = false, remoteVolume = null;
 let state = null, sel = -1, scanTick = 0;
 
 function err(t) { $('err').textContent = t || ''; }
+
+function setRemoteGain() {
+  if (remoteGain && ctx) remoteGain.gain.setTargetAtTime(remoteMuted ? 0 : (remoteVolume || 0) / 100, ctx.currentTime, 0.02);
+  $('spkMute').textContent = remoteMuted ? 'Unmute remote' : 'Mute remote';
+}
 
 async function api(path, opt) {
   const r = await fetch(path, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, opt || {}));
@@ -218,6 +238,13 @@ function cssColors(c) {
   set('--lit', c.lit, '#0A3440');
   set('--idle', c.idle, '#2F5A66');
   set('--label', c.label, '#7D8FA3');
+  set('--labels', c.labels, '#7D8FA3');
+  set('--event', c.event, '#DCE6F0');
+  set('--call', c.calltime, '#DCE6F0');
+  set('--accent', c.accent, c.talkgroup || '#00E5FF');
+  set('--glow', c.glow, 'transparent');
+  set('--topbar', c.topbar, 'transparent');
+  set('--labbar', c.labelbar, 'transparent');
 }
 
 function bars(n, text, show) {
@@ -253,11 +280,63 @@ function clock(ms) {
   return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 }
 
+function showStill(big, extra, text) {
+  if (big.dataset.mode === 'still' && big.dataset.text === text && big.dataset.extra === extra) return;
+  big.dataset.mode = 'still';
+  big.dataset.text = text;
+  big.dataset.extra = extra;
+  big.className = 'big' + (extra ? ' ' + extra : '');
+  big.textContent = text;
+}
+/** One scrolling copy, drawn twice so a move of exactly half the width loops with no jump. The node stays across polls. */
+function keepScan(big, text, reduce, color, glow) {
+  const unit = text + '          ';
+  const want = unit + unit;
+  const run = big.querySelector('.run');
+  const same = big.dataset.mode === 'scan' && run && run.dataset.text === want && big.classList.contains('reduce') === reduce;
+  big.classList.add('scan');
+  big.classList.toggle('reduce', reduce);
+  big.style.color = color || '';
+  big.style.textShadow = (!reduce && glow) ? ('0 0 12px ' + glow + ', 0 0 24px ' + glow) : 'none';
+  if (same) return;
+  big.dataset.mode = 'scan';
+  big.dataset.text = want;
+  big.className = 'big scan' + (reduce ? ' reduce' : '');
+  big.style.color = color || '';
+  big.style.textShadow = (!reduce && glow) ? ('0 0 12px ' + glow + ', 0 0 24px ' + glow) : 'none';
+  const span = document.createElement('span');
+  span.className = 'run';
+  span.dataset.text = want;
+  span.textContent = reduce ? text : want;
+  big.replaceChildren(span);
+}
 function paint(s) {
   state = s;
   cssColors(s.colors);
+  const col = s.colors || {};
+  const glow = col.glow || '';
   const on = !!s.monitoring;
   const call = s.activity === 'call';
+  const glass = $('glass');
+  glass.style.background = call ? (col.lit || '#0A3440') : (col.dark || '#020608');
+  glass.style.borderColor = glow || 'transparent';
+  glass.style.boxShadow = glow ? ('0 0 16px ' + glow) : 'none';
+  const bezel = $('bezel');
+  bezel.style.borderColor = glow || 'transparent';
+  bezel.style.boxShadow = glow ? ('0 0 18px ' + glow) : 'none';
+  const top = document.querySelector('.grow-top');
+  if (top) top.style.background = col.topbar || 'transparent';
+  const fields = document.querySelector('.fields');
+  if (fields) fields.style.background = col.labelbar || 'transparent';
+  const cd = $('countdown');
+  const left = s.autoStartIn || 0;
+  if (left > 0) {
+    cd.hidden = false;
+    cd.textContent = 'Starting ' + (s.autoStartName || 'the system') + ' in ' + left + ' second' + (left === 1 ? '' : 's');
+  } else {
+    cd.hidden = true;
+    cd.textContent = '';
+  }
   $('glass').className = 'glass' + (call ? ' call' : '');
   const sys = (s.system || 'NO SYSTEM') + (s.site ? '  ·  ' + s.site : '');
   $('sys').textContent = sys.toUpperCase();
@@ -265,22 +344,18 @@ function paint(s) {
   const conv = !!s.conventional;
   bars(s.signalBars, s.signalText, on);
   const big = $('big');
-  big.className = 'big';
-  if (!on) { big.classList.add('idle'); big.textContent = (s.engine || 'STOPPED').toUpperCase(); }
+  if (!on && left > 0) showStill(big, 'idle', 'STARTING IN ' + left);
+  else if (!on) showStill(big, 'idle', (s.engine || 'STOPPED').toUpperCase());
   else if (call) {
-    big.style.color = s.emergency ? '#FF4D5E' : s.encrypted ? '#B388FF' : '';
-    big.textContent = (s.talkgroup || 'TG ' + s.talkgroupId).toUpperCase();
-  } else {
-    big.classList.add('scan');
-    big.style.color = '';
-    big.replaceChildren();
-    const run = document.createElement('span');
-    run.className = 'run';
-    run.textContent = 'SCANNING ...          SCANNING ...          SCANNING ...';
-    big.append(run);
-  }
+    const tint = s.emergency ? '#FF4D5E' : s.encrypted ? '#B388FF' : (s.liveText || col.talkgroup || '');
+    showStill(big, '', (s.talkgroup || 'TG ' + s.talkgroupId).toUpperCase());
+    big.style.color = tint;
+    big.style.textShadow = (!s.emergency && !s.encrypted && glow) ? ('0 0 12px ' + glow + ', 0 0 24px ' + glow) : 'none';
+  } else keepScan(big, 'SCANNING ...', !!s.reduceMotion, col.scan || '', glow);
   const line = $('line2');
   line.className = 'line2' + (call ? '' : ' dim');
+  line.style.color = (s.liveText && !s.emergency && !s.encrypted && (call || s.hang)) ? s.liveText
+      : (call || s.hang) ? (col.tgid || '') : (col.labels || '');
   if (call) line.textContent = (s.talkgroupId > 0 ? 'TG ' + s.talkgroupId : '') + (s.category ? '   ' + s.category : '') + (s.tag ? '  ·  ' + s.tag : '');
   else if (on && s.hang && s.talkgroupId > 0) line.textContent = 'HOLDING TG ' + s.talkgroupId + (s.talkgroup ? '  ' + s.talkgroup.toUpperCase() : '');
   else if (on && s.lastAgo >= 0 && s.talkgroupId > 0) line.textContent = 'LAST  TG ' + s.talkgroupId + (s.talkgroup ? '  ' + s.talkgroup.toUpperCase() : '');
@@ -309,12 +384,12 @@ function paint(s) {
     $('tlab').textContent = 'LAST CALL';
     $('ctime').textContent = '-';
   }
-  $('freq').className = call ? 'on' : '';
   $('unit').textContent = (call || s.hang || s.lastAgo >= 0) && s.radio ? s.radio : '-';
-  $('unit').className = 'unit' + (call ? ' on' : '');
   $('event').textContent = (call || s.hang) && s.event ? s.event : '-';
-  $('event').className = call ? 'on' : '';
-  $('ctime').className = call ? 'on' : '';
+  if (col.freq) $('freq').style.color = col.freq;
+  if (col.radio) $('unit').style.color = col.radio;
+  if (col.calltime) $('ctime').style.color = col.calltime;
+  if (col.event) $('event').style.color = col.event;
   $('pill').textContent = on ? 'LIVE' : 'STOPPED';
   $('pill').className = 'pill' + (on ? ' live' : '');
   $('start').disabled = on;
@@ -384,9 +459,10 @@ function paint(s) {
   fillTgs($('hot'), groups.filter((g) => g.lastHeard > 0).sort((a, b) => b.lastHeard - a.lastHeard).slice(0, 12), true);
   fillTgs($('groups'), groups, false);
   if (document.activeElement !== $('speaker')) $('speaker').value = s.speaker || 'PRIORITY';
-  if (document.activeElement !== $('vol')) $('vol').value = String(s.volume == null ? 80 : s.volume);
-  $('volLabel').textContent = (s.volume == null ? 80 : s.volume) + ' %';
-  $('spkMute').textContent = s.speakerMuted ? 'Unmute' : 'Mute';
+  if (remoteVolume == null) remoteVolume = s.volume == null ? 80 : s.volume;
+  if (document.activeElement !== $('vol')) $('vol').value = String(remoteVolume);
+  $('volLabel').textContent = remoteVolume + ' %';
+  setRemoteGain();
   scanTick++;
 }
 
@@ -468,7 +544,7 @@ function playPcm(bytes) {
   buf.getChannelData(0).set(f32);
   const src = ctx.createBufferSource();
   src.buffer = buf;
-  src.connect(ctx.destination);
+  src.connect(remoteGain || ctx.destination);
   const now = ctx.currentTime;
   if (nextAt < now + 0.02) nextAt = now + 0.12;
   if (nextAt - now > 1.2) nextAt = now + 0.12;
@@ -480,6 +556,7 @@ function stopListen() {
   listening = false;
   if (abort) { try { abort.abort(); } catch (e) {} abort = null; }
   if (ctx) { try { ctx.close(); } catch (e) {} ctx = null; }
+  remoteGain = null;
   spare = new Uint8Array(0);
   $('listen').textContent = 'Listen';
 }
@@ -490,6 +567,9 @@ async function listen() {
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) { err('This browser cannot play the audio.'); return; }
   ctx = new AC();
+  remoteGain = ctx.createGain();
+  remoteGain.connect(ctx.destination);
+  setRemoteGain();
   const resumed = ctx.resume();
   listening = true;
   $('listen').textContent = 'Stop listening';
@@ -534,14 +614,14 @@ $('speaker').addEventListener('change', async () => {
   try { paint(await api('/api/speaker', { method: 'POST', body: JSON.stringify({ mode, id }) })); err(''); }
   catch (e) { if (e.message !== 'sign-in') err(e.message); if (state) $('speaker').value = state.speaker || 'PRIORITY'; }
 });
-$('vol').addEventListener('change', async () => {
-  try { paint(await api('/api/volume', { method: 'POST', body: JSON.stringify({ volume: Number($('vol').value) }) })); }
-  catch (e) { if (e.message !== 'sign-in') err(e.message); }
+$('vol').addEventListener('input', () => {
+  remoteVolume = Number($('vol').value);
+  $('volLabel').textContent = remoteVolume + ' %';
+  setRemoteGain();
 });
-$('spkMute').addEventListener('click', async () => {
-  const muted = !(state && state.speakerMuted);
-  try { paint(await api('/api/speakermute', { method: 'POST', body: JSON.stringify({ muted }) })); err(''); }
-  catch (e) { if (e.message !== 'sign-in') err(e.message); }
+$('spkMute').addEventListener('click', () => {
+  remoteMuted = !remoteMuted;
+  setRemoteGain();
 });
 fetch('/api/state', { credentials: 'same-origin' }).then((r) => {
   if (r.ok) { $('login').hidden = true; $('app').hidden = false; refresh(); timer = setInterval(refresh, 1000); }
@@ -550,4 +630,9 @@ fetch('/api/state', { credentials: 'same-origin' }).then((r) => {
 </body>
 </html>
 """;
+
+    /** The page, with the bundled display fonts filled in. */
+    static String page() {
+        return HTML.replace("/*DISPLAY_FONT*/", p25monitor.DisplayFont.faceCss());
+    }
 }
