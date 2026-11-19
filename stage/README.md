@@ -33,6 +33,7 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
 * **Set up from RadioReference** imports these system types now. DMR, NXDN and SmartNet / SmartZone systems become the
   matching kind. Analog trunked systems (EDACS, LTR, MPT, Passport) become analog FM channels, listened to directly.
 * **Analog Hold / Scan / Down / Up** on the Monitor page, for analog FM systems: see *Listening*.
+* **PPM calibration with a waterfall:** *Engine* page → **Calibrate…** next to each RTL-SDR. See *PPM calibration tips*.
 * **Paste a frequency table** into **Systems → Channels MHz** for a conventional kind (analog FM, P25, DMR, NXDN).
   Select the table on a RadioReference frequency page (with or without its header row) and copy it, or copy a CHIRP CSV
   or spreadsheet columns (frequency, name, tone, mode), then paste with Ctrl+V or right-click → Paste. The rows of the system's mode are added
@@ -590,6 +591,20 @@ which can swap if you plug them into different ports. To avoid that, give one a 
 
 ### PPM calibration tips
 A P25 channel is only 12.5 kHz wide, and a cheap dongle can be 20–60 PPM off (9–27 kHz at 453 MHz).
+
+**Calibrate… (waterfall)**, new in 1.7.5: on the *Engine* page, each RTL-SDR has a **Calibrate…** button. It opens a
+live waterfall around a signal that is always on the air, with a green line where that signal should be.
+* Pick the **Reference**: your system's control channel is listed first, then the NOAA weather stations
+  (162.400–162.550 MHz). You can type any frequency and press Enter.
+* Turn **PPM** until the signal sits on the green line, or press **Auto** when a suggestion shows. The text under the
+  waterfall turns green when it is on frequency.
+* **Save & close** stores the PPM for that dongle. **Cancel** (or Esc) closes without changing it.
+* If monitoring is running, it pauses while the window is open and starts again when you close it, with the new PPM.
+  Feeds stay connected.
+* Works on analog-only setups too, since it doesn't need to decode anything. A control channel or NOAA station works
+  best; a channel that is only on during calls won't show a steady signal.
+
+While monitoring a P25 system, the engine also measures the error itself:
 * The engine **measures** each dongle's frequency error from the P25 signal itself (*Frequency error* on the Engine page),
   and corrects small errors automatically (up to about ±9 kHz).
 * Once it's locked, it shows advice such as *"Control dongle: measured +2276 Hz (+5.0 ppm, signals appear high) - set its PPM to -5 (now 0)."*.

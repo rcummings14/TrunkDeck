@@ -393,7 +393,15 @@ public class NativePage extends JPanel {
                 n.setFont(Theme.ui(Font.PLAIN, 12f));
                 n.setToolTipText(d.label());
                 n.setMinimumSize(new Dimension(70, n.getPreferredSize().height));
-                g.gridx = 0; g.weightx = 1; tunerRows.add(n, g); g.weightx = 0;
+                g.gridwidth = 3; g.gridx = 0; g.weightx = 1; tunerRows.add(n, g); g.weightx = 0;
+                JButton cal = new JButton("Calibrate…");
+                cal.setFont(Theme.ui(Font.PLAIN, 11f));
+                cal.setMargin(new Insets(1, 8, 1, 8));
+                cal.setToolTipText("Set this dongle's PPM with a live waterfall. Monitoring pauses while it is open and starts again when you close it.");
+                cal.addActionListener(e -> PpmCalibrator.open(f, d, this::rescan));
+                g.gridwidth = 1; g.gridx = 3; g.fill = GridBagConstraints.NONE; g.anchor = GridBagConstraints.EAST;
+                tunerRows.add(cal, g);
+                g.fill = GridBagConstraints.HORIZONTAL; g.anchor = GridBagConstraints.WEST;
                 g.gridwidth = 1; g.gridy = y++; g.insets = new Insets(2, 2, 3, 6);
                 JComboBox<String> role = new JComboBox<>(new String[]{"auto", "control", "voice", "off"});
                 role.setSelectedItem(ts.role);
