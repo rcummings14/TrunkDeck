@@ -32,7 +32,7 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
 * **Analog Hold / Scan / Down / Up** on the Monitor page, for analog FM systems: see *Listening*.
 * **Paste a frequency table** into **Systems → Channels MHz** for a conventional kind (analog FM, P25, DMR, NXDN).
   Select the table on a RadioReference frequency page (with or without its header row) and copy it, or copy a CHIRP CSV
-  or spreadsheet columns (frequency, name, tone, mode), then paste with Ctrl+V. The rows of the system's mode are added
+  or spreadsheet columns (frequency, name, tone, mode), then paste with Ctrl+V or right-click → Paste. The rows of the system's mode are added
   to the channels already there, with their names and their CTCSS tone (analog), NAC (P25) or colour code (DMR). CSQ
   and DCS (DPL) channels use carrier squelch. Rows of other modes and channels already listed are left out, and a
   message says how many channels were added. Paste several tables to build one system, check the list, then **Save**.

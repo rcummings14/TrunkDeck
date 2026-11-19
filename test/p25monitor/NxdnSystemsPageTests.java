@@ -25,6 +25,16 @@ public final class NxdnSystemsPageTests {
             check(RadioSystem.parseFreqs(SystemsPage.splitNxdnTable(shown, again)).equals(List.of(451.0)) && again.equals(t), "the box text reads back the same: " + shown);
             RadioSystem c = SystemsPage.copy(s);
             check(c.nxdnTrunk() && c.nxdnChannels.equals(t) && c.nxdnChannels != s.nxdnChannels, "a copied system keeps its own NXDN table");
+            // right-click menu: Paste goes through the box's own paste(), the same path as Ctrl+V (table paste)
+            int[] pastes = {0};
+            javax.swing.JTextField box = new javax.swing.JTextField("155.2500") { @Override public void paste() { pastes[0]++; } };
+            javax.swing.JPopupMenu m = SystemsPage.editMenu(box);
+            List<String> items = new ArrayList<>();
+            javax.swing.JMenuItem pasteItem = null;
+            for (java.awt.Component x : m.getComponents()) if (x instanceof javax.swing.JMenuItem mi) { items.add(mi.getText()); if (mi.getText().equals("Paste")) pasteItem = mi; }
+            check(box.getComponentPopupMenu() == m && items.equals(List.of("Cut", "Copy", "Paste", "Select all")), "right-click menu on the box: " + items);
+            pasteItem.doClick(0);
+            check(pastes[0] == 1, "right-click Paste runs the same paste as Ctrl+V (so a table becomes channels)");
         } catch (Throwable e) { e.printStackTrace(); fail++; }
         System.out.println("NxdnSystemsPageTests: " + pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);

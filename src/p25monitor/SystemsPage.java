@@ -195,7 +195,44 @@ public class SystemsPage extends JPanel {
         form.add(buttons, BorderLayout.SOUTH);
         add(form, BorderLayout.CENTER);
         rrRefresh.setVisible(false);
+        for (JTextField t : new JTextField[]{name, site, cc, nac, wacn, sysId, rfss, siteNo, tuner, obtPlan}) editMenu(t);
         refreshList();
+    }
+
+    /**
+     * Right-click menu for a text box: Cut, Copy, Paste, Select all. Paste goes through the box's own paste(), so in the
+     * Channels box a frequency table pasted with the mouse becomes channels, the same as Ctrl+V.
+     */
+    static JPopupMenu editMenu(javax.swing.text.JTextComponent t) {
+        JPopupMenu m = new JPopupMenu();
+        JMenuItem cut = new JMenuItem("Cut"), copy = new JMenuItem("Copy"), paste = new JMenuItem("Paste"), all = new JMenuItem("Select all");
+        int ctrl;
+        try { ctrl = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx(); } catch (HeadlessException e) { ctrl = java.awt.event.InputEvent.CTRL_DOWN_MASK; }
+        cut.setAccelerator(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_X, ctrl));
+        copy.setAccelerator(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_C, ctrl));
+        paste.setAccelerator(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_V, ctrl));
+        all.setAccelerator(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_A, ctrl));
+        cut.addActionListener(e -> t.cut());
+        copy.addActionListener(e -> t.copy());
+        paste.addActionListener(e -> { t.requestFocusInWindow(); t.paste(); });
+        all.addActionListener(e -> { t.requestFocusInWindow(); t.selectAll(); });
+        m.add(cut); m.add(copy); m.add(paste); m.addSeparator(); m.add(all);
+        m.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+            public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
+                boolean sel = t.getSelectionStart() != t.getSelectionEnd();
+                cut.setEnabled(sel && t.isEditable());
+                copy.setEnabled(sel);
+                boolean text;
+                try { text = Toolkit.getDefaultToolkit().getSystemClipboard().isDataFlavorAvailable(java.awt.datatransfer.DataFlavor.stringFlavor); }
+                catch (Exception x) { text = true; }
+                paste.setEnabled(t.isEditable() && text);
+                all.setEnabled(!t.getText().isEmpty());
+            }
+            public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {}
+            public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {}
+        });
+        t.setComponentPopupMenu(m);
+        return m;
     }
 
     int row(JPanel g, GridBagConstraints c, int y, String label, JComponent comp, String help) {
@@ -280,7 +317,7 @@ public class SystemsPage extends JPanel {
                 : fixed
                 ? "The frequencies to listen on, separated by commas. Add a NAC after a colon when one channel uses its own, for example 155.2500:2D5. The NAC below applies to every channel without its own."
                 : "Primary first; add alternate control channels separated by commas. TrunkDeck rotates through them until one locks.")
-                + (pasteMode(kind) != null ? " You can also paste a frequency table copied from a RadioReference page, a spreadsheet or a CHIRP CSV." : "")));
+                + (pasteMode(kind) != null ? " You can also paste a frequency table copied from a RadioReference page, a spreadsheet or a CHIRP CSV (Ctrl+V, or right-click → Paste)." : "")));
         boolean tier3 = kind == 3 && dmrFlavor.getSelectedIndex() == 0;
         demodLabel.setVisible(!dmr && !nxdn && !analog);
         nativeMod.setVisible(!dmr && !nxdn && !analog);

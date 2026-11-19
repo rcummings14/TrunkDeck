@@ -52,7 +52,7 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   * The display shows *HOLDING*, the channel name and its frequency. Other channels the receivers already cover are
     still recorded while you hold.
 * **Paste a frequency table** into the Channels box of a conventional system (analog FM, P25, DMR or NXDN): rows
-  copied from a RadioReference frequency page (with or without the header row), a CHIRP CSV, or spreadsheet columns.
+  copied from a RadioReference frequency page (with or without the header row), a CHIRP CSV, or spreadsheet columns. Paste with Ctrl+V or right-click → Paste.
   The rows of that system's mode are added with their names and tones (CTCSS for analog, NAC for P25, colour code for
   DMR). Other modes and channels already listed are left out, and a message says how many were added. Paste several
   tables to build one system. Nothing is downloaded: TrunkDeck only reads what you copied.
