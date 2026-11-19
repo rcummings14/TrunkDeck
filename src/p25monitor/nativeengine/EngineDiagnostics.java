@@ -17,9 +17,14 @@ final class EngineDiagnostics {
         long now = System.currentTimeMillis();
         List<String[]> r = new ArrayList<>();
         String alias = c.alias().isEmpty() ? "" : "  " + c.alias();
-        r.add(new String[]{"Talkgroup", (c.conventional ? "conventional " : "") + c.tg + alias + (c.priority < 100 ? "  (priority " + c.priority + ")" : "")});
+        String proto = c.ev == null || c.ev.protocol == null ? "" : c.ev.protocol;
+        boolean nxdn = proto.equals("NXDN"), dmr = proto.equals("DMR"), analog = proto.equals("Analog FM");
+        boolean p25 = !nxdn && !dmr && !analog;   // the frame, talkgroup-check and I/Q rows below are P25 only
+        r.add(new String[]{"Talkgroup", (nxdn ? "NXDN " : dmr ? "DMR " : "") + (c.conventional ? "conventional " : "") + c.tg + alias + (c.priority < 100 ? "  (priority " + c.priority + ")" : "")});
         r.add(new String[]{"Status", status});
-        r.add(new String[]{"Channel", mhz(c.freq) + " MHz  " + (c.type2 && c.analogVoice ? "analog FM" : c.phase2 ? "Phase 2 TDMA slot " + (c.slot + 1) : "Phase 1 FDMA") + (c.conventional ? "" : c.type2 ? String.format("  Type II ch %03X", c.channel) : "  ch " + (c.channel >> 12) + "-" + (c.channel & 0xfff)) + (c.tuner != null ? "  on tuner T" + c.tuner.id : "")});
+        String mode = analog || c.type2 && c.analogVoice ? "analog FM" : nxdn ? "NXDN" : dmr ? (c.slot >= 0 ? "DMR timeslot " + (c.slot + 1) : "DMR")
+                : c.phase2 ? "Phase 2 TDMA slot " + (c.slot + 1) : "Phase 1 FDMA";
+        r.add(new String[]{"Channel", mhz(c.freq) + " MHz  " + mode + (c.conventional ? "" : c.type2 ? String.format("  Type II ch %03X", c.channel) : "  ch " + (c.channel >> 12) + "-" + (c.channel & 0xfff)) + (c.tuner != null ? "  on tuner T" + c.tuner.id : "")});
         if (vd != null) {
             r.add(new String[]{"Frequency offset", String.format(Locale.ROOT, "%+.0f Hz measured (filter correction %+.0f Hz, FLL %d / AFC %d steps)", vd.frequencyError(), vd.afcHz, vd.fllSteps, vd.afcSteps)});
             r.add(new String[]{"Demodulator", vd.demodSummary() + (vd.demodSwitches > 0 ? "  (" + vd.demodSwitches + " switches)" : "")});
@@ -29,20 +34,22 @@ final class EngineDiagnostics {
                 r.add(new String[]{"TDMA frames", String.format(Locale.ROOT, "channel: %d fragments in sync (%d sync losses), ISCH %d ok / %d bad, %d MAC PDUs ok / %d bad; this slot: %d voice bursts (%d AMBE+2 frames), %d transmissions, %d end-of-transmission (MAC_END_PTT / idle)",
                         p.fragments, Math.max(0, p.lockCount - 1), p.ischOk, p.ischBad, p.macOk, p.macBad, c.ldus, c.p2Frames, c.ptts, c.tdus)});
                 r.add(new String[]{"Scrambling", vd.scramblingSummary()});
-            } else
+            } else if (p25)
             r.add(new String[]{"Frames", String.format(Locale.ROOT, "%d syncs, %d NID ok / %d bad, %d voice LDUs (%d lost, replaced by silence), %d transmissions, %d end-of-transmission (TDU)", vd.syncs() - c.syncBase, vd.nidOk() - c.nidOkBase, vd.nidBad() - c.nidBadBase, c.ldus, c.lostLdus, c.ptts, c.tdus)});
+            else r.add(new String[]{"Frames", c.ptts + " transmissions"});
             r.add(new String[]{"Stream", TunerAdvice.streamSummary(vd) + (vd.phaseJumps >= 3 && vd.phaseJumps * 480000L > vd.jumpSamples ? "  - SAMPLES ARE BEING LOST (USB/CPU) or the signal is extremely weak: voice frames after each break are garbage" : "  (should be 0 or close to it)")});
         } else {
             r.add(new String[]{"Frequency offset", String.format(Locale.ROOT, "max %.0f Hz during the call", c.maxAbsOffset)});
-            r.add(new String[]{"Frames", String.format(Locale.ROOT, "%d voice LDUs, %d transmissions", c.ldus, c.ptts)});
+            r.add(new String[]{"Frames", p25 ? String.format(Locale.ROOT, "%d voice LDUs, %d transmissions", c.ldus, c.ptts) : c.ptts + " transmissions"});
         }
         String codec = c.phase2 ? "AMBE+2" : "IMBE";
         if (c.imbeFrames > 0) r.add(new String[]{codec + " error histogram", TunerAdvice.histSummary(c)});
         if (c.imbeFrames >= 50 && c.imbeBad * 5 > c.imbeFrames)
-            r.add(new String[]{"Recommendation", "Voice is still damaged: tick Record voice-channel I/Q, let it save 2-3 calls, and send one or two of the .wav files (I/Q folder) together with this text."});
+            r.add(new String[]{"Recommendation", p25 ? "Voice is still damaged: tick Record voice-channel I/Q, let it save 2-3 calls, and send one or two of the .wav files (I/Q folder) together with this text."
+                    : "Voice is still damaged: check the antenna, gain and signal level on this channel. (Record voice-channel I/Q works for P25 calls only.)"});
         r.add(new String[]{codec + " voice frames", c.imbeFrames == 0 ? (c.imbe == null ? (c.phase2 ? "AMBE+2 codec not available (needs JMBE 2.x)" : "voice codec not installed") : c.encrypted ? "encrypted - not decoded" : "none yet")
                 : String.format(Locale.ROOT, "%d decoded, %.2f corrected bits/frame (clean speech 0-1), %.1f%% repeated, %.1f%% muted as noise", c.imbeFrames, (double) c.imbeErrSum / c.imbeFrames, 100.0 * c.imbeRepeat / c.imbeFrames, 100.0 * c.imbeBad / c.imbeFrames)});
-        r.add(new String[]{"Talkgroup check", c.lcMismatch == 0 ? (c.lastLcTg == -1 ? "not confirmed yet" : c.phase2 ? "OK (MAC PDUs of the slot match)" : "OK (link control matches)") : c.lcMismatch + (c.phase2 ? " MAC PDUs" : " voice frames") + " for other talkgroups rejected"});
+        if (p25) r.add(new String[]{"Talkgroup check", c.lcMismatch == 0 ? (c.lastLcTg == -1 ? "not confirmed yet" : c.phase2 ? "OK (MAC PDUs of the slot match)" : "OK (link control matches)") : c.lcMismatch + (c.phase2 ? " MAC PDUs" : " voice frames") + " for other talkgroups rejected"});
         r.add(new String[]{"Audio", String.format(Locale.ROOT, "%d ms buffered (jitter buffer %d ms), %d underruns, %d frames dropped (session)", e.audio.queuedMs(), e.audio.prebufferMs, e.audio.underruns, e.audio.droppedFrames)});
         String ga = gainAdvice();
         if (!ga.isEmpty()) r.add(new String[]{"Gain", ga});

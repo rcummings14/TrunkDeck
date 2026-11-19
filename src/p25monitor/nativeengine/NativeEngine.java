@@ -1443,6 +1443,8 @@ public final class NativeEngine {
 
     public List<String> bandPlan() {
         List<String> out = new ArrayList<>();
+        RadioSystem s = sys;
+        if (s != null && (s.nxdn() || s.dmr() || s.analog() || s.type2())) return out;   // P25 channel identifiers: left over from an earlier P25 system
         List<ChannelMap.Band> b = new ArrayList<>(map.bands());
         b.sort(Comparator.comparingInt(x -> x.id));
         for (ChannelMap.Band x : b) out.add(String.format(Locale.ROOT, "Band %2d: base %s MHz, spacing %.2f kHz, %s", x.id, mhz(x.baseHz), x.spacingHz / 1000.0,

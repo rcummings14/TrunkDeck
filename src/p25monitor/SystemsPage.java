@@ -117,7 +117,11 @@ public class SystemsPage extends JPanel {
         int y = 0;
         cc.setFont(Theme.mono(Font.BOLD, 15f));
         tuner.putClientProperty("JTextField.placeholderText", "optional - e.g. Airspy 0x26A464DC2B5A7C9F (see Setup & Help \u2192 Tuners)");
-        kindBox.addActionListener(e -> showKind(kindBox.getSelectedIndex()));
+        kindBox.addActionListener(e -> {
+            int k = kindBox.getSelectedIndex();
+            if (shownKind == 5 && k != 5) cc.setText(withoutNxdnTable(cc.getText()));   // the number=MHz entries only work for NXDN trunked
+            showKind(k);
+        });
         dmrFlavor.addActionListener(e -> { if (kindBox.getSelectedIndex() == 3) showKind(3); });
         type2Plan.addActionListener(e -> { if (kindBox.getSelectedIndex() == 7) showKind(7); });
         obtPlan.putClientProperty("JTextField.placeholderText", "base MHz, spacing kHz, offset - e.g. 136.0000, 12.5, 380");
@@ -293,7 +297,11 @@ public class SystemsPage extends JPanel {
         return y + 1;
     }
 
+    /** The Kind the form is laid out for, so a change away from NXDN trunked can tidy the channel box. */
+    private int shownKind;
+
     void showKind(int kind) {
+        shownKind = kind;
         boolean fixed = kind == 1 || kind == 2 || kind == 4 || kind == 6;
         boolean analog = kind == 6;
         boolean dmr = kind == 2 || kind == 3;
@@ -439,6 +447,23 @@ public class SystemsPage extends JPanel {
             table.put(ch, mhz);
         }
         return rest.toString();
+    }
+
+    /**
+     * Kind changed away from NXDN trunked: the box text as a plain list of frequencies. The control channels are kept and
+     * each "number=MHz" entry becomes its frequency, each frequency listed once. A token that is not a number is left as
+     * typed, so the usual "Check the frequency" message still points at it.
+     */
+    static String withoutNxdnTable(String text) {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        for (String tok : text.split("[,;\\s]+")) {
+            if (tok.isBlank()) continue;
+            int eq = tok.indexOf('=');
+            String f = eq < 0 ? tok : tok.substring(eq + 1).trim();
+            try { f = RadioSystem.fmt(Double.parseDouble(f)); } catch (NumberFormatException ex) { f = tok; }
+            out.add(f);
+        }
+        return String.join(", ", out);
     }
 
     boolean readForm(RadioSystem s) {

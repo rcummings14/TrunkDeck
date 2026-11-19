@@ -110,6 +110,36 @@ public final class NxdnTests {
         for (boolean[] fr : frames) { for (int d : NxdnReceiver.dibits(NxdnReceiver.SYNC_BITS)) rx2.dibit(d ^ 2); for (int d : NxdnReceiver.dibits(fr)) rx2.dibit(d ^ 2); }
         check(rx2.frames == 6 && events.contains("release"), "receiver: inverted signal decodes too (" + rx2.frames + ")");
 
+        // noise must not lock: random dibits match the sync word (<= 2 wrong bits) about every 2500 symbols, and half of
+        // the frames after them pass the LICH parity; without the CRC confirmation that reported calls on empty channels
+        List<String> noise = new ArrayList<>();
+        NxdnReceiver rxn = new NxdnReceiver(rxListener(noise));
+        boolean everLocked = false;
+        for (int k = 0; k < 2_000_000; k++) { rxn.dibit(r.nextInt(4)); everLocked |= rxn.locked(); }
+        check(noise.isEmpty() && !everLocked && rxn.frames == 0, "receiver: 2 million random dibits never lock and report nothing (" + noise.size() + " events, " + rxn.frames + " frames)");
+
+        // one frame alone is only a candidate; the second one at the right spacing (with a CRC) locks, and both are used
+        List<String> one = new ArrayList<>();
+        NxdnReceiver rx1 = new NxdnReceiver(rxListener(one));
+        for (int d : NxdnReceiver.burst(frames.get(0))) rx1.dibit(d);
+        for (int k = 0; k < 400; k++) rx1.dibit(0);   // a quiet gap (no chance sync word inside it)
+        boolean alone = one.isEmpty() && !rx1.locked();
+        for (int d : NxdnReceiver.burst(frames.get(0))) rx1.dibit(d);
+        for (int d : NxdnReceiver.burst(frames.get(1))) rx1.dibit(d);
+        check(alone && rx1.locked() && one.contains("call") && rx1.frames == 2, "receiver: a lone frame is ignored, two in a row lock and the first is decoded too (" + one + ", " + rx1.frames + " frames)");
+
+        // demodulator on noise only (no signal at all), both rates at once: 20 s, no call or voice
+        List<String> dn = new ArrayList<>();
+        NxdnDemod noiseDemod = new NxdnDemod(rxListener(dn));
+        float[] ni = new float[48000], nq = new float[48000];
+        boolean demodLocked = false;
+        for (int s = 0; s < 20; s++) {
+            for (int k = 0; k < ni.length; k++) { ni[k] = (float) r.nextGaussian(); nq[k] = (float) r.nextGaussian(); }
+            noiseDemod.baseband(ni, nq, ni.length);
+            demodLocked |= noiseDemod.synced();
+        }
+        check(dn.isEmpty() && !demodLocked, "demodulator: 20 s of noise give no lock, call or voice (" + dn.size() + " events)");
+
         // demodulator: both rates, unknown symbol phase, carrier offset, noise, half gain
         for (int baud : new int[]{2400, 4800}) {
             List<String> dev = new ArrayList<>();

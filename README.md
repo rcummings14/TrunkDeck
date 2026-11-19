@@ -21,7 +21,9 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   * **DMR conventional:** channels with their colour code and timeslot (`450.0000:1/2`), or both timeslots.
   * **DMR trunked:** Tier III, Capacity Plus, Connect Plus and XPT.
   * **NXDN conventional and NXDN Type-C trunked:** NXDN48 and NXDN96 are detected automatically. Sites that use channel
-    numbers take `number=MHz` entries (`37=451.0125`).
+    numbers take `number=MHz` entries (`37=451.0125`). Changing the Kind from NXDN trunked to another kind removes
+    those entries and keeps their frequencies. TrunkDeck locks onto NXDN only after two frames in a row, one of them
+    with a checksum that passes, so an empty channel no longer shows "TG 0" calls made from noise.
   * **Analog FM (conventional):** channels with names and an optional CTCSS (PL) tone per channel (`155.3700:100.0 Fire`),
     plus a squelch setting from 1 to 10.
   * **Motorola Type II**, described below.

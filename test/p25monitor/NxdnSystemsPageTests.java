@@ -25,6 +25,10 @@ public final class NxdnSystemsPageTests {
             check(RadioSystem.parseFreqs(SystemsPage.splitNxdnTable(shown, again)).equals(List.of(451.0)) && again.equals(t), "the box text reads back the same: " + shown);
             RadioSystem c = SystemsPage.copy(s);
             check(c.nxdnTrunk() && c.nxdnChannels.equals(t) && c.nxdnChannels != s.nxdnChannels, "a copied system keeps its own NXDN table");
+            // Kind changed from NXDN trunked to a conventional kind: the channel numbers come out, each frequency once
+            String plain = SystemsPage.withoutNxdnTable("150.9200, 151.9100, 1=150.9200, 2=151.9100, 3=152.3375");
+            check(plain.equals("150.9200, 151.9100, 152.3375") && RadioSystem.parseChannelText(plain).size() == 3, "switching to conventional drops the number=MHz entries: " + plain);
+            check(SystemsPage.withoutNxdnTable("451.0, 37=abc").equals("451.0000, 37=abc"), "a bad entry is left as typed for the usual error message");
             // right-click menu: Paste goes through the box's own paste(), the same path as Ctrl+V (table paste)
             int[] pastes = {0};
             javax.swing.JTextField box = new javax.swing.JTextField("155.2500") { @Override public void paste() { pastes[0]++; } };

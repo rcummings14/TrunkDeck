@@ -20,7 +20,10 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
   * **DMR trunked:** **Tier III**, **Capacity Plus**, **Connect Plus** or **XPT**.
   * **NXDN (conventional)** and **NXDN trunked (Type-C):** NXDN48 and NXDN96 are detected automatically. Trunked sites
     that announce their frequencies need only the control channel. For a site that uses channel numbers, add each voice
-    channel as `number=MHz` (`37=451.0125`).
+    channel as `number=MHz` (`37=451.0125`). Changing the Kind from NXDN trunked to another kind removes those entries
+    and keeps their frequencies. TrunkDeck locks onto NXDN only after two frames in a row, one of them with a checksum
+    that passes, so an empty channel no longer shows "TG 0" calls made from noise. If an NXDN system shows nothing at
+    all, no NXDN signal is reaching the antenna on those frequencies.
   * **Analog FM (conventional):** channels with an optional name and their own CTCSS (PL) tone (`155.3700:100.0 Fire`;
     `155.3700 100.0` works too). A system-wide tone, and a **Squelch** from 1 (opens easiest) to 10 (strong signals
     only, default 5). With no tone set, the tone heard is shown on the call. **Scan delay** (0-30 seconds, default 2):

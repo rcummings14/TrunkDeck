@@ -4,8 +4,11 @@ package p25monitor.nxdn;
  * NXDN receiver on a dibit stream (01 = +3, 00 = +1, 10 = -1, 11 = -3, the same mapping as P25 and DMR).
  *
  * <p>Hunting: the last 10 dibits are compared with the frame sync word 0xCDF59, in both polarities, and accepted with up
- * to 2 wrong bits. Once a frame has decoded with a good LICH, the next sync word is expected exactly 192 symbols later
- * and is accepted there with up to 5 wrong bits; three misses in a row drop back to hunting.
+ * to 2 wrong bits. That alone matches plain noise several times a second (the demodulator runs 30 sample phases), and
+ * the LICH has a single parity bit, so a first frame is only a candidate: the receiver locks when the next sync word
+ * follows exactly 192 symbols later (up to 2 wrong bits) and one of the two frames has a field that passes its CRC
+ * (CAC, SACCH or FACCH1). Nothing is reported before that; the candidate frame is then decoded too, so no header is
+ * lost. Once locked, the next sync word is accepted with up to 5 wrong bits; three misses in a row drop back to hunting.
  *
  * <p>Each frame is decoded by {@link NxdnFrame}. Calls are reported from FACCH1 VCALL messages, from the four-part SACCH
  * superframe and (on a control channel) from CAC voice call assignments. Written for this program; NXDN protocol facts
@@ -32,6 +35,8 @@ public final class NxdnReceiver {
     private int shift;           // last 10 dibits, 2 bits each
     private boolean locked, inverted;
     private int collecting = -1; // dibits collected into the frame, or -1 when not in a frame
+    /** Not locked yet: the last frame decoded after a sync word, waiting for the next sync word to confirm it. */
+    private NxdnFrame candidate;
     private final float[] soft = new float[NxdnFrame.BITS];
     private int sinceFrame, misses;
     /** SACCH superframe fragments, by part (0 = first). */
@@ -49,6 +54,7 @@ public final class NxdnReceiver {
 
     public void reset() {
         shift = 0; locked = false; inverted = false; collecting = -1; sinceFrame = 0; misses = 0; sacchHave = 0; callSrc = callDst = -1;
+        candidate = null;
     }
 
     public void dibit(int d) {
@@ -69,6 +75,10 @@ public final class NxdnReceiver {
             if (++misses < 3) { start(inverted); return; }   // flywheel: the frame is where it should be
             locked = false;
             endCall(null);
+        } else if (candidate != null) {
+            if (sinceFrame < SYNC_LEN) return;
+            if ((inverted ? flipped : normal) <= 2) { start(inverted); return; }   // the frame after the candidate
+            candidate = null;   // no sync word where it belongs: it was noise, hunt again from here
         }
         if (normal <= 2) start(false);
         else if (flipped <= 2) start(true);
@@ -76,12 +86,27 @@ public final class NxdnReceiver {
 
     private void start(boolean inv) { inverted = inv; collecting = 0; sinceFrame = 0; }
 
+    /** A field of the frame passed its CRC, which noise almost never does. */
+    private static boolean checked(NxdnFrame f) {
+        return f.control() ? f.cacOk : f.sacchOk || !f.facch1.isEmpty();
+    }
+
     private void frame() {
         NxdnFrame f = NxdnFrame.decode(soft);
-        if (!f.lichOk) {
-            lichBad++;
-            if (!locked) return;
-        } else locked = true;
+        if (!locked) {
+            if (!f.lichOk) { lichBad++; candidate = null; return; }
+            NxdnFrame first = candidate;
+            if (first == null || !(checked(first) || checked(f))) { candidate = f; return; }   // keep waiting for a CRC
+            candidate = null;
+            locked = true;
+            misses = 0;
+            use(first);
+        } else if (!f.lichOk) lichBad++;
+        use(f);
+    }
+
+    /** A frame on a locked channel: its control message, or its SACCH, FACCH1 and voice. */
+    private void use(NxdnFrame f) {
         frames++;
         if (f.control()) {
             if (!f.cacOk) { crcBad++; return; }
