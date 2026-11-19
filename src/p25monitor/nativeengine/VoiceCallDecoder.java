@@ -139,6 +139,7 @@ final class VoiceCallDecoder {
         c.lastVoice = now;
         c.lastSeen = Math.max(c.lastSeen, now);
         c.voiceFrames++;
+        c.voiceMs += imbe == null || imbe.length == 0 ? 180 : imbe.length * 20L;   // P25 LDU: 9 x 20 ms; DMR burst 3, NXDN frame 4
         ChannelDecoder vd = c.vd;
         if (vd != null) c.maxAbsOffset = Math.max(c.maxAbsOffset, Math.abs(vd.frequencyError()));
         if (e.conventional && c.conventional && !c.eligible) { c.unconfirmed.clear(); return; }
@@ -331,6 +332,7 @@ final class VoiceCallDecoder {
         c.lastVoice = now;
         c.lastSeen = Math.max(c.lastSeen, now);
         c.p2Frames += frames.length;
+        c.voiceMs += frames.length * 20L;
         c.voiceFrames = (int) ((c.p2Frames + 8) / 9);       // in Phase 1 units (180 ms) for durations and checks
         ChannelDecoder vd = c.vd;
         if (vd != null) c.maxAbsOffset = Math.max(c.maxAbsOffset, Math.abs(vd.frequencyError()));
@@ -592,6 +594,7 @@ final class VoiceCallDecoder {
     // ------------------------------------------------------------------ analog FM (untested on air)
     /** An analog transmission opened the squelch (and matched the channel's CTCSS tone, when it has one). */
     void onAnalogStart(long f, double tone) {
+        if (e.lockedOut(f)) return;
         synchronized (e) {
             ActiveCall old = e.callMap.get("A" + f);
             if (old != null && !old.ended) return;
@@ -632,12 +635,14 @@ final class VoiceCallDecoder {
         if (c.hang) { c.hang = false; c.ptts++; }
         c.lastVoice = now; c.lastSeen = Math.max(c.lastSeen, now);
         c.voiceFrames++; c.imbeFrames++;
+        c.voiceMs += pcm.length / 8;   // 8 kHz audio
         if (c.encrypted) return;
         emit(c, pcm, pcm.length, new int[]{c.tg, c.lastLcTg, 0, 0});
     }
 
     /** 20 ms of analog audio at 8 kHz. */
     void onAnalogAudio(long f, float[] pcm) {
+        if (e.lockedOut(f)) return;
         ActiveCall c;
         synchronized (e) { c = e.callMap.get("A" + f); }
         if (c == null || c.ended) { onAnalogStart(f, 0); synchronized (e) { c = e.callMap.get("A" + f); } }
@@ -645,6 +650,7 @@ final class VoiceCallDecoder {
         long now = System.currentTimeMillis();
         c.lastVoice = now; c.lastSeen = Math.max(c.lastSeen, now);
         c.voiceFrames++; c.imbeFrames++;
+        c.voiceMs += pcm.length / 8;   // 8 kHz audio
         e.lastAnalogHeard = f; e.lastAnalogAt = now;
         emit(c, pcm, pcm.length, new int[]{c.tg, c.lastLcTg, 0, 0});
     }

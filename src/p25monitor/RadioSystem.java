@@ -57,6 +57,8 @@ public class RadioSystem {
     public int squelch = p25monitor.analog.FmReceiver.SQUELCH_DEFAULT;
     /** Analog scan delay: seconds the scan stays on a channel after its transmission ends, 0 to {@value #SCAN_DELAY_MAX}. */
     public int scanDelay = SCAN_DELAY_DEFAULT;
+    /** Analog channels locked out from the Monitor page (Hz): not played, recorded or scanned. Saved with the system. */
+    public final java.util.Set<Long> lockout = java.util.concurrent.ConcurrentHashMap.newKeySet();
     public static final int SCAN_DELAY_DEFAULT = 2, SCAN_DELAY_MAX = 30;
     /** Motorola Type II band plan: auto, 800reband, 800standard, 800splinter, 900 or obt (VHF/UHF, uses the three values below). */
     public String type2Plan = "auto";
@@ -163,6 +165,14 @@ public class RadioSystem {
             if (c.name != null && !c.name.isBlank()) t += " " + c.name.trim();
             j.add(t);
         }
+        return j.toString();
+    }
+
+    /** Saved form of {@link #lockout}: MHz of the locked-out channels still in the list, in list order. */
+    public String lockoutProperty() {
+        StringJoiner j = new StringJoiner(",");
+        java.util.Set<Long> seen = new java.util.HashSet<>();
+        for (Channel c : channels) { long hz = Math.round(c.mhz * 1e6); if (lockout.contains(hz) && seen.add(hz)) j.add(fmt(c.mhz)); }
         return j.toString();
     }
 
@@ -398,7 +408,11 @@ public class RadioSystem {
             p.setProperty("colorCode", String.valueOf(colorCode));
             p.setProperty("timeslot", String.valueOf(timeslot));
         }
-        if (analog()) { p.setProperty("squelch", String.valueOf(squelch)); p.setProperty("scanDelay", String.valueOf(scanDelay)); }
+        if (analog()) {
+            p.setProperty("squelch", String.valueOf(squelch)); p.setProperty("scanDelay", String.valueOf(scanDelay));
+            String lo = lockoutProperty();
+            if (!lo.isEmpty()) p.setProperty("lockout", lo);
+        }
         if (type2()) {
             p.setProperty("type2Plan", type2Plan == null ? "auto" : type2Plan);
             p.setProperty("obtBase", fmt(obtBaseMHz));
@@ -451,6 +465,9 @@ public class RadioSystem {
         try { s.squelch = Math.max(p25monitor.analog.FmReceiver.SQUELCH_MIN, Math.min(p25monitor.analog.FmReceiver.SQUELCH_MAX,
                 Integer.parseInt(p.getProperty("squelch", String.valueOf(p25monitor.analog.FmReceiver.SQUELCH_DEFAULT)).trim()))); } catch (Exception ignored) {}
         try { s.scanDelay = Math.max(0, Math.min(SCAN_DELAY_MAX, Integer.parseInt(p.getProperty("scanDelay", String.valueOf(SCAN_DELAY_DEFAULT)).trim()))); } catch (Exception ignored) {}
+        for (String m : p.getProperty("lockout", "").split(",")) {
+            try { if (!m.isBlank()) s.lockout.add(Math.round(Double.parseDouble(m.trim()) * 1e6)); } catch (NumberFormatException ignored) {}
+        }
         s.type2Plan = p25monitor.motorola.Type2BandPlan.Kind.of(p.getProperty("type2Plan", "auto")).key;
         try { s.obtBaseMHz = Double.parseDouble(p.getProperty("obtBase", "0").trim()); } catch (Exception ignored) {}
         try { s.obtSpacingKHz = Double.parseDouble(p.getProperty("obtSpacing", "0").trim()); } catch (Exception ignored) {}

@@ -61,7 +61,8 @@ public class MonitorPage extends JPanel {
     final JCheckBox tintApp = new JCheckBox("Tint the whole app in these colours");
     /** Analog systems only (shown while one is running): Hold the channel being heard, Scan to go back to all. */
     final JButton holdBtn = MainFrame.button("Hold", null, Theme.CYAN), scanBtn = MainFrame.button("Scan", null, Theme.CYAN),
-            downBtn = MainFrame.button("Down", null, Theme.CYAN), upBtn = MainFrame.button("Up", null, Theme.CYAN);
+            downBtn = MainFrame.button("Down", null, Theme.CYAN), upBtn = MainFrame.button("Up", null, Theme.CYAN),
+            lockBtn = MainFrame.button("Lockout", null, Theme.CYAN), lockedBtn = MainFrame.button("Locked out", null, Theme.AMBER);
     final JLabel holdLbl = new JLabel();
     final JPanel holdBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
     final JComboBox<String> speakerBox = new JComboBox<>(new String[]{"One call at a time (priority)", "Mix all calls", "Hold one talkgroup", "Queue all calls (one after another)"});
@@ -89,7 +90,12 @@ public class MonitorPage extends JPanel {
         north.add(autoStartBar, BorderLayout.NORTH);
         north.add(f.display, BorderLayout.CENTER);
         holdBar.setOpaque(false);
-        holdBar.add(holdBtn); holdBar.add(scanBtn); holdBar.add(downBtn); holdBar.add(upBtn); holdBar.add(holdLbl);
+        holdBar.add(holdBtn); holdBar.add(scanBtn); holdBar.add(downBtn); holdBar.add(upBtn); holdBar.add(lockBtn); holdBar.add(lockedBtn); holdBar.add(holdLbl);
+        lockBtn.setToolTipText("Lock out the channel you are hearing (or the one held): it is skipped - not played, recorded or scanned - until you unlock it. Saved with the system.");
+        lockedBtn.setToolTipText("Channels locked out on this system: choose one to unlock it");
+        lockBtn.addActionListener(e -> lockoutNow());
+        lockedBtn.addActionListener(e -> showLockedOut());
+        lockedBtn.setVisible(false);
         downBtn.setToolTipText("Hold the previous channel in the system's list");
         upBtn.setToolTipText("Hold the next channel in the system's list");
         downBtn.addActionListener(e -> { String why = f.nativeEngine.stepAnalog(-1); if (why != null) f.toast(why); refreshHold(); });
@@ -111,7 +117,7 @@ public class MonitorPage extends JPanel {
         table.setFillsViewportHeight(true);
         table.setShowVerticalLines(false);
         table.setDefaultRenderer(Object.class, new LiveRenderer());
-        int[] widths = {80, 70, 210, 120, 190, 90, 150, 60};
+        int[] widths = {80, 70, 210, 120, 190, 90, 150, 60, 70};
         for (int i = 0; i < widths.length; i++) table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         table.getSelectionModel().addListSelectionListener(e -> {
             int r = table.getSelectedRow();
@@ -597,6 +603,46 @@ public class MonitorPage extends JPanel {
                 + q[2] + " call(s) skipped by the " + f.nativeEngine.speakerQueueMaxDelay() + " s limit. The list below shows the live calls.");
     }
 
+    /** Lockout: the channel heard (or held) is skipped from now on, and the system is saved so it stays locked out. */
+    void lockoutNow() {
+        var ne = f.nativeEngine;
+        long hz = ne.lockoutTarget();
+        if (hz <= 0) { f.toast("Nothing heard yet to lock out."); return; }
+        ne.lockout(hz);
+        saveLockout();
+        f.toast("Locked out " + channelText(hz) + ". Press Locked out to unlock it.");
+        refreshHold();
+    }
+
+    void showLockedOut() {
+        var ne = f.nativeEngine;
+        List<Long> lo = ne.lockedOutChannels();
+        JPopupMenu m = new JPopupMenu();
+        for (long hz : lo) {
+            JMenuItem it = new JMenuItem("Unlock " + channelText(hz));
+            it.addActionListener(e -> { ne.unlock(hz); saveLockout(); f.toast("Unlocked " + channelText(hz) + "."); refreshHold(); });
+            m.add(it);
+        }
+        if (lo.size() > 1) {
+            m.addSeparator();
+            JMenuItem all = new JMenuItem("Unlock all");
+            all.addActionListener(e -> { for (long hz : lo) ne.unlock(hz); saveLockout(); f.toast("Every channel is unlocked."); refreshHold(); });
+            m.add(all);
+        }
+        if (m.getComponentCount() > 0) m.show(lockedBtn, 0, lockedBtn.getHeight());
+    }
+
+    String channelText(long hz) {
+        String name = f.nativeEngine.channelName(hz);
+        return (name.isEmpty() ? "" : name + " ") + p25monitor.nativeengine.NativeEngine.mhzText(hz) + " MHz";
+    }
+
+    void saveLockout() {
+        RadioSystem s = f.nativeEngine.system();
+        if (s == null || s.id == null || s.id.isBlank()) return;
+        try { f.app.save(s); } catch (Exception ex) { f.toast("Could not save the lockout: " + ex.getMessage()); }
+    }
+
     /** Analog systems only: Hold / Scan under the display, and which channel is held. */
     void refreshHold() {
         boolean on = f.nativeEngine.analogRunning();
@@ -604,6 +650,11 @@ public class MonitorPage extends JPanel {
         if (holdBar.isVisible() != on) { holdBar.setVisible(on); holdBar.revalidate(); }
         holdBtn.setEnabled(on && hf == 0);
         scanBtn.setEnabled(hf > 0);
+        lockBtn.setEnabled(on);
+        int locked = on ? f.nativeEngine.lockedOutChannels().size() : 0;
+        String lt = "Locked out (" + locked + ")";
+        if (!lt.equals(lockedBtn.getText())) lockedBtn.setText(lt);
+        if (lockedBtn.isVisible() != (locked > 0)) { lockedBtn.setVisible(locked > 0); holdBar.revalidate(); }
         String name = hf > 0 ? f.nativeEngine.channelName(hf) : "";
         holdLbl.setText(hf > 0 ? "HOLDING " + (name.isEmpty() ? "" : name.toUpperCase() + "  ") + p25monitor.nativeengine.NativeEngine.mhzText(hf) + " MHz" : "");
     }
@@ -718,7 +769,7 @@ public class MonitorPage extends JPanel {
 
     class LiveModel extends AbstractTableModel {
         final List<Row> rows = new ArrayList<>();
-        final String[] cols = {"Time", "TG", "Alpha tag", "Category", "Radio", "Freq MHz", "Event", "Secs"};
+        final String[] cols = {"Time", "TG", "Alpha tag", "Category", "Radio", "Freq MHz", "Event", "Secs", "Level"};
         public int getRowCount() { return rows.size(); }
         public int getColumnCount() { return cols.length; }
         public String getColumnName(int c) { return cols[c]; }
@@ -733,7 +784,8 @@ public class MonitorPage extends JPanel {
                 case 4: return e.radioId > 0 && f.app.current != null ? f.app.current.radioLabel(e.radioId) : e.radioId >= 0 ? String.valueOf(e.radioId) : e.from;
                 case 5: return e.frequencyMHz > 0 ? String.format(Locale.ROOT, "%.5f", e.frequencyMHz) : "";
                 case 6: return e.event + (e.timeslot.isBlank() ? "" : " " + e.timeslot);
-                default: return e.durationMs > 0 ? String.valueOf(e.durationMs / 1000) : "";
+                case 7: return e.durationMs > 0 ? String.valueOf(e.durationMs / 1000) : "";
+                default: return Double.isNaN(e.levelDb) ? "" : String.format(Locale.ROOT, "%.0f dB", e.levelDb);
             }
         }
     }

@@ -43,14 +43,16 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   imported as P25). Type I still imports as P25. **Note:** some RadioReference listings still say "Type II SmartZone"
   for systems that have since moved to a P25 control channel. If the Engine page shows P25 (NAC, WACN, system ID) on
   your control channel but no calls, change the system's Kind to *Trunked (control channel)*.
-* **Analog Hold / Scan / Down / Up** (Monitor page): while an analog system is running, four buttons appear under the
-  scanner display. These buttons only show for analog systems.
+* **Analog Hold / Scan / Down / Up / Lockout** (Monitor page): while an analog system is running, these buttons appear
+  under the scanner display. They only show for analog systems.
   * **Hold** stays on the channel you are hearing (or the last one heard): only that channel plays, and a receiver that
     steps through channel groups stops stepping.
   * **Down** / **Up** step through the channels in the order you entered them, wrapping around, and hold each one.
   * **Scan delay** (Systems page): how many seconds scanning waits on a channel after a transmission ends, so you hear
     the reply. 0 to 30, default 2.
   * **Scan** goes back to all channels.
+  * **Lockout** skips the channel you are hearing (not played, recorded or scanned), saved with the system.
+    **Locked out (n)** unlocks them.
   * The display shows *HOLDING*, the channel name and its frequency. Other channels the receivers already cover are
     still recorded while you hold.
 * **Paste a frequency table** into the Channels box of a conventional system (analog FM, P25, DMR or NXDN): rows

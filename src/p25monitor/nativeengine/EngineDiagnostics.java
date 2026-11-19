@@ -112,6 +112,27 @@ final class EngineDiagnostics {
                 c == e.speaker.speaker ? "  SPEAKER" : "");
     }
 
+    /** The call's signal level now (dB), as the active calls list shows it; NaN if not measured. */
+    double levelOf(ActiveCall c) {
+        double db = Double.NaN;
+        ChannelDecoder d = c.vd;
+        if (d != null && !Double.isNaN(d.syncPower)) db = d.syncPower;
+        if (Double.isNaN(db) && c.conventional) {
+            for (ChannelDecoder p : e.decodersOn(c.tuner)) if (p.freqHz == c.freq && !Double.isNaN(p.signalDb)) db = p.signalDb;
+        }
+        return db;
+    }
+
+    /** Every 250 ms: adds the level of each call that is carrying voice to its average (Live call log, Level). */
+    void sampleLevels(long now) {
+        for (ActiveCall c : e.callMap.values()) if (!c.ended && c.voiceFrames > 0 && now - c.lastVoice < 1000) sampleLevel(c);
+    }
+
+    void sampleLevel(ActiveCall c) {
+        double db = levelOf(c);
+        if (!Double.isNaN(db) && !Double.isInfinite(db)) { c.levelSum += db; c.levelN++; }
+    }
+
     List<CallView> activeCalls() {
         long now = System.currentTimeMillis();
         List<CallView> out = new ArrayList<>();
@@ -124,11 +145,7 @@ final class EngineDiagnostics {
             v.encrypted = c.encrypted; v.emergency = c.emergency; v.slot = c.phase2 && c.slot >= 0 ? c.slot + 1 : 0;
             boolean live = c.vd != null || (c.conventional && c.voiceFrames > 0 && now - c.lastVoice < 1500);
             v.recording = live && ((c.t != null && c.t.record) || e.calls.recordAll());
-            ChannelDecoder d = c.vd;
-            if (d != null && !Double.isNaN(d.syncPower)) v.levelDb = d.syncPower;
-            if ((d == null || Double.isNaN(v.levelDb)) && c.conventional) {
-                for (ChannelDecoder p : e.decodersOn(c.tuner)) if (p.freqHz == c.freq && !Double.isNaN(p.signalDb)) v.levelDb = p.signalDb;
-            }
+            v.levelDb = levelOf(c);
             if (c.imbeFrames > 0) v.bitsPerFrame = (double) c.imbeErrSum / c.imbeFrames;
             v.state = c.waiting ? "WAITING FOR TUNER" : c.encrypted ? "ENCRYPTED" : v.audible ? "PLAYING" : c.hang ? "HANG" : live && now - c.lastVoice < 800 ? "VOICE" : live ? "LISTENING" : "-";
             out.add(v);

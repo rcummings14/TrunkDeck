@@ -845,9 +845,9 @@ public final class NativeEngine {
         final long freq = f;
         double tone = sys == null ? 0 : sys.toneFor(f);
         d.analog = new p25monitor.analog.FmReceiver(tone, new p25monitor.analog.FmReceiver.Listener() {
-            public void start(double toneHz) { d.lastFrameAt = System.currentTimeMillis(); voice.onAnalogStart(freq, toneHz); }
+            public void start(double toneHz) { if (lockedOut(freq)) return; d.lastFrameAt = System.currentTimeMillis(); voice.onAnalogStart(freq, toneHz); }
             public void tone(double toneHz) { voice.onAnalogTone(freq, toneHz); }
-            public void audio(float[] pcm) { d.lastFrameAt = System.currentTimeMillis(); voice.onAnalogAudio(freq, pcm); }
+            public void audio(float[] pcm) { if (lockedOut(freq)) return; d.lastFrameAt = System.currentTimeMillis(); voice.onAnalogAudio(freq, pcm); }
             public void end() { voice.onAnalogEnd(freq); }
         });
         d.analog.setSquelch(sys == null ? p25monitor.analog.FmReceiver.SQUELCH_DEFAULT : sys.squelch);
@@ -978,10 +978,13 @@ public final class NativeEngine {
             if (scanTuner != null && scanGroups.size() > 1 && (mode == Mode.RTL || huntable)
                     && speaker.holdFreq == 0 && !scanBusy(now) && now - lastScanAt >= Long.getLong("trunkdeck.convScanMs", 5_000L)) {
                 lastScanAt = now;
-                scanIndex = (scanIndex + 1) % scanGroups.size();
-                List<Long> g = scanGroups.get(scanIndex);
-                for (ActiveCall c : new ArrayList<>(callMap.values())) if (c.tuner == scanTuner && !c.ended) calls.endCall(c, "changing channel");
-                tunePark(scanTuner, ConventionalPlan.center(g, scanTuner.halfSpan(), scanTuner.dcGuard), "next channels (" + mhzList(g) + ")");
+                int next = nextScanGroup();
+                if (next != scanIndex) {
+                    scanIndex = next;
+                    List<Long> g = scanGroups.get(scanIndex);
+                    for (ActiveCall c : new ArrayList<>(callMap.values())) if (c.tuner == scanTuner && !c.ended) calls.endCall(c, "changing channel");
+                    tunePark(scanTuner, ConventionalPlan.center(g, scanTuner.halfSpan(), scanTuner.dcGuard), "next channels (" + mhzList(g) + ")");
+                }
             }
         }
         if (mode == Mode.FILE && ccSource != null && !ccSource.running()) {
@@ -993,6 +996,16 @@ public final class NativeEngine {
         if (cur != null) state = (cur.encrypted ? "ENCRYPTED " : "VOICE ") + "TG " + cur.tg + (dec > 1 ? "  +" + (dec - 1) : "");
         else if (dec > 0) state = dec + " CALL" + (dec == 1 ? "" : "S");
         else state = speaker.holdFreq > 0 ? "HOLD " + mhz(speaker.holdFreq) : scanGroups.size() > 1 ? "SCANNING CHANNELS" : "LISTENING";
+    }
+
+    /** The next scan group with a channel that is not locked out (the current one if every other group is locked out). */
+    int nextScanGroup() {
+        int n = scanGroups.size(), i = scanIndex;
+        for (int k = 0; k < n; k++) {
+            i = (i + 1) % n;
+            for (long f : scanGroups.get(i)) if (!lockedOut(f)) return i;
+        }
+        return scanIndex;
     }
 
     boolean scanBusy(long now) {
@@ -1182,6 +1195,7 @@ public final class NativeEngine {
             synchronized (this) { n = pendingMsgs; pendingMsgs = 0; last = lastMsg; }
             if (n > 0) listener.messages(n, last);
             calls.housekeep(now);
+            diag.sampleLevels(now);
             tdma.refreshScrambler();
             nxdnHousekeeping(now);
             watchSync(now);
@@ -1307,12 +1321,74 @@ public final class NativeEngine {
         if (!analogRunning()) return "Up / Down work on analog systems.";
         List<Long> fs = analogChannels();
         if (fs.isEmpty()) return "This system has no channels.";
+        List<Long> all = fs;
+        fs = new ArrayList<>(fs);
+        fs.removeIf(this::lockedOut);
+        if (fs.isEmpty()) return "Every channel is locked out.";
         long cur = speaker.holdFreq;
         if (cur <= 0) { ActiveCall s = speaker.speaker; cur = s != null && !s.ended && s.conventional ? s.freq : lastAnalogHeard; }
+        int n;
         int i = fs.indexOf(cur);
-        int n = i < 0 ? (dir > 0 ? 0 : fs.size() - 1) : Math.floorMod(i + (dir > 0 ? 1 : -1), fs.size());
+        if (i >= 0) n = Math.floorMod(i + (dir > 0 ? 1 : -1), fs.size());
+        else {   // from a locked-out channel: the next one in the list that is not locked out
+            int at = all.indexOf(cur);
+            n = dir > 0 ? 0 : fs.size() - 1;
+            if (at >= 0) for (int k = 1; k <= all.size(); k++) {
+                long c = all.get(Math.floorMod(at + (dir > 0 ? k : -k), all.size()));
+                if (fs.contains(c)) { n = fs.indexOf(c); break; }
+            }
+        }
         holdOn(fs.get(n));
         return null;
+    }
+
+    /** Whether this analog channel is locked out (Monitor page, Lockout). */
+    boolean lockedOut(long hz) { RadioSystem s = sys; return s != null && s.lockout.contains(hz); }
+
+    /** The running system (the one Lockout saves to). */
+    public RadioSystem system() { return sys; }
+
+    /** What Lockout would lock out: the channel playing, else the one held, else the last one heard (0 = nothing yet). */
+    public long lockoutTarget() {
+        if (!analogRunning()) return 0;
+        ActiveCall s = speaker.speaker;
+        if (s != null && !s.ended && s.conventional && s.freq > 0) return s.freq;
+        if (speaker.holdFreq > 0) return speaker.holdFreq;
+        return lastAnalogHeard;
+    }
+
+    /**
+     * Lockout: this analog channel is skipped from now on - not played, recorded or logged, and scanning does not wait
+     * on it - until it is unlocked. The caller saves the system so it stays locked out after a restart.
+     */
+    public void lockout(long hz) {
+        RadioSystem s = sys;
+        if (s == null || hz <= 0) return;
+        s.lockout.add(hz);
+        if (speaker.holdFreq == hz) scanAnalog();
+        synchronized (this) {
+            ActiveCall c = callMap.get("A" + hz);
+            if (c != null && !c.ended) calls.endCall(c, "locked out");
+        }
+        if (lastAnalogHeard == hz) { lastAnalogHeard = 0; lastAnalogAt = 0; }
+        String name = channelName(hz);
+        log("Lockout: " + (name.isEmpty() ? "" : name + " ") + mhz(hz) + " MHz - skipped until it is unlocked (Monitor page, Locked out)");
+    }
+
+    /** Unlock: the channel is scanned and played again. The caller saves the system. */
+    public void unlock(long hz) {
+        RadioSystem s = sys;
+        if (s == null || !s.lockout.remove(hz)) return;
+        String name = channelName(hz);
+        log("Unlocked: " + (name.isEmpty() ? "" : name + " ") + mhz(hz) + " MHz");
+    }
+
+    /** The locked-out channels of the running analog system, in the system's order. */
+    public List<Long> lockedOutChannels() {
+        List<Long> l = new ArrayList<>();
+        if (!analogRunning()) return l;
+        for (long f : analogChannels()) if (lockedOut(f)) l.add(f);
+        return l;
     }
 
     /** The channel's name from the system (or ""), for the Monitor page's hold label. */

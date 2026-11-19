@@ -32,7 +32,10 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
 * DMR and NXDN voice use the AMBE+2 codec: they need JMBE 2.x, the same as P25 Phase 2.
 * **Set up from RadioReference** imports these system types now. DMR, NXDN and SmartNet / SmartZone systems become the
   matching kind. Analog trunked systems (EDACS, LTR, MPT, Passport) become analog FM channels, listened to directly.
-* **Analog Hold / Scan / Down / Up** on the Monitor page, for analog FM systems: see *Listening*.
+* **Analog Hold / Scan / Down / Up / Lockout** on the Monitor page, for analog FM systems: see *Listening*.
+* **Level** in the live call log: each call's average signal level while it was on the air (dB, like the Active calls
+  list). The log's **Secs** is now the real length on analog, Type II, DMR and NXDN calls too (it was several times too
+  long).
 * **PPM calibration with a waterfall:** *Engine* page → **Calibrate…** next to each RTL-SDR (and each SoapySDR receiver,
   untested). See *PPM calibration tips*.
 * **Paste a frequency table** into **Systems → Channels MHz** for a conventional kind (analog FM, P25, DMR, NXDN).
@@ -342,7 +345,7 @@ in a few seconds - your feeds stay connected (listeners hear silence for that mo
 
 | Page | What it does |
 |---|---|
-| **Monitor** | The scanner display (the call on the speaker: big alpha tag, talkgroup, category/tag, frequency, radio ID, call timer, ENC / EMERGENCY / FAV / MUTED badges; a dimmed SCANNING when no call is playing), control-channel meter, activity graph). Below it: the **Active calls** table, the live call log (double-click a call, or **Play**, to hear its recording), **Hot talkgroups**, the **Speaker** choice, and quick buttons for the selected talkgroup (**Favorite, Mute, Add to list, Replay last**). **What to play:** *Everything*, *Only talkgroups in my list*, or *Favorites only*. |
+| **Monitor** | The scanner display (the call on the speaker: big alpha tag, talkgroup, category/tag, frequency, radio ID, call timer, ENC / EMERGENCY / FAV / MUTED badges; a dimmed SCANNING when no call is playing), control-channel meter, activity graph). Below it: the **Active calls** table, the live call log (with each call's length in seconds and its average signal **Level**; double-click a call, or **Play**, to hear its recording), **Hot talkgroups**, the **Speaker** choice, and quick buttons for the selected talkgroup (**Favorite, Mute, Add to list, Replay last**). **What to play:** *Everything*, *Only talkgroups in my list*, or *Favorites only*. |
 | **Talkgroups** | Your list for the selected system. **Import CSV**, **Export CSV**, **Save CSV template**, search box, category filter, *Favorites* / *Heard* filters. Tick ★ (favorite), **Mute** and **Rec** (record) per talkgroup. Edit names, categories and **Priority** (1 = most important, 100 = normal) in the table. The **Color** column sets the colour of that talkgroup's name and number while it is on the air (or Default, which keeps the display theme). The list itself stays the usual colours. The Monitor, Display only, and the home-network page use that text colour. Sites of the same system share it. Select rows (Ctrl/Shift-click or Ctrl+A) to favorite, mute, record or assign streams in bulk. |
 | **Systems** | Add or edit systems: **Kind** (P25 trunked, P25 conventional, DMR, DMR trunked, NXDN, NXDN trunked, analog FM, Motorola Type II), name, site, **control channel(s) in MHz** (or the channels, for a conventional kind), demodulator (Auto / C4FM / LSM for simulcast), optional NAC/WACN/System ID/RFSS/Site, **Max simultaneous calls**, *Record every call*, and *Auto-start when TrunkDeck opens* (only one system; the next time TrunkDeck opens it starts after a short countdown on the Monitor page, with Cancel). The home-network page can show the countdown but cannot change this checkbox. **Add preset** brings back the fictional example presets. |
 | **Streams** | Broadcastify Calls, Broadcastify Feeds and Icecast. See below. |
@@ -464,6 +467,10 @@ scanner display on the Monitor page. They are not shown for other kinds of syste
 * **Down** / **Up** hold the previous / next channel, in the order the channels are typed on the Systems page, wrapping
   around at the ends.
 * **Scan** goes back to all channels.
+* **Lockout** locks out the channel you are hearing (or the one held, or the last one heard): from then on it is not
+  played, recorded or logged, scanning doesn't wait on it, and Down / Up skip it. It is saved with the system, so it
+  stays locked out after a restart. **Locked out (n)** appears next to it: choose a channel there to unlock it, or
+  *Unlock all*. The Systems page lists a system's locked-out channels next to its scan delay.
 * Next to the buttons: *HOLDING*, the channel's name and its frequency. Other channels the receivers already cover are
   still recorded while you hold. A hold is not remembered after a restart.
 * **Scan delay** (Systems page, analog FM only): after a transmission ends, scanning stays on that channel for this many

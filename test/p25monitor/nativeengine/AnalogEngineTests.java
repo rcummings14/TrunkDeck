@@ -49,8 +49,12 @@ public final class AnalogEngineTests {
         v.onAnalogAudio(f, new float[160]);
         v.onAnalogAudio(f, new float[160]);
         check(c.voiceFrames == 2 && c.pcmLen == 320, "audio is recorded on the call (" + c.pcmLen + " samples)");
+        for (int k = 0; k < 198; k++) v.onAnalogAudio(f, new float[160]);   // 4 s of audio in 20 ms blocks
+        c.levelSum = -60 - 50; c.levelN = 2;   // two level samples taken while it was on the air
         v.onAnalogEnd(f);
         check(c.ended, "squelch close ends the call");
+        check(c.voiceMs == 4000 && c.ev.durationMs < 5000, "the logged length is the audio heard (4 s), not 20 ms blocks counted as 180 ms (" + c.ev.durationMs + " ms)");
+        check(c.ev.levelDb == -55, "the call log's Level is the average while it was on the air (" + c.ev.levelDb + " dB)");
         v.onAnalogAudio(f, new float[160]);
         check(ne.callMap.get("A" + f) != null && ne.callMap.get("A" + f) != c, "audio after an end starts a new call");
         v.onAnalogEnd(f);
@@ -104,10 +108,41 @@ public final class AnalogEngineTests {
         s.kind = RadioSystem.ANALOG;
         s.scanDelay = 7;
 
+        // Lockout (Monitor page): skipped from then on, saved with the system
+        ne.running = true;
+        long third = 155_400_000L;
+        ne.lastAnalogHeard = other;
+        check(ne.lockoutTarget() == other, "Lockout takes the channel last heard when nothing is playing");
+        ne.lockout(other);
+        int before = started.size();
+        v.onAnalogStart(other, 0); v.onAnalogAudio(other, new float[160]);
+        ActiveCall lc = ne.callMap.get("A" + other);
+        check((lc == null || lc.ended) && started.size() == before && ne.lastAnalogHeard != other, "a locked-out channel is not played, recorded or logged");
+        check(ne.lockedOutChannels().equals(List.of(other)), "Locked out lists it (" + ne.lockedOutChannels() + ")");
+        ne.scanGroups = List.of(List.of(f), List.of(other), List.of(third)); ne.scanIndex = 0;
+        check(ne.nextScanGroup() == 2, "scanning skips a group whose channels are all locked out");
+        ne.scanGroups = List.of(List.of(f), List.of(other)); ne.scanIndex = 0;
+        check(ne.nextScanGroup() == 0, "scanning stays put when every other group is locked out");
+        ne.stepAnalog(1); ne.stepAnalog(1);   // hold Fire, then step: 155.4000 is next
+        long upFrom = ne.holdFreq();
+        ne.stepAnalog(1);
+        check(ne.holdFreq() != other && ne.holdFreq() != 0, "Up / Down skip a locked-out channel (" + upFrom + " -> " + ne.holdFreq() + ")");
+        long heldNow = ne.holdFreq();
+        ne.lockout(heldNow);
+        check(ne.holdFreq() == 0, "locking out the held channel goes back to scanning");
+        ne.unlock(heldNow);
+        ne.running = false;
+        ne.scanGroups = List.of(); ne.scanIndex = 0;
+
         var dir = home.resolve("sys");
         s.save(dir);
         RadioSystem back = RadioSystem.load(dir);
         check(back.analog() && back.toneFor(f) == 100.0 && back.toneFor(155_250_000L) == 123.0, "kind and tones survive save and load");
         check(back.scanDelay == 7, "the scan delay is saved with the system (" + back.scanDelay + ")");
+        check(back.lockout.equals(java.util.Set.of(other)), "the lockout is saved with the system (" + back.lockout + ")");
+        ne.running = true; ne.unlock(other);
+        check(!ne.lockedOut(other) && ne.lockedOutChannels().isEmpty(), "Unlock brings the channel back");
+        s.save(dir);
+        check(RadioSystem.load(dir).lockout.isEmpty(), "an unlocked channel stays unlocked after a restart");
     }
 }

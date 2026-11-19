@@ -51,6 +51,11 @@ final class ActiveCall {
     /** Per-call voice codec: IMBE for Phase 1, AMBE+2 (half rate) for Phase 2. */
     EngineLibs.VoiceCodec imbe;
     int voiceFrames;
+    /** Voice heard, in ms of audio (P25 LDU 180 ms, AMBE frame 20 ms, analog by samples): the logged call length can't exceed what was heard by more than the call's own span. */
+    long voiceMs;
+    /** Signal level samples taken while voice was heard (for the call log's average Level). */
+    double levelSum;
+    int levelN;
     /** The tuner whose samples feed this call's decoder (null while waiting). */
     Tuner tuner;
     volatile ChannelDecoder vd;

@@ -244,7 +244,9 @@ final class CallManager {
             e.callMap.values().remove(c);
             e.recentlyEnded.put(c.key(), now);
             long end = Math.max(c.lastSeen, c.lastVoice);
-            c.ev.durationMs = Math.max(Math.max(0, Math.min(now, end) - c.start), c.voiceFrames * 180L);
+            c.ev.durationMs = Math.max(Math.max(0, Math.min(now, end) - c.start), c.voiceMs);   // voiceMs, not frames x 180 ms: analog/DMR/NXDN frames are shorter
+            if (c.levelN == 0 && c.voiceFrames > 0) e.diag.sampleLevel(c);   // a call shorter than one sample
+            c.ev.levelDb = c.levelN > 0 ? c.levelSum / c.levelN : Double.NaN;
             ChannelDecoder v = c.vd;
             boolean stopping = why.equals("engine stopped");
             if (v != null) {

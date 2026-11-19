@@ -26,6 +26,8 @@ public class SystemsPage extends JPanel {
     final JLabel delayLabel = new JLabel("Scan delay");
     final JLabel delayHelp = new JLabel();
     final JPanel delayBox = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    /** Analog: channels locked out from the Monitor page (unlocked there). */
+    final JLabel lockedLbl = new JLabel();
     /** Shown under Kind, the same way an untested receiver is marked on the Engine page. */
     final JLabel untestedNote = new JLabel();
     final JTextField name = new JTextField(), site = new JTextField(),
@@ -167,6 +169,8 @@ public class SystemsPage extends JPanel {
         delayBox.setOpaque(false);
         delayBox.add(scanDelay);
         delayBox.add(new JLabel("seconds"));
+        lockedLbl.setForeground(Theme.AMBER);
+        delayBox.add(lockedLbl);
         delayHelp.setText(helpHtml("After a transmission ends, scanning waits this long on that channel so you hear the reply. 0 moves on at once. 2 is the default. Takes effect right away, even while running."));
         y = row(g, c, y, delayLabel, delayBox, delayHelp);
         y = row(g, c, y, "Max simultaneous calls", traffic, "How many calls the engine decodes at the same time (each uses about 4% of one CPU core). Calls must also fall inside a dongle's window.");
@@ -404,6 +408,7 @@ public class SystemsPage extends JPanel {
         dmrSlot.setSelectedIndex(s.timeslot == 1 ? 1 : s.timeslot == 2 ? 2 : 0);
         squelch.setValue(Math.max(p25monitor.analog.FmReceiver.SQUELCH_MIN, Math.min(p25monitor.analog.FmReceiver.SQUELCH_MAX, s.squelch)));
         scanDelay.setValue(Math.max(0, Math.min(RadioSystem.SCAN_DELAY_MAX, s.scanDelay)));
+        showLockout(s);
         type2Plan.setSelectedIndex(Math.max(0, java.util.Arrays.asList(TYPE2_PLANS).indexOf(p25monitor.motorola.Type2BandPlan.Kind.of(s.type2Plan).key)));
         obtPlan.setText(s.obtBaseMHz > 0 ? RadioSystem.fmt(s.obtBaseMHz) + ", " + s.obtSpacingKHz + ", " + s.obtOffset : "");
         showKind(kind);
@@ -617,6 +622,19 @@ public class SystemsPage extends JPanel {
         if (pick != null) addSystem(pick);
     }
 
+    /** "Locked out: Fire 155.3700, 155.2500" next to the scan delay (analog systems). */
+    void showLockout(RadioSystem s) {
+        String lo = s == null ? "" : s.lockoutProperty();
+        if (lo.isEmpty()) { lockedLbl.setText(""); lockedLbl.setToolTipText(null); return; }
+        java.util.StringJoiner j = new java.util.StringJoiner(", ");
+        for (String m : lo.split(",")) {
+            RadioSystem.Channel c = s.channelAt(Math.round(Double.parseDouble(m) * 1e6));
+            j.add((c != null && c.name != null && !c.name.isBlank() ? c.name.trim() + " " : "") + m);
+        }
+        lockedLbl.setText("    Locked out: " + j);
+        lockedLbl.setToolTipText("Locked out with the Lockout button on the Monitor page: not played, recorded or scanned. Unlock them there (Locked out).");
+    }
+
     static RadioSystem copy(RadioSystem o) {
         RadioSystem s = new RadioSystem();
         s.name = o.name; s.site = o.site; s.kind = o.kind; s.controlChannelsMHz = new ArrayList<>(o.controlChannelsMHz);
@@ -624,7 +642,7 @@ public class SystemsPage extends JPanel {
         s.nac = o.nac; s.wacn = o.wacn; s.sysId = o.sysId;
         s.rfss = o.rfss; s.siteNumber = o.siteNumber; s.modulation = o.modulation; s.nativeModulation = o.nativeModulation; s.trafficChannels = o.trafficChannels; s.ignoreDataCalls = o.ignoreDataCalls;
         s.preferredTuner = o.preferredTuner; s.recordAll = o.recordAll; s.decodeMeter = o.decodeMeter; s.notes = o.notes;
-        s.dmrFlavor = o.dmrFlavor; s.colorCode = o.colorCode; s.timeslot = o.timeslot; s.squelch = o.squelch; s.scanDelay = o.scanDelay;
+        s.dmrFlavor = o.dmrFlavor; s.colorCode = o.colorCode; s.timeslot = o.timeslot; s.squelch = o.squelch; s.scanDelay = o.scanDelay; s.lockout.addAll(o.lockout);
         s.type2Plan = o.type2Plan; s.obtBaseMHz = o.obtBaseMHz; s.obtSpacingKHz = o.obtSpacingKHz; s.obtOffset = o.obtOffset;
         s.nxdnChannels = new java.util.TreeMap<>(o.nxdnChannels);
         s.rrSid = o.rrSid; s.rrSites = o.rrSites; s.rrUpdated = o.rrUpdated; s.rrSeen = o.rrSeen;

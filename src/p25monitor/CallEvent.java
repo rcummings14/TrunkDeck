@@ -5,6 +5,8 @@ public class CallEvent {
     public String timestamp = "", protocol = "", event = "", from = "", to = "", channel = "", details = "", eventId = "";
     public double frequencyMHz;
     public long durationMs;
+    /** Average signal level while voice was heard (dB, as in the active calls list), NaN if never measured. */
+    public double levelDb = Double.NaN;
     public int talkgroup = -1;
     public int radioId = -1;
     public String timeslot = "";
