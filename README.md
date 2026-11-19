@@ -1,8 +1,9 @@
 # TrunkDeck
 
-**A scanner-style P25 trunking monitor for Windows and Linux.** TrunkDeck follows a P25 trunked radio system's control
+**A scanner-style trunking monitor for Windows and Linux.** TrunkDeck follows a P25 trunked radio system's control
 channel, decodes the voice calls (Phase 1 and Phase 2) with its own built-in engine, plays them, records them, and can
 stream them to Broadcastify, OpenMHz or your own Rdio Scanner server - all from one window, no other radio software needed.
+New and **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone) and analog FM systems.
 
 ![TrunkDeck main window](docs/screenshots/monitor.png)
 
@@ -12,6 +13,49 @@ stream them to Broadcastify, OpenMHz or your own Rdio Scanner server - all from 
 > warranty** of any kind, and issues or pull requests **may not be answered**. See [LICENSE](LICENSE).
 
 If TrunkDeck is useful to you, you can support it here: [https://paypal.me/TrunkDeck](https://paypal.me/TrunkDeck)
+
+## What's new in 1.7.5 beta
+
+* **More kinds of radio system** (all new and **untested** on real systems; please report how they work on
+  [GitHub Issues](https://github.com/rcummings14/TrunkDeck/issues)). Choose them under **Kind** on the Systems page:
+  * **DMR conventional:** channels with their colour code and timeslot (`450.0000:1/2`), or both timeslots.
+  * **DMR trunked:** Tier III, Capacity Plus, Connect Plus and XPT.
+  * **NXDN conventional and NXDN Type-C trunked:** NXDN48 and NXDN96 are detected automatically. Sites that use channel
+    numbers take `number=MHz` entries (`37=451.0125`).
+  * **Analog FM (conventional):** channels with names and an optional CTCSS (PL) tone per channel (`155.3700:100.0 Fire`),
+    plus a squelch setting from 1 to 10.
+  * **Motorola Type II**, described below.
+  * DMR and NXDN voice use the AMBE+2 codec, so they need JMBE 2.x, the same as P25 Phase 2.
+  * **Set up from RadioReference** now imports these system types too, instead of refusing them.
+* **Motorola Type II SmartNet / SmartZone** (new, **untested**): a new system kind on the Systems page. TrunkDeck
+  decodes the 3600 bit/s Type II control channel (with error correction; damaged messages are thrown away rather than
+  misread) and follows each call. The grant says whether the voice is analog FM or P25. If TrunkDeck joins a call late,
+  it uses the talkgroup's last known mode. Encrypted, emergency and patch flags and the talking radio's ID are shown.
+  * **Band plan** setting: *Auto* covers 800 MHz (rebanded, standard and splinter, checked against the channel number the
+    site announces) and 900 MHz. VHF / UHF systems need their base frequency, spacing and offset typed in
+    (for example `136.0000, 12.5, 380`).
+  * Tested only against simulated signals, since there was no Type II system nearby to try it on. If you have one,
+    please report how it works on [GitHub Issues](https://github.com/rcummings14/TrunkDeck/issues).
+  * Protocol facts came from gr-smartnet and trunk-recorder; no code was copied (see [NOTICE.txt](NOTICE.txt)).
+* **RadioReference import:** SmartNet, SmartZone and Type IIi systems now import as Motorola Type II (before, they
+  imported as P25). Type I still imports as P25. **Note:** some RadioReference listings still say "Type II SmartZone"
+  for systems that have since moved to a P25 control channel. If the Engine page shows P25 (NAC, WACN, system ID) on
+  your control channel but no calls, change the system's Kind to *Trunked (control channel)*.
+* **Analog Hold / Scan / Down / Up** (Monitor page): while an analog system is running, four buttons appear under the
+  scanner display. These buttons only show for analog systems.
+  * **Hold** stays on the channel you are hearing (or the last one heard): only that channel plays, and a receiver that
+    steps through channel groups stops stepping.
+  * **Down** / **Up** step through the channels in the order you entered them, wrapping around, and hold each one.
+  * **Scan** goes back to all channels.
+  * The display shows *HOLDING*, the channel name and its frequency. Other channels the receivers already cover are
+    still recorded while you hold.
+* **Paste a frequency table** into the Channels box of a conventional system (analog FM, P25, DMR or NXDN): rows
+  copied from a RadioReference frequency page (with or without the header row), a CHIRP CSV, or spreadsheet columns.
+  The rows of that system's mode are added with their names and tones (CTCSS for analog, NAC for P25, colour code for
+  DMR). Other modes and channels already listed are left out, and a message says how many were added. Paste several
+  tables to build one system. Nothing is downloaded: TrunkDeck only reads what you copied.
+* **Easier tone entry for analog channels:** `154.8225 206.5` and `154.8225: 206.5` are now read the same as
+  `154.8225:206.5` (frequency, then its CTCSS tone).
 
 ## Features
 
@@ -27,6 +71,9 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   and/or one or more **RTL-SDR** dongles (a control dongle plus roaming voice dongles). Own drivers - no SDR# / SDRTrunk.
   New in 1.7.0 and **untested**: **SDRplay**, **HackRF One**, **LimeSDR** and **Ettus USRP** through SoapySDR - see
   [Supported receivers](#supported-receivers).
+* **Other radio systems** (new in 1.7.5, **untested**): DMR (conventional, Tier III, Capacity Plus, Connect Plus, XPT),
+  NXDN (conventional and Type-C trunking), Motorola Type II SmartNet / SmartZone (analog or P25 voice), and analog FM
+  channels with CTCSS, including Hold / Scan / Up / Down on the Monitor page. See [What's new](#whats-new-in-175-beta).
 * **Big scanner display** with colour themes (Full color, SDS-style, amber, ... or your own colours, including the bars
   and the display border), glow, scan lines, backlight on calls, SCANNING ticker.
 * **Control-channel signal meter** (1.7.2): the scanner display shows a signal meter on the control-channel row so you
@@ -66,7 +113,7 @@ Download the file for your system from the [Releases](../../releases) page.
 
 ### Windows 10/11 (64-bit)
 
-1. Unzip **`TrunkDeck-1.7.4.1-windows.zip`**, open `TrunkDeck\windows` and double-click **`Install.bat`**
+1. Unzip **`TrunkDeck-1.7.5-windows.zip`**, open `TrunkDeck\windows` and double-click **`Install.bat`**
    (SmartScreen: *More info → Run anyway*). It downloads the Eclipse Temurin Java runtime into TrunkDeck's own folder
    (checksum-verified) and adds Start Menu and Desktop shortcuts. Installs for your user only, no admin rights needed.
 2. **USB driver (once per receiver):** run [Zadig](https://zadig.akeo.ie), *Options → List All Devices*, pick the
@@ -79,7 +126,7 @@ Uninstall: *Settings → Apps → TrunkDeck*.
 ### Linux (Fedora, Ubuntu, Debian, Mint, Arch, Raspberry Pi OS 64-bit)
 
 ```bash
-tar xzf TrunkDeck-1.7.4.1-linux.tar.gz
+tar xzf TrunkDeck-1.7.5-linux.tar.gz
 cd TrunkDeck/linux
 ./install.sh
 ```
@@ -118,7 +165,7 @@ SoapySDR in short (details: *Supported receivers* in [stage/README.md](stage/REA
 
 1. **Systems** page: **Set up from RadioReference** (needs a RadioReference Premium account and a build with an app key),
    or add your system by hand - its control channel(s) in MHz (RadioReference lists them; use the ones marked
-   *c*). The preloaded *Example County* presets are **fictional** placeholders; delete them if you like.
+   *c*). Pick the **Kind** first: P25 trunked (the default), P25 conventional, DMR, NXDN, Motorola Type II or analog FM. The preloaded *Example County* presets are **fictional** placeholders; delete them if you like.
 2. **Talkgroups** page: import your talkgroup CSV (RadioReference export works as-is; `talkgroups_template.csv` is a template).
 3. **Engine** page → *Voice codec*: click **Build from source…** once to build the JMBE voice codec on your PC (see the
    legal note below). Without it, calls are followed but silent.
@@ -179,7 +226,8 @@ Tests that need them are skipped when they are missing.
 
 Built by Ray Cummings.  
 Thanks to @phillydjdan for the Display-Only button idea ([Discussion #15](https://github.com/rcummings14/TrunkDeck/discussions/15)) and DMR testing,  
-and @kd8bxp for SDRplay testing, the auto-start idea and the Linux line-ending catch.
+and @kd8bxp for SDRplay testing, the auto-start idea and the Linux line-ending catch.  
+Thanks to Tim (@Timjnev) for DMR testing and ideas, including the analog Hold / Scan buttons.
 
 ## License
 
