@@ -46,6 +46,8 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   * **Hold** stays on the channel you are hearing (or the last one heard): only that channel plays, and a receiver that
     steps through channel groups stops stepping.
   * **Down** / **Up** step through the channels in the order you entered them, wrapping around, and hold each one.
+  * **Scan delay** (Systems page): how many seconds scanning waits on a channel after a transmission ends, so you hear
+    the reply. 0 to 30, default 2.
   * **Scan** goes back to all channels.
   * The display shows *HOLDING*, the channel name and its frequency. Other channels the receivers already cover are
     still recorded while you hold.

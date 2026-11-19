@@ -23,7 +23,8 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
     channel as `number=MHz` (`37=451.0125`).
   * **Analog FM (conventional):** channels with an optional name and their own CTCSS (PL) tone (`155.3700:100.0 Fire`;
     `155.3700 100.0` works too). A system-wide tone, and a **Squelch** from 1 (opens easiest) to 10 (strong signals
-    only, default 5). With no tone set, the tone heard is shown on the call.
+    only, default 5). With no tone set, the tone heard is shown on the call. **Scan delay** (0-30 seconds, default 2):
+    how long scanning waits on a channel after a transmission ends, so you hear the reply.
   * **Motorola Type II SmartNet / SmartZone:** see *Motorola Type II* under *Using TrunkDeck*.
 * DMR and NXDN voice use the AMBE+2 codec: they need JMBE 2.x, the same as P25 Phase 2.
 * **Set up from RadioReference** imports these system types now. DMR, NXDN and SmartNet / SmartZone systems become the
@@ -460,6 +461,10 @@ scanner display on the Monitor page. They are not shown for other kinds of syste
 * **Scan** goes back to all channels.
 * Next to the buttons: *HOLDING*, the channel's name and its frequency. Other channels the receivers already cover are
   still recorded while you hold. A hold is not remembered after a restart.
+* **Scan delay** (Systems page, analog FM only): after a transmission ends, scanning stays on that channel for this many
+  seconds before moving on, so the reply isn't missed. 0 moves on at once; the default is 2. A change applies straight
+  away, even while the system is running. It matters when the channels don't all fit in one receiver's window and the
+  receiver steps through channel groups.
 
 Also:
 * **Mute** a talkgroup to skip it (it's still logged). **What to play:** *Only talkgroups in my list* or *Favorites only* skips the rest.

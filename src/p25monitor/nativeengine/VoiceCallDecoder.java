@@ -645,7 +645,7 @@ final class VoiceCallDecoder {
         long now = System.currentTimeMillis();
         c.lastVoice = now; c.lastSeen = Math.max(c.lastSeen, now);
         c.voiceFrames++; c.imbeFrames++;
-        e.lastAnalogHeard = f;
+        e.lastAnalogHeard = f; e.lastAnalogAt = now;
         emit(c, pcm, pcm.length, new int[]{c.tg, c.lastLcTg, 0, 0});
     }
 

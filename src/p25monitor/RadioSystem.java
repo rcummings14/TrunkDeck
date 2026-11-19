@@ -55,6 +55,9 @@ public class RadioSystem {
     public java.util.Map<Integer, Double> nxdnChannels = new java.util.TreeMap<>();
     /** Analog FM noise squelch level 1 (opens easiest) to 10 (strongest signal only); 5 is the default. */
     public int squelch = p25monitor.analog.FmReceiver.SQUELCH_DEFAULT;
+    /** Analog scan delay: seconds the scan stays on a channel after its transmission ends, 0 to {@value #SCAN_DELAY_MAX}. */
+    public int scanDelay = SCAN_DELAY_DEFAULT;
+    public static final int SCAN_DELAY_DEFAULT = 2, SCAN_DELAY_MAX = 30;
     /** Motorola Type II band plan: auto, 800reband, 800standard, 800splinter, 900 or obt (VHF/UHF, uses the three values below). */
     public String type2Plan = "auto";
     /** VHF/UHF (OBT) band plan: first receive frequency, channel spacing, and the channel number of the first receive channel. */
@@ -395,7 +398,7 @@ public class RadioSystem {
             p.setProperty("colorCode", String.valueOf(colorCode));
             p.setProperty("timeslot", String.valueOf(timeslot));
         }
-        if (analog()) p.setProperty("squelch", String.valueOf(squelch));
+        if (analog()) { p.setProperty("squelch", String.valueOf(squelch)); p.setProperty("scanDelay", String.valueOf(scanDelay)); }
         if (type2()) {
             p.setProperty("type2Plan", type2Plan == null ? "auto" : type2Plan);
             p.setProperty("obtBase", fmt(obtBaseMHz));
@@ -447,6 +450,7 @@ public class RadioSystem {
         try { s.timeslot = Integer.parseInt(p.getProperty("timeslot", "0").trim()); } catch (Exception ignored) {}
         try { s.squelch = Math.max(p25monitor.analog.FmReceiver.SQUELCH_MIN, Math.min(p25monitor.analog.FmReceiver.SQUELCH_MAX,
                 Integer.parseInt(p.getProperty("squelch", String.valueOf(p25monitor.analog.FmReceiver.SQUELCH_DEFAULT)).trim()))); } catch (Exception ignored) {}
+        try { s.scanDelay = Math.max(0, Math.min(SCAN_DELAY_MAX, Integer.parseInt(p.getProperty("scanDelay", String.valueOf(SCAN_DELAY_DEFAULT)).trim()))); } catch (Exception ignored) {}
         s.type2Plan = p25monitor.motorola.Type2BandPlan.Kind.of(p.getProperty("type2Plan", "auto")).key;
         try { s.obtBaseMHz = Double.parseDouble(p.getProperty("obtBase", "0").trim()); } catch (Exception ignored) {}
         try { s.obtSpacingKHz = Double.parseDouble(p.getProperty("obtSpacing", "0").trim()); } catch (Exception ignored) {}

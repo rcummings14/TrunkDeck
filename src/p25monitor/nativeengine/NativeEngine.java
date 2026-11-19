@@ -258,7 +258,7 @@ public final class NativeEngine {
         lsmPreferred = "lsm".equalsIgnoreCase(s.nativeModulation); ccDemodLogged = "";
         usage.clear(); missed.clear(); missedRecent.clear(); peakConcurrent = 0; tuners.clear(); huntCount = 0; fixedWideCenter = 0; widePlanned = false;
         conventional = s.fixedChannels(); parkedDecoders.clear(); scanTuner = null; scanGroups = List.of(); scanIndex = 0; lastScanAt = 0;
-        speaker.holdFrequency(0); lastAnalogHeard = 0;
+        speaker.holdFrequency(0); lastAnalogHeard = 0; lastAnalogAt = 0;
         nxdnSite = s.nxdnTrunk() ? new p25monitor.nxdn.NxdnSite(s::nxdnChannelHz) : null;
         nxdnVoice.clear(); nxdnLogged.clear();
         type2Digital.clear(); type2Grants = 0;
@@ -998,8 +998,23 @@ public final class NativeEngine {
     boolean scanBusy(long now) {
         if (scanTuner == null) return false;
         if (calls.callsOn(scanTuner) > 0) return true;
+        if (analogDelay(now)) return true;
         for (ChannelDecoder d : decodersOn(scanTuner)) if (now - d.lastFrameAt < 1200) return true;
         return false;
+    }
+
+    /**
+     * Analog scan delay (Systems page, per system): after a transmission on the channels now being scanned ends, stay
+     * on them for that many seconds so a reply is not missed. Read live, so a change applies without a restart.
+     */
+    boolean analogDelay(long now) {
+        RadioSystem s = sys;
+        long hz = lastAnalogHeard;
+        if (s == null || !s.analog() || hz <= 0 || s.scanDelay <= 0) return false;
+        if (now - lastAnalogAt >= s.scanDelay * 1000L) return false;
+        List<List<Long>> g = scanGroups;
+        int i = scanIndex;
+        return g.isEmpty() || (i >= 0 && i < g.size() && g.get(i).contains(hz));
     }
 
     List<ChannelDecoder> decodersOn(Tuner t) {
@@ -1254,6 +1269,8 @@ public final class NativeEngine {
     // ------------------------------------------------------------------ analog Hold / Scan (Monitor page)
     /** The analog channel most recently heard (Hz): what Hold stays on when nothing is playing right now. */
     volatile long lastAnalogHeard;
+    /** When analog audio was last heard (for the scan delay). */
+    volatile long lastAnalogAt;
     /** True while an analog FM system is running: the Monitor page shows Hold / Scan only then. */
     public boolean analogRunning() { RadioSystem s = sys; return running && s != null && s.analog(); }
     /** The analog channel held (Hz), or 0 while scanning. */

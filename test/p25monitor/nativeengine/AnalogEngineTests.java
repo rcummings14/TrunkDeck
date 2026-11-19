@@ -87,9 +87,27 @@ public final class AnalogEngineTests {
         ne.running = false;
         v.onAnalogEnd(other); v.onAnalogEnd(f);
 
+        // Scan delay (Systems page): stay on the channel a few seconds after its transmission ends
+        long now = System.currentTimeMillis();
+        ne.scanGroups = List.of(List.of(f), List.of(other)); ne.scanIndex = 0;
+        ne.lastAnalogHeard = f; ne.lastAnalogAt = now;
+        check(s.scanDelay == RadioSystem.SCAN_DELAY_DEFAULT && ne.analogDelay(now + 1500), "default 2 s delay: still waiting 1.5 s after the transmission");
+        check(!ne.analogDelay(now + 2100), "scanning resumes after the delay");
+        s.scanDelay = 0;
+        check(!ne.analogDelay(now + 10), "delay 0 moves on at once");
+        s.scanDelay = 10;
+        check(ne.analogDelay(now + 9000) && !ne.analogDelay(now + 10_500), "a longer delay is read live (no restart)");
+        ne.scanIndex = 1;
+        check(!ne.analogDelay(now + 100), "no delay once the scan is on other channels");
+        s.kind = RadioSystem.TRUNKED; ne.scanIndex = 0;
+        check(!ne.analogDelay(now + 100), "the delay is for analog systems only");
+        s.kind = RadioSystem.ANALOG;
+        s.scanDelay = 7;
+
         var dir = home.resolve("sys");
         s.save(dir);
         RadioSystem back = RadioSystem.load(dir);
         check(back.analog() && back.toneFor(f) == 100.0 && back.toneFor(155_250_000L) == 123.0, "kind and tones survive save and load");
+        check(back.scanDelay == 7, "the scan delay is saved with the system (" + back.scanDelay + ")");
     }
 }

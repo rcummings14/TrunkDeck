@@ -21,6 +21,11 @@ public class SystemsPage extends JPanel {
     /** Analog FM noise squelch level, 1 (opens easiest) to 10 (strongest signal only). */
     final JSpinner squelch = new JSpinner(new SpinnerNumberModel(p25monitor.analog.FmReceiver.SQUELCH_DEFAULT,
             p25monitor.analog.FmReceiver.SQUELCH_MIN, p25monitor.analog.FmReceiver.SQUELCH_MAX, 1));
+    /** Analog scan delay in seconds (0 = move on as soon as the transmission ends). */
+    final JSpinner scanDelay = new JSpinner(new SpinnerNumberModel(RadioSystem.SCAN_DELAY_DEFAULT, 0, RadioSystem.SCAN_DELAY_MAX, 1));
+    final JLabel delayLabel = new JLabel("Scan delay");
+    final JLabel delayHelp = new JLabel();
+    final JPanel delayBox = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
     /** Shown under Kind, the same way an untested receiver is marked on the Engine page. */
     final JLabel untestedNote = new JLabel();
     final JTextField name = new JTextField(), site = new JTextField(),
@@ -151,6 +156,15 @@ public class SystemsPage extends JPanel {
         y = row(g, c, y, idsLabel, ids, idsHelp);
         dmrOpts.setOpaque(false);
         y = row(g, c, y, dmrLabel, dmrOpts, dmrHelp);
+        JTextField delayText = ((JSpinner.DefaultEditor) scanDelay.getEditor()).getTextField();
+        delayText.setColumns(3);
+        delayText.setOpaque(true);
+        delayText.setForeground(new Color(220, 228, 236));
+        delayBox.setOpaque(false);
+        delayBox.add(scanDelay);
+        delayBox.add(new JLabel("seconds"));
+        delayHelp.setText(helpHtml("After a transmission ends, scanning waits this long on that channel so you hear the reply. 0 moves on at once. 2 is the default. Takes effect right away, even while running."));
+        y = row(g, c, y, delayLabel, delayBox, delayHelp);
         y = row(g, c, y, "Max simultaneous calls", traffic, "How many calls the engine decodes at the same time (each uses about 4% of one CPU core). Calls must also fall inside a dongle's window.");
         JPanel checks = new JPanel(new GridLayout(0, 1));
         checks.setOpaque(false);
@@ -300,6 +314,9 @@ public class SystemsPage extends JPanel {
         dmrLabel.setVisible(dmr || analog || type2);
         dmrOpts.setVisible(dmr || analog || type2);
         dmrHelp.setVisible(dmr || analog || type2);
+        delayLabel.setVisible(analog);
+        delayBox.setVisible(analog);
+        delayHelp.setVisible(analog);
         dmrHelp.setText(helpHtml(type2
                 ? (obt ? "VHF/UHF systems use their own band plan: copy the base frequency, spacing and offset from the system's RadioReference page. (untested)"
                        : "Turns the channel numbers in grants into frequencies. Auto picks 800 or 900 MHz from the control channel and checks the 800 MHz variant against the channel number the site announces. (untested)")
@@ -341,6 +358,7 @@ public class SystemsPage extends JPanel {
             case "capplus" -> 1; case "conplus" -> 2; case "xpt" -> 3; default -> 0; });
         dmrSlot.setSelectedIndex(s.timeslot == 1 ? 1 : s.timeslot == 2 ? 2 : 0);
         squelch.setValue(Math.max(p25monitor.analog.FmReceiver.SQUELCH_MIN, Math.min(p25monitor.analog.FmReceiver.SQUELCH_MAX, s.squelch)));
+        scanDelay.setValue(Math.max(0, Math.min(RadioSystem.SCAN_DELAY_MAX, s.scanDelay)));
         type2Plan.setSelectedIndex(Math.max(0, java.util.Arrays.asList(TYPE2_PLANS).indexOf(p25monitor.motorola.Type2BandPlan.Kind.of(s.type2Plan).key)));
         obtPlan.setText(s.obtBaseMHz > 0 ? RadioSystem.fmt(s.obtBaseMHz) + ", " + s.obtSpacingKHz + ", " + s.obtOffset : "");
         showKind(kind);
@@ -429,6 +447,7 @@ public class SystemsPage extends JPanel {
         s.dmrFlavor = switch (dmrFlavor.getSelectedIndex()) { case 1 -> "capplus"; case 2 -> "conplus"; case 3 -> "xpt"; default -> "tier3"; };
         s.timeslot = dmrSlot.getSelectedIndex();
         s.squelch = (Integer) squelch.getValue();
+        s.scanDelay = (Integer) scanDelay.getValue();
         s.name = name.getText().trim(); s.site = site.getText().trim();
         s.nac = nac.getText().trim();
         s.colorCode = -1;
@@ -543,7 +562,7 @@ public class SystemsPage extends JPanel {
         s.nac = o.nac; s.wacn = o.wacn; s.sysId = o.sysId;
         s.rfss = o.rfss; s.siteNumber = o.siteNumber; s.modulation = o.modulation; s.nativeModulation = o.nativeModulation; s.trafficChannels = o.trafficChannels; s.ignoreDataCalls = o.ignoreDataCalls;
         s.preferredTuner = o.preferredTuner; s.recordAll = o.recordAll; s.decodeMeter = o.decodeMeter; s.notes = o.notes;
-        s.dmrFlavor = o.dmrFlavor; s.colorCode = o.colorCode; s.timeslot = o.timeslot; s.squelch = o.squelch;
+        s.dmrFlavor = o.dmrFlavor; s.colorCode = o.colorCode; s.timeslot = o.timeslot; s.squelch = o.squelch; s.scanDelay = o.scanDelay;
         s.type2Plan = o.type2Plan; s.obtBaseMHz = o.obtBaseMHz; s.obtSpacingKHz = o.obtSpacingKHz; s.obtOffset = o.obtOffset;
         s.nxdnChannels = new java.util.TreeMap<>(o.nxdnChannels);
         s.rrSid = o.rrSid; s.rrSites = o.rrSites; s.rrUpdated = o.rrUpdated; s.rrSeen = o.rrSeen;
