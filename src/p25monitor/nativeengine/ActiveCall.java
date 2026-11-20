@@ -17,6 +17,8 @@ final class ActiveCall {
     long freq, start, lastSeen, lastVoice, followStart, hangSince, waitingSince;
     /** Motorola Type II call; {@code analogVoice}: its voice channel is analog FM (else P25 Phase 1). */
     boolean type2, analogVoice;
+    /** EDACS call ({@code analogVoice}: analog FM, else ProVoice); {@code channel} is the LCN. */
+    boolean edacs;
     boolean encrypted, emergency, phase2, followed, unitToUnit, conventional, patch, eligible, hang, waiting;
     volatile boolean ended;
     // voice diagnostics

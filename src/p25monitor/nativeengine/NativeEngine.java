@@ -262,6 +262,7 @@ public final class NativeEngine {
         nxdnSite = s.nxdnTrunk() ? new p25monitor.nxdn.NxdnSite(s::nxdnChannelHz) : null;
         nxdnVoice.clear(); nxdnLogged.clear();
         type2Digital.clear(); type2Grants = 0;
+        if (s.edacs()) log("EDACS (untested): " + p25monitor.edacs.EdacsSite.Mode.of(s.edacsMode).label + " addressing, " + s.nxdnChannels.size() + " LCN" + (s.nxdnChannels.size() == 1 ? "" : "s") + " listed; voice is analog FM or ProVoice as each grant says." + (s.nxdnChannels.isEmpty() ? " No LCN=MHz entries on the Systems page: grants can't be followed until they are added." : "") + " If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         if (s.type2()) log("Motorola Type II (untested): band plan " + s.type2BandPlan() + "; voice is analog FM or P25 as each grant says. If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         if (s.analog()) log("Analog FM conventional (untested): noise squelch level " + s.squelch + (s.channels.stream().anyMatch(c -> s.toneFor(Math.round(c.mhz * 1e6)) > 0) ? " and CTCSS tone squelch" : "") + ". If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         if (s.nxdn()) log("NXDN " + (s.nxdnTrunk() ? "Type-C trunked" : "conventional") + " (untested; NXDN48 and NXDN96 are detected automatically). If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
@@ -871,6 +872,30 @@ public final class NativeEngine {
         });
         d.type2 = new p25monitor.motorola.Type2Demod(new p25monitor.motorola.Type2Demod.Listener() {
             public void osw(p25monitor.motorola.Type2Frame.Osw w) { site.osw(w); }
+            public void bad() { tsbkBad++; }
+        });
+        d.anchor = () -> tunerAnchor(t, d, freq);
+        return d;
+    }
+
+    // ------------------------------------------------------------------ EDACS (untested on air)
+    /** The EDACS site state of the control channel being decoded (site ID, control channel LCN), for diagnostics. */
+    volatile p25monitor.edacs.EdacsSite edacsSite;
+    /** EDACS channel filter: 9600 bit/s FSK needs more than P25's 6.25 kHz. */
+    static final double EDACS_CUTOFF_HZ = 8500;
+
+    /** A channel decoder whose P25 framer is idle and whose samples feed the EDACS control channel receiver. */
+    ChannelDecoder edacsDecoder(Tuner t, long f) {
+        ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {}, 0);
+        d.widen(t.decoderRate(), EDACS_CUTOFF_HZ);
+        final long freq = f;
+        RadioSystem s = sys;
+        p25monitor.edacs.EdacsSite site = new p25monitor.edacs.EdacsSite(p25monitor.edacs.EdacsSite.Mode.of(s.edacsMode), s::nxdnChannelHz, new p25monitor.edacs.EdacsSite.Listener() {
+            public void grant(int group, int src, int lcn, long hz, boolean digital, boolean emergency, boolean update) { cc.edacsGrant(group, src, lcn, hz, digital, emergency, update); }
+            public void message(String text) { onDmrControl(freq, d, text); }
+        });
+        d.edacs = new p25monitor.edacs.EdacsDemod(new p25monitor.edacs.EdacsDemod.Listener() {
+            public void frame(int m1, int m2) { edacsSite = site; site.frame(m1, m2); }
             public void bad() { tsbkBad++; }
         });
         d.anchor = () -> tunerAnchor(t, d, freq);
@@ -1539,7 +1564,7 @@ public final class NativeEngine {
     public List<String> bandPlan() {
         List<String> out = new ArrayList<>();
         RadioSystem s = sys;
-        if (s != null && (s.nxdn() || s.dmr() || s.analog() || s.type2())) return out;   // P25 channel identifiers: left over from an earlier P25 system
+        if (s != null && (s.nxdn() || s.dmr() || s.analog() || s.type2() || s.edacs())) return out;   // P25 channel identifiers: left over from an earlier P25 system
         List<ChannelMap.Band> b = new ArrayList<>(map.bands());
         b.sort(Comparator.comparingInt(x -> x.id));
         for (ChannelMap.Band x : b) out.add(String.format(Locale.ROOT, "Band %2d: base %s MHz, spacing %.2f kHz, %s", x.id, mhz(x.baseHz), x.spacingHz / 1000.0,

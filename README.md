@@ -3,7 +3,7 @@
 **A scanner-style trunking monitor for Windows and Linux.** TrunkDeck follows a P25 trunked radio system's control
 channel, decodes the voice calls (Phase 1 and Phase 2) with its own built-in engine, plays them, records them, and can
 stream them to Broadcastify, OpenMHz or your own Rdio Scanner server - all from one window, no other radio software needed.
-New and **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone) and analog FM systems.
+New and **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), EDACS / ProVoice and analog FM systems.
 
 ![TrunkDeck main window](docs/screenshots/monitor.png)
 
@@ -27,6 +27,7 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   * **Analog FM (conventional):** channels with names and an optional CTCSS (PL) tone per channel (`155.3700:100.0 Fire`),
     plus a squelch setting from 1 to 10.
   * **Motorola Type II**, described below.
+  * **EDACS / ProVoice**, described below.
   * DMR and NXDN voice use the AMBE+2 codec, so they need JMBE 2.x, the same as P25 Phase 2.
   * **Set up from RadioReference** now imports these system types too, instead of refusing them.
 * **Motorola Type II SmartNet / SmartZone** (new, **untested**): a new system kind on the Systems page. TrunkDeck
@@ -39,6 +40,14 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   * Tested only against simulated signals, since there was no Type II system nearby to try it on. If you have one,
     please report how it works on [GitHub Issues](https://github.com/rcummings14/TrunkDeck/issues).
   * Protocol facts came from gr-smartnet and trunk-recorder; no code was copied (see [NOTICE.txt](NOTICE.txt)).
+* **EDACS and ProVoice** (new, **untested**): a new system kind on the Systems page. TrunkDeck decodes the 9600 bit/s
+  EDACS control channel (standard, networked, extended addressing, with or without ESK) and follows each call, on analog
+  FM or ProVoice digital voice as the grant says. ProVoice is played with the same IMBE codec (JMBE) as P25.
+  * Grants name a logical channel number, so the site's channels are listed as `LCN=MHz`
+    (for example `851.0125, 1=851.0125, 2=851.2625`). Set up from RadioReference fills them in.
+  * Tested only against simulated signals. If you have an EDACS system, please report how it works on
+    [GitHub Issues](https://github.com/rcummings14/TrunkDeck/issues).
+  * Protocol facts came from DSD-FME, DSD and mbelib; no code was copied (see [NOTICE.txt](NOTICE.txt)).
 * **RadioReference import:** SmartNet, SmartZone and Type IIi systems now import as Motorola Type II (before, they
   imported as P25). Type I still imports as P25. **Note:** some RadioReference listings still say "Type II SmartZone"
   for systems that have since moved to a P25 control channel. If the Engine page shows P25 (NAC, WACN, system ID) on

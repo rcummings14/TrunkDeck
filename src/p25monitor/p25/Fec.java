@@ -226,4 +226,12 @@ public final class Fec {
         if (err != null) err[0] = e < 0 ? -1 : Integer.bitCount(e);
         return ((c ^ Math.max(e, 0)) >> 11) & 0xfff;
     }
+
+    /** Decodes a 23-bit Golay word (data in bits 22-11), correcting up to 3 bits; err[0] = corrected bits. */
+    public static int golay23Decode(int cw23, int[] err) {
+        int c = cw23 & 0x7fffff;
+        int e = golayTable()[syndrome23(c)];
+        if (err != null) err[0] = e < 0 ? -1 : Integer.bitCount(e);
+        return ((c ^ Math.max(e, 0)) >> 11) & 0xfff;
+    }
 }

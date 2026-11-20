@@ -37,6 +37,11 @@ final class ControlChannel {
             for (long f : fs) e.ccDecoders.add(e.type2Decoder(e.ccTuner, f));
             return;
         }
+        if (e.sys != null && e.sys.edacs()) {
+            e.ccDecoders.clear();
+            for (long f : fs) e.ccDecoders.add(e.edacsDecoder(e.ccTuner, f));
+            return;
+        }
         if (e.sys != null && e.sys.nxdnTrunk()) {
             e.ccDecoders.clear();
             for (long f : fs) e.ccDecoders.add(e.nxdnDecoder(e.ccTuner, f));
@@ -136,7 +141,7 @@ final class ControlChannel {
      * missed), but only for channels the site's channel plan knows.
      */
     void voiceChannelUpdate(P25Framer.LinkControl lc) {
-        if (lc == null || !lc.isGroupUpdate() || e.conventional || e.sys == null || e.sys.dmr() || e.sys.nxdn() || e.sys.type2()) return;
+        if (lc == null || !lc.isGroupUpdate() || e.conventional || e.sys == null || e.sys.dmr() || e.sys.nxdn() || e.sys.type2() || e.sys.edacs()) return;
         synchronized (e) {
             for (int pair = 0; pair < 2; pair++) {
                 int ch = lc.updateChannel(pair), tg = lc.updateGroup(pair);
@@ -203,6 +208,36 @@ final class ControlChannel {
                 c.lastSeen = now;
                 if (src > 0 && c.src <= 0) { c.src = src; c.ev.from = String.valueOf(src); c.ev.radioId = src; e.listener.callUpdated(c.ev); }
                 if (!update) { c.encrypted |= p25monitor.motorola.Type2Site.encrypted(status); c.emergency |= p25monitor.motorola.Type2Site.emergency(status); }
+            }
+        }
+    }
+
+    /**
+     * An EDACS group call or its update. The control channel repeats the assignment while the call is up, which keeps
+     * {@code lastSeen} fresh; the call ends on the voice channel's dotting, or when the updates stop.
+     */
+    void edacsGrant(int group, int src, int lcn, long hz, boolean digital, boolean emergency, boolean update) {
+        synchronized (e) {
+            long now = System.currentTimeMillis();
+            String key = "G" + group;
+            ActiveCall c = e.callMap.get(key);
+            if (c != null && (c.channel != lcn || c.analogVoice == digital) && !update) { e.calls.endCall(c, "new grant on another channel"); c = null; }
+            if (c == null) {
+                Long ended = e.recentlyEnded.get(key);
+                if (ended != null && now - ended < (update ? 2500 : 600)) return;   // updates and repeats of a call that just ended (dotting)
+                c = new ActiveCall();
+                c.edacs = true; c.analogVoice = !digital;
+                c.tg = group; c.src = src; c.channel = lcn; c.start = now; c.lastSeen = now;
+                c.freq = hz;
+                c.emergency = emergency;
+                c.t = e.tg(group);
+                if (c.t != null) c.priority = c.t.priority;
+                e.callMap.put(key, c);
+                e.calls.newCall(c);
+            } else {
+                c.lastSeen = now;
+                if (src > 0 && c.src != src) { c.src = src; c.ev.from = String.valueOf(src); c.ev.radioId = src; e.listener.callUpdated(c.ev); }
+                c.emergency |= emergency;
             }
         }
     }

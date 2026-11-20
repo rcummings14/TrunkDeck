@@ -312,7 +312,7 @@ final class RrWizard extends JDialog {
         bottom.add(Box.createHorizontalStrut(16)); bottom.add(reload);
         JPanel south = new JPanel(new BorderLayout(0, 6)); south.setOpaque(false);
         south.add(bottom, BorderLayout.NORTH);
-        south.add(note("The system ID is the number at the end of the system page address on the RadioReference website (…/sid/<b>1234</b>). TrunkDeck decodes P25, DMR and NXDN (trunked and conventional) and analog FM with CTCSS. Analog trunked systems (EDACS, LTR, MPT 1327) are set up as their analog voice channels. Use <b>Conventional channels</b> for a county's fixed frequencies."), BorderLayout.SOUTH);
+        south.add(note("The system ID is the number at the end of the system page address on the RadioReference website (…/sid/<b>1234</b>). TrunkDeck decodes P25, DMR and NXDN (trunked and conventional), Motorola Type II, EDACS / ProVoice, and analog FM with CTCSS. Other analog trunked systems (LTR, MPT 1327) are set up as their analog voice channels. Use <b>Conventional channels</b> for a county's fixed frequencies."), BorderLayout.SOUTH);
         JPanel in = new JPanel(new BorderLayout(0, 10)); in.setOpaque(false);
         in.add(top, BorderLayout.NORTH); in.add(lists, BorderLayout.CENTER); in.add(south, BorderLayout.SOUTH);
         c.add(in, BorderLayout.CENTER);
@@ -657,7 +657,8 @@ final class RrWizard extends JDialog {
              .append(fam == RrImport.Family.P25 ? "<li>Usual settings: demodulator Auto (C4FM and LSM), up to 20 calls at once. Change them on the Systems page any time.</li>"
                      : fam == RrImport.Family.DMR ? "<li>DMR " + (conv ? "conventional" : "trunked, " + RrImport.dmrFlavor(fetched.details().typeName(), fetched.details().flavorName())) + " (untested). Change it on the Systems page any time.</li>"
                      : fam == RrImport.Family.NXDN ? "<li>NXDN " + (conv ? "conventional" : "trunked; voice channels found from RadioReference's channel numbers or the site's own announcements") + " (untested).</li>"
-                     : fam == RrImport.Family.TYPE2 ? "<li>Motorola Type II (untested). Band plan Auto works for 800 and 900 MHz; a VHF/UHF system needs its band plan entered on the Systems page.</li>" : "")
+                     : fam == RrImport.Family.TYPE2 ? "<li>Motorola Type II (untested). Band plan Auto works for 800 and 900 MHz; a VHF/UHF system needs its band plan entered on the Systems page.</li>"
+                     : fam == RrImport.Family.EDACS ? "<li>EDACS (untested), " + Util.xml(p25monitor.edacs.EdacsSite.Mode.of(RrImport.edacsMode(fetched.details().typeName(), fetched.details().flavorName())).label) + " addressing; voice channels from RadioReference's LCN numbers. Analog FM and ProVoice voice (ProVoice uses the same IMBE codec as P25).</li>" : "")
              .append(sharesExisting() ? "<li>This site shares the talkgroup list you already keep for this system. RadioReference names are merged in; favorites, mutes, record, priority and streams stay.</li>" : "")
              .append("<li>New talkgroups are not sent to any stream until you assign them (Talkgroups or Streams page).</li></ul>")
              .append("<p style='color:#7D8FA3'>Nothing else is fetched from RadioReference until you choose Refresh on the Systems page.</p>");

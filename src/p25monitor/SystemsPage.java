@@ -10,7 +10,9 @@ public class SystemsPage extends JPanel {
     final MainFrame f;
     final DefaultListModel<RadioSystem> listModel = new DefaultListModel<>();
     final JList<RadioSystem> list = new JList<>(listModel);
-    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)", "DMR (conventional, untested)", "DMR trunked (untested)", "NXDN (conventional, untested)", "NXDN trunked (untested)", "Analog FM (conventional, untested)", "Motorola Type II SmartNet / SmartZone (untested)"});
+    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)", "DMR (conventional, untested)", "DMR trunked (untested)", "NXDN (conventional, untested)", "NXDN trunked (untested)", "Analog FM (conventional, untested)", "Motorola Type II SmartNet / SmartZone (untested)", "EDACS / ProVoice (untested)"});
+    /** EDACS addressing, in {@link p25monitor.edacs.EdacsSite.Mode} order. */
+    final JComboBox<p25monitor.edacs.EdacsSite.Mode> edacsMode = new JComboBox<>(p25monitor.edacs.EdacsSite.Mode.values());
     /** Motorola Type II band plan; the last entry uses {@link #obtPlan}. Order matches {@link #TYPE2_PLANS}. */
     final JComboBox<String> type2Plan = new JComboBox<>(new String[]{"Auto (800 / 900 MHz)", "800 MHz rebanded", "800 MHz standard", "800 MHz splinter", "900 MHz", "VHF / UHF (custom)"});
     static final String[] TYPE2_PLANS = {"auto", "800reband", "800standard", "800splinter", "900", "obt"};
@@ -126,7 +128,7 @@ public class SystemsPage extends JPanel {
         tuner.putClientProperty("JTextField.placeholderText", "optional - e.g. Airspy 0x26A464DC2B5A7C9F (see Setup & Help \u2192 Tuners)");
         kindBox.addActionListener(e -> {
             int k = kindBox.getSelectedIndex();
-            if (shownKind == 5 && k != 5) cc.setText(withoutNxdnTable(cc.getText()));   // the number=MHz entries only work for NXDN trunked
+            if ((shownKind == 5 || shownKind == 8) && k != 5 && k != 8) cc.setText(withoutNxdnTable(cc.getText()));   // number=MHz entries only work for NXDN trunked and EDACS
             showKind(k);
         });
         dmrFlavor.addActionListener(e -> { if (kindBox.getSelectedIndex() == 3) showKind(3); });
@@ -326,15 +328,18 @@ public class SystemsPage extends JPanel {
         boolean dmr = kind == 2 || kind == 3;
         boolean nxdn = kind == 4 || kind == 5;
         boolean type2 = kind == 7;
+        boolean edacs = kind == 8;
         boolean obt = type2 && type2Plan.getSelectedIndex() == 5;
         freqLabel.setText(fixed ? "Channels MHz" : "Control channel(s) MHz");
         Jargon.explain(freqLabel, fixed ? "Channels MHz" : "Control channel(s) MHz");
         cc.setToolTipText(freqLabel.getToolTipText());
-        cc.putClientProperty("JTextField.placeholderText", kind == 2 ? "e.g. 450.0000:1/1 Sample" : kind == 4 ? "e.g. 451.0125, 451.0250" : analog ? "e.g. 155.2500, 155.3700:100.0 Fire" : kind == 5 ? "e.g. 451.0000, 37=451.0125" : fixed ? "e.g. 155.2500, 155.3700:2D5" : "e.g. 851.0125, 851.5125");
+        cc.putClientProperty("JTextField.placeholderText", kind == 2 ? "e.g. 450.0000:1/1 Sample" : kind == 4 ? "e.g. 451.0125, 451.0250" : analog ? "e.g. 155.2500, 155.3700:100.0 Fire" : kind == 5 ? "e.g. 451.0000, 37=451.0125" : edacs ? "e.g. 851.0125, 1=851.0125, 2=851.2625" : fixed ? "e.g. 155.2500, 155.3700:2D5" : "e.g. 851.0125, 851.5125");
         freqHelp.setText(helpHtml((analog
                 ? "Analog FM channels, separated by commas, each with an optional name. Add a CTCSS (PL) tone after a colon when one channel uses its own, for example 155.3700:100.0. (untested)"
                 : kind == 4
                 ? "NXDN channels, separated by commas. NXDN48 and NXDN96 are detected automatically. (untested)"
+                : edacs
+                ? "Control channel(s) first, then every channel of the site as LCN=MHz in the site's order, for example 1=851.0125, 2=851.2625 (RadioReference lists the LCN next to each frequency). Grants name the LCN; voice is analog FM or ProVoice, as each grant says. (untested)"
                 : type2
                 ? "Control channel(s), primary first. Calls are followed from the control channel; their voice is analog FM or P25, as each grant says. (untested)"
                 : kind == 5
@@ -346,9 +351,9 @@ public class SystemsPage extends JPanel {
                 : "Primary first; add alternate control channels separated by commas. TrunkDeck rotates through them until one locks.")
                 + (pasteMode(kind) != null ? " You can also paste a frequency table copied from a RadioReference page, a spreadsheet or a CHIRP CSV (Ctrl+V, or right-click → Paste)." : "")));
         boolean tier3 = kind == 3 && dmrFlavor.getSelectedIndex() == 0;
-        demodLabel.setVisible(!dmr && !nxdn && !analog);
-        nativeMod.setVisible(!dmr && !nxdn && !analog);
-        demodHelp.setVisible(!dmr && !nxdn && !analog);
+        demodLabel.setVisible(!dmr && !nxdn && !analog && !edacs);
+        nativeMod.setVisible(!dmr && !nxdn && !analog && !edacs);
+        demodHelp.setVisible(!dmr && !nxdn && !analog && !edacs);
         demodHelp.setText(helpHtml("Auto runs both demodulators (C4FM and LSM/CQPSK for simulcast) on every channel and uses the one with fewer bit errors (shown on the Engine page)."));
         idsLabel.setText(dmr ? "Colour code" : analog ? "Tone squelch" : "IDs (optional)");
         nacLabel.setText(dmr ? "CC" : analog ? "CTCSS" : "NAC");
@@ -360,8 +365,8 @@ public class SystemsPage extends JPanel {
         trunkIds.setVisible(kind == 0 || tier3);
         idsHelp.setText(helpHtml(analog
                 ? "CTCSS (PL) tone in Hz, for example 100.0: only transmissions with that tone are played. Leave blank to hear everything that opens the squelch; the tone heard is then shown on the call."
-                : nxdn || type2
-                ? "Not used for " + (type2 ? "Motorola Type II" : "NXDN") + ": leave blank."
+                : nxdn || type2 || edacs
+                ? "Not used for " + (type2 ? "Motorola Type II" : edacs ? "EDACS" : "NXDN") + ": leave blank."
                 : kind == 2
                 ? "Colour code 0-15. Bursts with a different colour code are ignored. A channel can set its own after the frequency, for example 450.0000:3/1."
                 : tier3
@@ -374,17 +379,20 @@ public class SystemsPage extends JPanel {
         if (kind == 2) dmrOpts.add(dmrSlot);
         if (analog) dmrOpts.add(squelch);
         if (type2) { dmrOpts.add(type2Plan); if (obt) dmrOpts.add(obtPlan); }
-        dmrLabel.setText(type2 ? "Band plan" : analog ? "Squelch" : kind == 2 ? "Timeslot" : "Trunking");
-        dmrLabel.setVisible(dmr || analog || type2);
-        dmrOpts.setVisible(dmr || analog || type2);
-        dmrHelp.setVisible(dmr || analog || type2);
+        if (edacs) dmrOpts.add(edacsMode);
+        dmrLabel.setText(type2 ? "Band plan" : edacs ? "Addressing" : analog ? "Squelch" : kind == 2 ? "Timeslot" : "Trunking");
+        dmrLabel.setVisible(dmr || analog || type2 || edacs);
+        dmrOpts.setVisible(dmr || analog || type2 || edacs);
+        dmrHelp.setVisible(dmr || analog || type2 || edacs);
         delayLabel.setVisible(analog);
         delayBox.setVisible(analog);
         delayHelp.setVisible(analog);
         dwellLabel.setVisible(analog);
         dwellBox.setVisible(analog);
         dwellHelp.setVisible(analog);
-        dmrHelp.setText(helpHtml(type2
+        dmrHelp.setText(helpHtml(edacs
+                ? "How the site numbers its talkgroups and radios. RadioReference says which: EDACS Standard and Networked are Standard; Extended Addressing is EA. Pick an ESK option only if the listing mentions ESK. If calls show talkgroups that make no sense, try another one. (untested)"
+                : type2
                 ? (obt ? "VHF/UHF systems use their own band plan: copy the base frequency, spacing and offset from the system's RadioReference page. (untested)"
                        : "Turns the channel numbers in grants into frequencies. Auto picks 800 or 900 MHz from the control channel and checks the 800 MHz variant against the channel number the site announces. (untested)")
                 : analog
@@ -399,6 +407,7 @@ public class SystemsPage extends JPanel {
                 : kind == 4 ? "NXDN conventional has not been tested on a real radio system yet."
                 : kind == 5 ? "NXDN Type-C trunking has not been tested on a real radio system yet."
                 : type2 ? "Motorola Type II (SmartNet / SmartZone) has not been tested on a real radio system yet."
+                : edacs ? "EDACS and ProVoice have not been tested on a real radio system yet. ProVoice needs the same IMBE voice codec as P25."
                 : "";
         untestedNote.setText(note.isEmpty() ? " " : helpHtml(note + " If something doesn't work, please report it on GitHub Issues ("
                 + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").", "#FFB300", 11));
@@ -417,7 +426,7 @@ public class SystemsPage extends JPanel {
     void edit(RadioSystem s) {
         editing = s;
         name.setText(s.name); site.setText(s.site);
-        int kind = s.type2() ? 7 : s.analog() ? 6 : s.nxdnTrunk() ? 5 : s.nxdnConventional() ? 4 : s.dmrTrunk() ? 3 : s.dmrConventional() ? 2 : s.conventional() ? 1 : 0;
+        int kind = s.edacs() ? 8 : s.type2() ? 7 : s.analog() ? 6 : s.nxdnTrunk() ? 5 : s.nxdnConventional() ? 4 : s.dmrTrunk() ? 3 : s.dmrConventional() ? 2 : s.conventional() ? 1 : 0;
         kindBox.setSelectedIndex(kind);
         showKind(kind);
         cc.setText(s.fixedChannels() ? s.channelText() : s.freqText() + nxdnTableText(s));
@@ -428,6 +437,7 @@ public class SystemsPage extends JPanel {
         scanDelay.setValue(Math.max(0, Math.min(RadioSystem.SCAN_DELAY_MAX, s.scanDelay)));
         scanDwell.setValue(RadioSystem.clampDwell(s.scanDwell));
         showLockout(s);
+        edacsMode.setSelectedItem(p25monitor.edacs.EdacsSite.Mode.of(s.edacsMode));
         type2Plan.setSelectedIndex(Math.max(0, java.util.Arrays.asList(TYPE2_PLANS).indexOf(p25monitor.motorola.Type2BandPlan.Kind.of(s.type2Plan).key)));
         obtPlan.setText(s.obtBaseMHz > 0 ? RadioSystem.fmt(s.obtBaseMHz) + ", " + s.obtSpacingKHz + ", " + s.obtOffset : "");
         showKind(kind);
@@ -448,7 +458,7 @@ public class SystemsPage extends JPanel {
 
     /** NXDN Type-C channel table, appended to the control channels as ", 37=451.0125". */
     static String nxdnTableText(RadioSystem s) {
-        if (!s.nxdnTrunk() || s.nxdnChannels.isEmpty()) return "";
+        if (!s.channelNumbers() || s.nxdnChannels.isEmpty()) return "";
         StringBuilder b = new StringBuilder();
         for (var en : s.nxdnChannels.entrySet()) b.append(", ").append(en.getKey()).append('=').append(RadioSystem.fmt(en.getValue()));
         return b.toString();
@@ -514,7 +524,7 @@ public class SystemsPage extends JPanel {
                 s.controlChannelsMHz = new ArrayList<>();
             } else {
                 String text = cc.getText();
-                if (kind == 5) text = splitNxdnTable(text, table);
+                if (kind == 5 || kind == 8) text = splitNxdnTable(text, table);
                 java.util.List<Double> fr = RadioSystem.parseFreqs(text);
                 if (fr.isEmpty()) throw new NumberFormatException("enter at least one control channel");
                 s.controlChannelsMHz = fr;
@@ -526,7 +536,8 @@ public class SystemsPage extends JPanel {
             return false;
         }
         if (name.getText().isBlank()) { JOptionPane.showMessageDialog(f, "Give the system a name."); return false; }
-        s.kind = switch (kind) { case 1 -> RadioSystem.CONVENTIONAL; case 2 -> RadioSystem.DMR; case 3 -> RadioSystem.DMR_TRUNK; case 4 -> RadioSystem.NXDN; case 5 -> RadioSystem.NXDN_TRUNK; case 6 -> RadioSystem.ANALOG; case 7 -> RadioSystem.TYPE2; default -> RadioSystem.TRUNKED; };
+        s.kind = switch (kind) { case 1 -> RadioSystem.CONVENTIONAL; case 2 -> RadioSystem.DMR; case 3 -> RadioSystem.DMR_TRUNK; case 4 -> RadioSystem.NXDN; case 5 -> RadioSystem.NXDN_TRUNK; case 6 -> RadioSystem.ANALOG; case 7 -> RadioSystem.TYPE2; case 8 -> RadioSystem.EDACS; default -> RadioSystem.TRUNKED; };
+        s.edacsMode = ((p25monitor.edacs.EdacsSite.Mode) edacsMode.getSelectedItem()).key;
         s.type2Plan = TYPE2_PLANS[Math.max(0, type2Plan.getSelectedIndex())];
         if (obt != null) { s.obtBaseMHz = obt[0]; s.obtSpacingKHz = obt[1]; s.obtOffset = (int) obt[2]; }
         s.nxdnChannels = table;
@@ -600,7 +611,7 @@ public class SystemsPage extends JPanel {
 
     /** The system settings the radio engine only reads when it starts (tuning plan, control-channel hunt or conventional channels, demodulator). */
     static String restartKey(RadioSystem s) { return s.kind + "|" + s.controlChannelsMHz + "|" + s.nxdnChannels + "|" + s.channelsProperty() + "|" + s.nac.trim() + "|" + s.nativeModulation + "|" + (s.analog() ? s.squelch : 0)
-            + "|" + (s.type2() ? s.type2BandPlan().toString() : ""); }
+            + "|" + (s.type2() ? s.type2BandPlan().toString() : "") + "|" + (s.edacs() ? s.edacsMode : ""); }
 
     void save(boolean monitor) {
         if (editing == null) return;
@@ -663,6 +674,7 @@ public class SystemsPage extends JPanel {
         s.rfss = o.rfss; s.siteNumber = o.siteNumber; s.modulation = o.modulation; s.nativeModulation = o.nativeModulation; s.trafficChannels = o.trafficChannels; s.ignoreDataCalls = o.ignoreDataCalls;
         s.preferredTuner = o.preferredTuner; s.recordAll = o.recordAll; s.decodeMeter = o.decodeMeter; s.notes = o.notes;
         s.dmrFlavor = o.dmrFlavor; s.colorCode = o.colorCode; s.timeslot = o.timeslot; s.squelch = o.squelch; s.scanDelay = o.scanDelay; s.scanDwell = o.scanDwell; s.lockout.addAll(o.lockout);
+        s.edacsMode = o.edacsMode;
         s.type2Plan = o.type2Plan; s.obtBaseMHz = o.obtBaseMHz; s.obtSpacingKHz = o.obtSpacingKHz; s.obtOffset = o.obtOffset;
         s.nxdnChannels = new java.util.TreeMap<>(o.nxdnChannels);
         s.rrSid = o.rrSid; s.rrSites = o.rrSites; s.rrUpdated = o.rrUpdated; s.rrSeen = o.rrSeen;

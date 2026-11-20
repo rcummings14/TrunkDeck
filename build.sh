@@ -45,6 +45,8 @@ if [ "${1:-}" = "test" ]; then
   "$JAVA" ${TEST_OPTS:-} -cp build/classes${CPS}build/test p25monitor.analog.SquelchToneTests   # adjustable analog squelch level, CTCSS tone formats (206.5 PL, 206,5)
   "$JAVA" ${TEST_OPTS:-} -cp build/classes${CPS}build/test p25monitor.motorola.Type2Tests   # Motorola Type II control channel: OSW coding, 3600 bit/s FSK receiver, band plans, grants
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.Type2EngineTests   # Type II grants -> analog / P25 calls, saved band plan, RadioReference type
+  "$JAVA" ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/slf4j-api-2.0.7.jar p25monitor.edacs.EdacsTests   # EDACS control channel (BCH, framing, 9600 bit/s receiver, messages), ProVoice frames; -Dtrunkdeck.jmbe=<jmbe jar> adds the JMBE check
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.EdacsEngineTests   # EDACS grants -> analog / ProVoice calls, dotting, saved settings, RadioReference type
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.AnalogEngineTests   # analog calls, channel tones (1.7.6)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.SignalMeterTests   # control-channel signal meter: scale, text, glass
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.ControlSignalTests   # control-tuner level only; no invented reading

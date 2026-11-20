@@ -18,7 +18,8 @@ public final class DemodTests {
         try { if (Files.exists(Path.of("samples/P25-C4FM-VC_IF.wav")) || System.getProperty("voiceSample") != null) { List<byte[]> b = BusySite.imbeFrames(); if (b.size() > 50) return b; } }
         catch (Exception ignored) {}
         List<byte[]> b = new ArrayList<>(); Random r = new Random(7);
-        for (int i = 0; i < 300; i++) { byte[] x = new byte[18]; r.nextBytes(x); b.add(x); }
+        // random voice parameters, FEC-coded like real IMBE frames (random bytes would never pass the voice FEC)
+        for (int i = 0; i < 300; i++) { int[] u = new int[88]; for (int k = 0; k < 88; k++) u[k] = r.nextInt(2); b.add(p25monitor.edacs.ProVoice.toP25Frame(u)); }
         return b;
     }
 

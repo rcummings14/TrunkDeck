@@ -73,9 +73,11 @@ public final class RrImport {
         P25, DMR, NXDN,
         /** Motorola Type II SmartNet / SmartZone (including Type IIi hybrid): Motorola control channel, analog or P25 voice. */
         TYPE2,
-        /** Analog trunking (EDACS, LTR, MPT 1327, Passport): its control channel is not followed, its voice channels are analog FM. */
+        /** EDACS (standard, networked, EA, ESK): its 9600 bit/s control channel is followed, voice is analog FM or ProVoice. */
+        EDACS,
+        /** Analog trunking (LTR, MPT 1327, Passport): its control channel is not followed, its voice channels are analog FM. */
         ANALOG,
-        /** Digital voice TrunkDeck cannot decode (TETRA, iDEN, OpenSky, ProVoice, dPMR). */
+        /** Digital voice TrunkDeck cannot decode (TETRA, iDEN, OpenSky, dPMR). */
         UNSUPPORTED
     }
 
@@ -87,7 +89,8 @@ public final class RrImport {
     public static Family family(String typeName, String flavorName) {
         String t = typeText(typeName, flavorName);
         if (t.isEmpty()) return Family.P25;
-        if (t.matches(".*(tetra|iden|opensky|provoice|dpmr).*")) return Family.UNSUPPORTED;
+        if (t.matches(".*(edacs|provoice).*")) return Family.EDACS;
+        if (t.matches(".*(tetra|iden|opensky|dpmr).*")) return Family.UNSUPPORTED;
         if (t.matches(".*(dmr|mototrbo|capacity plus|capacity max|connect plus|xpt|hytera).*")) return Family.DMR;
         if (t.matches(".*(nxdn|nexedge|idas).*")) return Family.NXDN;
         if (t.contains("25") || t.contains("apco")) return Family.P25;
@@ -95,7 +98,7 @@ public final class RrImport {
         if (t.matches(".*(smartzone|smartnet|type ii).*")) return Family.TYPE2;
         // Type I (fleet maps) is not decoded: it imports as P25, as before, so the talkgroups and frequencies come along.
         if (t.matches(".*(type i\\b|motorola).*")) return Family.P25;
-        if (t.matches(".*(edacs|ltr|mpt|passport|multi-net|multinet).*")) return Family.ANALOG;
+        if (t.matches(".*(ltr|mpt|passport|multi-net|multinet).*")) return Family.ANALOG;
         return Family.UNSUPPORTED;
     }
 
@@ -108,6 +111,13 @@ public final class RrImport {
         if (t.contains("connect plus")) return "conplus";
         if (t.contains("xpt")) return "xpt";
         return "tier3";
+    }
+
+    /** EDACS addressing for {@link RadioSystem#edacsMode} from the RadioReference type: ea / std, with -esk when it says ESK. */
+    public static String edacsMode(String typeName, String flavorName) {
+        String t = typeText(typeName, flavorName);
+        boolean ea = t.matches(".*(extended|\\bea\\b).*"), esk = t.matches(".*\\besk\\b.*");
+        return (ea ? "ea" : "std") + (esk ? "-esk" : "");
     }
 
     /**
@@ -405,9 +415,11 @@ public final class RrImport {
             case NXDN -> conv ? RadioSystem.NXDN : RadioSystem.NXDN_TRUNK;
             case ANALOG -> RadioSystem.ANALOG;
             case TYPE2 -> conv ? RadioSystem.ANALOG : RadioSystem.TYPE2;
+            case EDACS -> conv ? RadioSystem.ANALOG : RadioSystem.EDACS;
             default -> conv ? RadioSystem.CONVENTIONAL : RadioSystem.TRUNKED;
         };
         if (fam == Family.DMR) s.dmrFlavor = dmrFlavor(f.details().typeName(), f.details().flavorName());
+        if (fam == Family.EDACS) s.edacsMode = edacsMode(f.details().typeName(), f.details().flavorName());
         if (conv) {
             s.channels = conventionalChannels(sites);
             s.controlChannelsMHz = new ArrayList<>();
@@ -427,7 +439,7 @@ public final class RrImport {
             for (RadioSystem.Channel c : s.channels) c.nac = "";
         }
         s.nxdnChannels = new TreeMap<>();
-        if (fam == Family.NXDN && !conv) for (Site x : sites) for (SiteFreq sf : x.freqs()) if (sf.lcn() > 0) s.nxdnChannels.putIfAbsent(sf.lcn(), sf.mhz());
+        if ((fam == Family.NXDN || fam == Family.EDACS) && !conv) for (Site x : sites) for (SiteFreq sf : x.freqs()) if (sf.lcn() > 0) s.nxdnChannels.putIfAbsent(sf.lcn(), sf.mhz());
         if (fam == Family.P25 && !conv && !f.details().sysids().isEmpty()) {
             s.sysId = f.details().sysids().get(0).sysid().trim().toUpperCase(Locale.ROOT);
             s.wacn = f.details().sysids().get(0).wacn().trim().toUpperCase(Locale.ROOT);

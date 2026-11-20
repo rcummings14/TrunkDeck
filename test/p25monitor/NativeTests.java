@@ -45,7 +45,7 @@ public class NativeTests {
         run("Display lit until the last audio is heard", () -> { int[] r = DisplayTests.lit(); pass += r[0]; fail += r[1]; });
         for (Runnable extra : EXTRA) extra.run();
         System.out.printf("%n%d checks passed, %d failed (%.1f s)%n", pass, fail, (System.currentTimeMillis() - t0) / 1000.0);
-        if (fail > 0) System.exit(1);
+        System.exit(fail > 0 ? 1 : 0);   // a display-timing check leaves an AWT thread running
     }
 
     static final List<Runnable> EXTRA = new ArrayList<>();

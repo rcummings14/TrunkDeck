@@ -30,9 +30,9 @@ public final class RrAllSystemsTests {
             {"Motorola Mototrbo", "Linked Capacity Plus", RrImport.Family.DMR}, {"Motorola Mototrbo", "Connect Plus", RrImport.Family.DMR},
             {"Hytera", "XPT", RrImport.Family.DMR}, {"Motorola Mototrbo", "Capacity Max", RrImport.Family.DMR},
             {"NXDN", "NEXEDGE 48", RrImport.Family.NXDN}, {"Kenwood NEXEDGE", "", RrImport.Family.NXDN}, {"Icom IDAS", "", RrImport.Family.NXDN},
-            {"EDACS", "Networked", RrImport.Family.ANALOG}, {"LTR", "Standard", RrImport.Family.ANALOG}, {"LTR", "Passport", RrImport.Family.ANALOG},
+            {"EDACS", "Networked", RrImport.Family.EDACS}, {"LTR", "Standard", RrImport.Family.ANALOG}, {"LTR", "Passport", RrImport.Family.ANALOG},
             {"MPT-1327", "", RrImport.Family.ANALOG},
-            {"EDACS", "ProVoice", RrImport.Family.UNSUPPORTED}, {"TETRA", "", RrImport.Family.UNSUPPORTED},
+            {"EDACS", "ProVoice", RrImport.Family.EDACS}, {"TETRA", "", RrImport.Family.UNSUPPORTED},
             {"iDEN", "", RrImport.Family.UNSUPPORTED}, {"OpenSky", "", RrImport.Family.UNSUPPORTED}, {"", "", RrImport.Family.P25},
         };
         List<String> wrong = new ArrayList<>();
@@ -62,8 +62,8 @@ public final class RrAllSystemsTests {
         Site ed = new Site(4, 77, 1, "EDACS site", 0, "", "County", 1, "", 0,
                 List.of(new SiteFreq(1, 866.0125, "d"), new SiteFreq(2, 866.5125, ""), new SiteFreq(3, 867.0125, "")));
         RadioSystem e = build(det("EDACS", "Networked"), ed);
-        check(e.analog() && e.frequencies().equals(List.of(866.5125, 867.0125)) && e.controlChannelsMHz.isEmpty(), "EDACS: voice channels as analog FM, control channel left out: " + e.displayFreqs());
-        check(e.talkgroups.isEmpty() && e.nac.isEmpty() && e.wacn.isEmpty(), "analog: no talkgroups, no NAC or WACN");
+        check(e.edacs() && e.controlChannelsMHz.equals(List.of(866.0125)) && e.nxdnChannelHz(2) == 866_512_500L && e.nxdnChannelHz(3) == 867_012_500L && e.edacsMode.equals("std"), "EDACS: control channel, and RadioReference's LCNs fill the channel table " + e.nxdnChannels);
+        check(e.talkgroups.size() == 1 && e.nac.isEmpty() && e.wacn.isEmpty(), "EDACS: talkgroups import, no NAC or WACN");
         Site ltr = new Site(5, 77, 1, "LTR", 0, "", "County", 1, "", 0, List.of(new SiteFreq(1, 461.1, ""), new SiteFreq(2, 461.2, "")));
         check(build(det("LTR", "Standard"), ltr).frequencies().size() == 2, "LTR (no control channel): every repeater is a channel");
 

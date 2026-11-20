@@ -1,7 +1,7 @@
 # TrunkDeck 1.7.5 — P25 Phase 1 and Phase 2 trunking monitor (Windows & Linux)
 
 TrunkDeck is a scanner-style dashboard for **P25 trunked radio systems** (Phase 1 control channel; Phase 1 and Phase 2 voice).
-New in 1.7.5 and **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone) and analog FM systems (see below). Type in a control channel, load your
+New in 1.7.5 and **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), EDACS / ProVoice and analog FM systems (see below). Type in a control channel, load your
 talkgroups from a CSV file, plug in an Airspy R2, an Airspy Mini or one or two RTL-SDR dongles (or, new and untested, an SDRplay, HackRF One, LimeSDR or Ettus USRP), press **START MONITORING**, and watch (and hear) the system
 live: talkgroup, name, frequency, radio ID, call timer, encryption and emergency flags, a control-channel decode meter, an
 activity graph, and a table of **every call that is on the air right now**.
@@ -10,7 +10,7 @@ TrunkDeck decodes everything itself with the **TrunkDeck engine**, its own P25 d
 It talks to your Airspy R2, Airspy Mini and RTL-SDR dongles directly. No other radio program is needed. SDRplay, HackRF, LimeSDR and USRP
 receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *Supported receivers*.
 
-**New in 1.7.5 – DMR, NXDN, Motorola Type II and analog FM (UNTESTED)**
+**New in 1.7.5 – DMR, NXDN, Motorola Type II, EDACS / ProVoice and analog FM (UNTESTED)**
 * **UNTESTED:** these system types are new and **have not been tested on real radio systems**. They were tested with
   simulated signals only. If something doesn't work, please report it on **GitHub Issues**
   (<https://github.com/rcummings14/TrunkDeck/issues>) and attach *Copy diagnostics* from the Engine page. P25 is unchanged.
@@ -29,9 +29,11 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
     only, default 5). With no tone set, the tone heard is shown on the call. **Scan delay** (0-30 seconds, default 2):
     how long scanning waits on a channel after a transmission ends, so you hear the reply.
   * **Motorola Type II SmartNet / SmartZone:** see *Motorola Type II* under *Using TrunkDeck*.
+  * **EDACS / ProVoice:** see *EDACS and ProVoice* under *Using TrunkDeck*.
 * DMR and NXDN voice use the AMBE+2 codec: they need JMBE 2.x, the same as P25 Phase 2.
 * **Set up from RadioReference** imports these system types now. DMR, NXDN and SmartNet / SmartZone systems become the
-  matching kind. Analog trunked systems (EDACS, LTR, MPT, Passport) become analog FM channels, listened to directly.
+  matching kind. EDACS systems import as EDACS (see *EDACS and ProVoice*). Other analog trunked systems (LTR, MPT,
+  Passport) become analog FM channels, listened to directly.
 * **Analog Hold / Scan / Down / Up / Lockout** on the Monitor page, for analog FM systems: see *Listening*.
 * **Level** in the live call log: each call's average signal level while it was on the air (dB, like the Active calls
   list). The log's **Secs** is now the real length on analog, Type II, DMR and NXDN calls too (it was several times too
@@ -354,7 +356,7 @@ in a few seconds - your feeds stay connected (listeners hear silence for that mo
 |---|---|
 | **Monitor** | The scanner display (the call on the speaker: big alpha tag, talkgroup, category/tag, frequency, radio ID, call timer, ENC / EMERGENCY / FAV / MUTED badges; a dimmed SCANNING when no call is playing), control-channel meter, activity graph). Below it: the **Active calls** table, the live call log (with each call's length in seconds and its average signal **Level**; double-click a call, or **Play**, to hear its recording), **Hot talkgroups**, the **Speaker** choice, and quick buttons for the selected talkgroup (**Favorite, Mute, Add to list, Replay last**). **What to play:** *Everything*, *Only talkgroups in my list*, or *Favorites only*. |
 | **Talkgroups** | Your list for the selected system. **Import CSV**, **Export CSV**, **Save CSV template**, search box, category filter, *Favorites* / *Heard* filters. Tick ★ (favorite), **Mute** and **Rec** (record) per talkgroup. Edit names, categories and **Priority** (1 = most important, 100 = normal) in the table. The **Color** column sets the colour of that talkgroup's name and number while it is on the air (or Default, which keeps the display theme). The list itself stays the usual colours. The Monitor, Display only, and the home-network page use that text colour. Sites of the same system share it. Select rows (Ctrl/Shift-click or Ctrl+A) to favorite, mute, record or assign streams in bulk. |
-| **Systems** | Add or edit systems: **Kind** (P25 trunked, P25 conventional, DMR, DMR trunked, NXDN, NXDN trunked, analog FM, Motorola Type II), name, site, **control channel(s) in MHz** (or the channels, for a conventional kind), demodulator (Auto / C4FM / LSM for simulcast), optional NAC/WACN/System ID/RFSS/Site, **Max simultaneous calls**, *Record every call*, and *Auto-start when TrunkDeck opens* (only one system; the next time TrunkDeck opens it starts after a short countdown on the Monitor page, with Cancel). The home-network page can show the countdown but cannot change this checkbox. **Add preset** brings back the fictional example presets. |
+| **Systems** | Add or edit systems: **Kind** (P25 trunked, P25 conventional, DMR, DMR trunked, NXDN, NXDN trunked, analog FM, Motorola Type II, EDACS / ProVoice), name, site, **control channel(s) in MHz** (or the channels, for a conventional kind), demodulator (Auto / C4FM / LSM for simulcast), optional NAC/WACN/System ID/RFSS/Site, **Max simultaneous calls**, *Record every call*, and *Auto-start when TrunkDeck opens* (only one system; the next time TrunkDeck opens it starts after a short countdown on the Monitor page, with Cancel). The home-network page can show the countdown but cannot change this checkbox. **Add preset** brings back the fictional example presets. |
 | **Streams** | Broadcastify Calls, Broadcastify Feeds and Icecast. See below. |
 | **Recordings** | Recorded calls, one file per call (talkgroups with **Rec** ticked, or every call). Double-click a recording (or **Play** / **Pause**) to hear it in TrunkDeck. The talkgroup name and time stay on screen while it plays. A live call on the speaker pauses it. Volume slider, *Open folder*, *Choose folder...* and *Use default*. *Choose folder...* sets where new recordings are saved (used right away, no restart). *Use default* returns to the usual folder in your home directory. Recordings already saved are left in place and can still be played. If the folder is missing or can't be written, TrunkDeck explains and uses the usual folder. The home-network page cannot change it. |
 | **Engine** | Dongles (role, PPM, gain, bias-T), live site info and tuner windows, voice codec, voice-call diagnostics, decoded control-channel messages, and *Test with an I/Q recording*. See *Engine page*. |
@@ -389,8 +391,9 @@ page address on the RadioReference website, e.g. `…/sid/1234`), pick the syste
 * Errors are explained in plain words: wrong username or password, no active Premium subscription, a missing or
   rejected app key, no internet connection, or a message from RadioReference.
 * P25, DMR, NXDN and Motorola Type II (SmartNet / SmartZone, including Type IIi) systems import as their own kind.
-  Motorola Type I imports as P25. Analog trunked systems (EDACS, LTR, MPT, Passport) import as analog FM channels.
-  TETRA, iDEN, OpenSky, ProVoice and dPMR can't be imported.
+  Motorola Type I imports as P25. EDACS (standard, networked, EA, ESK, ProVoice) imports as EDACS, with the voice
+  channels from RadioReference's LCN numbers. Other analog trunked systems (LTR, MPT, Passport) import as analog FM
+  channels. TETRA, iDEN, OpenSky and dPMR can't be imported.
 * **Check the Kind after importing a SmartZone system.** Some RadioReference listings still say *Type II SmartZone* for
   systems that have since moved to a P25 control channel. If the Engine page shows P25 site details (NAC, WACN, system
   ID) on your control channel, set **Kind** to *Trunked (control channel)*.
@@ -516,6 +519,25 @@ emergency and patch flags and the talking radio's ID are shown.
   built from the published descriptions. A short I/Q recording of a Type II control channel (made with any SDR program;
   TrunkDeck can test-decode it with *Engine → Test with an I/Q recording*) sent with an issue helps a lot.
 * Private (unit-to-unit) calls are logged, not followed.
+
+### EDACS and ProVoice (1.7.5, untested)
+Set **Kind** to *EDACS / ProVoice* (Set up from RadioReference does this for you). TrunkDeck decodes the 9600 bit/s
+EDACS control channel (each message is sent three times and error-checked, so damaged ones are thrown away rather than
+misread) and follows each call. Each grant says whether the voice is analog FM or ProVoice digital, and the call is
+decoded that way.
+* **Channels:** EDACS grants name a logical channel number (LCN), not a frequency, so list every channel of the site
+  after the control channel(s) as `LCN=MHz` in the site's order, for example `851.0125, 1=851.0125, 2=851.2625`.
+  RadioReference shows the LCN next to each site frequency, and the import fills this in.
+* **Addressing** (Systems page): *Standard / networked*, *Extended addressing (EA)*, or either with *ESK*. RadioReference
+  names the type. If calls show talkgroups that make no sense, try another one.
+* **ProVoice** is decoded with the same IMBE voice codec (JMBE) as P25, so nothing extra is needed. Analog calls use
+  the analog FM receiver.
+* A call ends on the "dotting" EDACS sends on the voice channel when the radio unkeys, or when the control channel
+  stops repeating the assignment.
+* Talkgroups are shown as numbers (the standard 11-bit agency / fleet / subfleet number, or the 16-bit EA group). Names
+  come from your talkgroup list, as for P25.
+* **Untested:** no EDACS system was in reach while this was written; it was tested against simulated signals only. An
+  I/Q recording of a control channel or a ProVoice call sent with an issue helps a lot.
 
 ### Streaming to Broadcastify, OpenMHz or Rdio Scanner (optional)
 On **Streams**:
@@ -727,7 +749,7 @@ own CSV (see *Talkgroup CSV files*).
 * **Mix all calls** plays everything, but the big display doesn't follow individual calls in that mode (the Active calls table does).
 * The LSM/CQPSK (simulcast) demodulator has been tested on public recordings and simulated simulcast, not on a live simulcast site.
 * Unit-to-unit (private) calls, data (PDU) and the HDU are logged but not followed. A terminator's link control is read for a radio name, and the transmission still ends.
-* **DMR, NXDN, Motorola Type II and analog FM (1.7.5) are UNTESTED on real radio systems** - only with simulated signals.
+* **DMR, NXDN, Motorola Type II, EDACS / ProVoice and analog FM (1.7.5) are UNTESTED on real radio systems** - only with simulated signals.
   A VHF / UHF Type II system needs its band plan typed in (see *Motorola Type II*).
 * **Encrypted talkgroups can't be heard.** They're still listed, in purple, so you can see the activity.
 * Expect it to decode somewhat worse than mature decoders on weak or fringe signals.
@@ -790,6 +812,8 @@ Your systems, talkgroups, radio names, streams, recordings and voice codec are k
   are identical to the earlier tables. See `NOTICE.txt`.
 * **NXDN** and **Motorola Type II** decoders (1.7.5): TrunkDeck's own code. Protocol facts were read from sdrtrunk (NXDN),
   gr-smartnet and trunk-recorder (Type II); no code was copied. See `NOTICE.txt`.
+* **EDACS and ProVoice** decoder (1.7.5): TrunkDeck's own code. Protocol facts were read from DSD-FME, DSD and mbelib;
+  no code was copied. ProVoice voice is played by JMBE. See `NOTICE.txt`.
 * **JMBE** voice codec (GPLv3, <https://github.com/DSheirer/jmbe>): only built on your machine on request (see *Voice audio*). It's never included in this zip.
   The IMBE and AMBE+2 vocoders it implements are subject to patents held by Digital Voice Systems, Inc.
 * **Eclipse Temurin JDK 25** (GPLv2 with the Classpath Exception, <https://adoptium.net>): downloaded by the installer, not in this zip. Licence files: `runtime/legal`.

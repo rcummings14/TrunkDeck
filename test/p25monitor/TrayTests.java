@@ -217,6 +217,7 @@ public final class TrayTests {
         check(!f.isVisible() && exitCode[0] == -1 && f.nativeEngine.isRunning(), "X: window hidden, app still running");
         check(fb.notices.size() == 1 && fb.notices.get(0).contains(Tray.NOTICE), "first time: tray notice");
         if (voice) check(waitFor(() -> bc.received.size() > up0, 40000), "Broadcastify Calls uploads continue while hidden (" + up0 + " -> " + bc.received.size() + ")");
+        waitFor(() -> c.bytes().length > feed0 + 4000, 3000);   // without the voice checks above no time has passed yet
         check(c.bytes().length > feed0 && c.maxGapMs() < 1500, "feed keeps sending while hidden (" + (c.bytes().length - feed0) + " bytes, max gap " + c.maxGapMs() + " ms)");
         check(spk[0] > spk0, "speaker audio keeps playing while hidden (" + (spk[0] - spk0) + " bytes)");
         check(f.nativeEngine.starts == starts && ice.conns.size() == 1 && c.closedMs == 0, "no engine restart, same feed connection");

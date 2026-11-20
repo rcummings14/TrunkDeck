@@ -49,6 +49,19 @@ final class VoiceCallDecoder {
             if (c.imbe == null && e.ambeMissingLogged.compareAndSet(false, true))
                 e.log("Phase 2 call TG " + c.tg + ": the AMBE+2 voice codec is not available (it needs JMBE 2.x built by the installer, see START-HERE) - calls are followed but silent.");
             e.phase2Calls++;
+        } else if (c.edacs) {
+            vd = new ChannelDecoder(t.decoderRate(), t.decoderCenter(c.freq), c.freq, new P25Framer.Listener() {}, afc);
+            vd.widen(t.decoderRate(), NativeEngine.EDACS_CUTOFF_HZ);
+            if (c.analogVoice) vd.analog = new p25monitor.analog.FmReceiver(0, new p25monitor.analog.FmReceiver.Listener() {
+                public void start(double toneHz) {}
+                public void audio(float[] pcm) { onType2Audio(call, pcm); }
+                public void end() {}
+            });
+            vd.provoice = new p25monitor.edacs.ProVoiceReceiver(new p25monitor.edacs.ProVoiceReceiver.Listener() {
+                public void voice(byte[][] frames, int errors) { if (!call.analogVoice) onProVoice(call, frames); }
+                public void end() { onEdacsEnd(call); }
+            });
+            vd.provoice.dottingAlwaysEnds = c.analogVoice;
         } else if (c.type2 && c.analogVoice) {
             vd = new ChannelDecoder(t.decoderRate(), t.decoderCenter(c.freq), c.freq, new P25Framer.Listener() {}, afc);
             vd.analog = new p25monitor.analog.FmReceiver(0, new p25monitor.analog.FmReceiver.Listener() {
@@ -626,7 +639,33 @@ final class VoiceCallDecoder {
         e.listener.callUpdated(c.ev);
     }
 
-    /** 20 ms of analog audio at 8 kHz on a Motorola Type II voice channel. */
+    /** Four 20 ms ProVoice voice frames (converted to P25 IMBE frames) on an EDACS voice channel. */
+    void onProVoice(ActiveCall c, byte[][] frames) {
+        if (c.ended) return;
+        long now = System.currentTimeMillis();
+        ChannelDecoder vd = c.vd;
+        if (vd != null) vd.lastFrameAt = now;
+        if (c.hang) { c.hang = false; c.ptts++; }
+        c.lastVoice = now; c.lastSeen = Math.max(c.lastSeen, now);
+        c.voiceFrames++; c.ldus++;
+        c.voiceMs += frames.length * 20L;
+        if (c.encrypted || c.imbe == null) return;
+        playFrames(c, frames);
+    }
+
+    /**
+     * Dotting (or lost ProVoice sync) on an EDACS voice channel: the transmission is over. Dotting in the first second
+     * of an analog call, before any audio, is the channel's set-up data, not the end.
+     */
+    void onEdacsEnd(ActiveCall c) {
+        synchronized (e) {
+            if (c.ended) return;
+            if (c.analogVoice && c.voiceFrames == 0 && System.currentTimeMillis() - c.followStart < 1000) return;
+            e.calls.endCall(c, "end of transmission");
+        }
+    }
+
+    /** 20 ms of analog audio at 8 kHz on a Motorola Type II (or EDACS) voice channel. */
     void onType2Audio(ActiveCall c, float[] pcm) {
         if (c.ended) return;
         long now = System.currentTimeMillis();

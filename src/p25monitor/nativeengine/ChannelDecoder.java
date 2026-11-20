@@ -41,7 +41,7 @@ final class ChannelDecoder {
     static boolean holdAfterLock = !Boolean.getBoolean("trunkdeck.fllNoHold");
     static final int WINDOW = 24000;           // 0.5 s of 48 kHz samples per demodulator comparison
     final long freqHz;
-    final Channelizer ch;
+    Channelizer ch;
     /** Centre of the stream this decoder is fed (tuner centre, or its sub-band's centre on a wideband tuner). */
     volatile long centerHz;
     /** Sub-band of a wideband tuner this decoder reads (set by the tuner's sample loop). */
@@ -91,15 +91,20 @@ final class ChannelDecoder {
         final P25Framer framer;
         P2Framer p2f;
         long f0, b0, e0;                // window baselines
+        long nidAt = -1_000_000;        // sample count at this path's last good NID
+        int voiceErr, ldus;             // before Auto has decided: voice frames and their first-code-word errors
         double ber = Double.NaN;        // smoothed bit error rate estimate
         int windows;
         Demod(boolean lsm, int nac) {
             framer = new P25Framer(new P25Framer.Listener() {
-                public void nid(int n, int duid, int e) { lastFrameAt = System.currentTimeMillis(); lastNidSampleAt = samples; if (active == Demod.this) out.nid(n, duid, e); }
+                public void nid(int n, int duid, int e) { lastFrameAt = System.currentTimeMillis(); lastNidSampleAt = samples; nidAt = samples; if (active == Demod.this) out.nid(n, duid, e); }
                 public void tsbk(Tsbk t) { if (fresh(t.b, Demod.this)) { lastTsbkAt = System.currentTimeMillis(); out.tsbk(t); } }
                 public void pdu(Pdu p) { if (fresh(p.data.length > 0 ? p.data : p.header, Demod.this)) { lastTsbkAt = System.currentTimeMillis(); out.pdu(p); } }
                 public void tsbkError() { if (active == Demod.this) out.tsbkError(); }
-                public void ldu(int n, int duid, byte[][] imbe, P25Framer.LinkControl lc, P25Framer.EncryptionSync ess) { if (active == Demod.this) out.ldu(n, duid, imbe, lc, ess); }
+                public void ldu(int n, int duid, byte[][] imbe, P25Framer.LinkControl lc, P25Framer.EncryptionSync ess) {
+                    if (!decided()) { voiceErr += voiceErrors(imbe); ldus++; }
+                    if (active == Demod.this || takeOver(Demod.this)) out.ldu(n, duid, imbe, lc, ess);
+                }
                 public void hdu(int n) { if (active == Demod.this) out.hdu(n); }
                 public void tdulc(int n, P25Framer.LinkControl lc) { if (active == Demod.this) out.tdulc(n, lc); }
                 public void terminator(int n, int duid) { if (active == Demod.this) out.terminator(n, duid); }
@@ -130,6 +135,47 @@ final class ChannelDecoder {
             }
         }
         @Override public void symbol(int dibit, float level) { if (p2f != null) p2f.symbol(dibit); else framer.symbol(dibit, level); }
+    }
+
+    /**
+     * Auto, before the error-rate comparison has decided (about the first second of a channel): the other demodulator
+     * decoded a voice frame the one in use missed (no frame from it for a quarter second), so it takes over at once.
+     * Every voice channel starts on C4FM, and without this a CQPSK / simulcast call lost its first second or so.
+     */
+    /** Bit positions of IMBE code word c0 (Golay 23,12, not scrambled) in a P25 voice frame as the framer gives it. */
+    static final int[] C0_BITS = new int[23];
+    static {
+        for (int i = 0; i < 144; i++) {
+            int c = i / 12, j = i % 12, k = j < 6 ? 24 * j + 2 * c : 24 * ((j - 6) ^ 1) + 2 * c + 1;
+            if (k < 23) C0_BITS[k] = i;
+        }
+    }
+    /** Bit errors in c0 of each voice frame (4 for one Golay can't correct): a cheap measure of how clean the voice is. */
+    static int voiceErrors(byte[][] frames) {
+        int sum = 0; int[] e = new int[1];
+        for (byte[] f : frames) {
+            int cw = 0;
+            for (int b : C0_BITS) cw = cw << 1 | (f[b >> 3] >> (7 - (b & 7)) & 1);
+            p25monitor.p25.Fec.golay23Decode(cw, e);
+            sum += e[0] < 0 ? 4 : e[0];
+        }
+        return sum;
+    }
+
+    boolean takeOver(Demod d) {
+        Demod a = active;
+        if (paths.length < 2 || a == d || decided()) return false;
+        if (samples - a.nidAt >= 12000) {                          // the one in use missed this frame
+            trace("early switch " + a.name() + "->" + d.name());
+            active = d; demodSwitches++;
+            return true;
+        }
+        // both decode voice: switch once this one's voice is clearly cleaner (the one in use already passed this frame on)
+        if (d.ldus >= 2 && a.ldus >= 2 && d.voiceErr * 3 + 6 < a.voiceErr) {
+            trace("early switch " + a.name() + "->" + d.name() + " voice errors " + d.voiceErr + "/" + a.voiceErr);
+            active = d; demodSwitches++;
+        }
+        return false;
     }
 
     ChannelDecoder(double rate, long centerHz, long freqHz, P25Framer.Listener l, double afcStart) {
@@ -213,6 +259,13 @@ final class ChannelDecoder {
     p25monitor.analog.FmReceiver analog;
     /** Motorola Type II control channel receiver on this same 48 kHz channel. Null unless this is a Type II control channel. */
     p25monitor.motorola.Type2Demod type2;
+    /** EDACS control channel receiver on this same 48 kHz channel. Null unless this is an EDACS control channel. */
+    p25monitor.edacs.EdacsDemod edacs;
+    /** ProVoice receiver (and, on an analog EDACS call, the end-of-call dotting detector). Null unless an EDACS voice channel. */
+    p25monitor.edacs.ProVoiceReceiver provoice;
+
+    /** EDACS channels are 9600 bit/s FSK: a wider channel filter than P25's 6.25 kHz. */
+    void widen(double rate, double cutoffHz) { ch = new Channelizer(rate, freqHz - centerHz + afcHz, cutoffHz); }
 
     void process(float[] i, float[] q, int n) {
         if (!enabled) return;
@@ -262,6 +315,8 @@ final class ChannelDecoder {
         if (nxdn != null && m > 0) nxdn.baseband(oi, oq, m);
         if (analog != null && m > 0) analog.baseband(oi, oq, m);
         if (type2 != null && m > 0) type2.baseband(oi, oq, m);
+        if (edacs != null && m > 0) edacs.baseband(oi, oq, m);
+        if (provoice != null && m > 0) provoice.baseband(oi, oq, m);
         samples += m;
         fll();
         if (samples - windowAt >= WINDOW) { windowAt = samples; compare(); }
@@ -324,6 +379,8 @@ final class ChannelDecoder {
     /** Demodulator name for display: a DMR channel is 4FSK, not C4FM. */
     String demodName() {
         if (type2 != null) return "2FSK (Motorola Type II)";
+        if (edacs != null) return "2FSK 9600 (EDACS)";
+        if (provoice != null && analog == null) return "2FSK 9600 (ProVoice)";
         if (analog != null) return "FM (analog)" + (analog.tone() > 0 ? String.format(java.util.Locale.ROOT, " PL %.1f", analog.tone()) : "");
         if (nxdn != null) { String m = nxdn.mode(); return "4FSK (" + (m == null ? "NXDN" : m) + ")"; }
         return dmr != null ? "4FSK (DMR)" : active.demod.name();
@@ -361,7 +418,7 @@ final class ChannelDecoder {
 
     /** Total measured carrier offset in Hz (AFC + residual). */
     double frequencyError() { return afcHz + active.demod.freqErrorHz; }
-    boolean locked(long now) { return now - lastFrameAt < 2500 || (dmr != null && dmr.synced()) || (nxdn != null && nxdn.synced()) || (analog != null && analog.open()) || (type2 != null && type2.locked()); }
+    boolean locked(long now) { return now - lastFrameAt < 2500 || (dmr != null && dmr.synced()) || (nxdn != null && nxdn.synced()) || (analog != null && analog.open()) || (type2 != null && type2.locked()) || (edacs != null && edacs.locked()) || (provoice != null && provoice.locked()); }
 
     /** Resets since the last frame lock. Drives the trunked "give up after 8" rule, and goes back to 0 when sync returns. */
     int syncResets;

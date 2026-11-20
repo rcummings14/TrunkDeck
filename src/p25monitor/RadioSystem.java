@@ -20,6 +20,8 @@ public class RadioSystem {
     public static final String ANALOG = "analog";
     /** Motorola Type II (SmartNet / SmartZone) trunking: 3600 bit/s control channel, analog FM or P25 voice. Untested on air. */
     public static final String TYPE2 = "type2";
+    /** EDACS trunking (GE / Ericsson / Harris): 9600 bit/s control channel, analog FM or ProVoice voice. Untested on air. */
+    public static final String EDACS = "edacs";
 
     /** One fixed channel on a conventional system. A blank NAC uses the system's NAC; a blank name is just the frequency. */
     public static final class Channel {
@@ -69,6 +71,8 @@ public class RadioSystem {
     public static double clampDwell(double v) { return Double.isNaN(v) ? SCAN_DWELL_DEFAULT : Math.max(SCAN_DWELL_MIN, Math.min(SCAN_DWELL_MAX, Math.round(v * 2) / 2.0)); }
     /** Motorola Type II band plan: auto, 800reband, 800standard, 800splinter, 900 or obt (VHF/UHF, uses the three values below). */
     public String type2Plan = "auto";
+    /** EDACS addressing: std, std-esk, ea or ea-esk ({@link p25monitor.edacs.EdacsSite.Mode}). Its LCN list is {@link #nxdnChannels}. */
+    public String edacsMode = "std";
     /** VHF/UHF (OBT) band plan: first receive frequency, channel spacing, and the channel number of the first receive channel. */
     public double obtBaseMHz, obtSpacingKHz;
     public int obtOffset = 380;
@@ -129,6 +133,10 @@ public class RadioSystem {
     public boolean nxdn() { return nxdnConventional() || nxdnTrunk(); }
     /** Motorola Type II SmartNet / SmartZone (untested). */
     public boolean type2() { return TYPE2.equalsIgnoreCase(kind); }
+    /** EDACS with analog FM or ProVoice voice (untested). */
+    public boolean edacs() { return EDACS.equalsIgnoreCase(kind); }
+    /** Trunked kinds whose voice channels are numbered (number=MHz in the frequency box): NXDN Type-C and EDACS. */
+    public boolean channelNumbers() { return nxdnTrunk() || edacs(); }
 
     public p25monitor.motorola.Type2BandPlan type2BandPlan() {
         return new p25monitor.motorola.Type2BandPlan(p25monitor.motorola.Type2BandPlan.Kind.of(type2Plan),
@@ -210,6 +218,7 @@ public class RadioSystem {
         if (dmrTrunk()) return freqText().isBlank() ? "" : "DMR CC " + freqText();
         if (nxdnTrunk()) return freqText().isBlank() ? "" : "NXDN CC " + freqText();
         if (type2()) return freqText().isBlank() ? "" : "TYPE II CC " + freqText();
+        if (edacs()) return freqText().isBlank() ? "" : "EDACS CC " + freqText();
         if (analog()) return channels.isEmpty() ? "" : channels.size() == 1 ? channelCaption(Math.round(channels.get(0).mhz * 1e6)) : channels.size() + " analog channels";
         if (nxdnConventional()) return channels.isEmpty() ? "" : channels.size() == 1 ? channelCaption(Math.round(channels.get(0).mhz * 1e6)) : channels.size() + " NXDN channels";
         if (dmrConventional()) {
@@ -270,6 +279,7 @@ public class RadioSystem {
         if (analog()) return "Analog FM (untested)";
         if (nxdnTrunk()) return "NXDN trunked (untested)";
         if (type2()) return "Motorola Type II (untested)";
+        if (edacs()) return "EDACS / ProVoice (untested)";
         if (conventional()) return "Conventional (untested)";
         return "Trunked";
     }
@@ -427,7 +437,8 @@ public class RadioSystem {
             p.setProperty("obtSpacing", String.valueOf(obtSpacingKHz));
             p.setProperty("obtOffset", String.valueOf(obtOffset));
         }
-        if (nxdnTrunk() && !nxdnChannels.isEmpty()) {
+        if (edacs()) p.setProperty("edacsMode", p25monitor.edacs.EdacsSite.Mode.of(edacsMode).key);
+        if (channelNumbers() && !nxdnChannels.isEmpty()) {
             StringJoiner j = new StringJoiner(",");
             for (var en : nxdnChannels.entrySet()) j.add(en.getKey() + "=" + fmt(en.getValue()));
             p.setProperty("nxdnChannels", j.toString());
@@ -478,6 +489,7 @@ public class RadioSystem {
             try { if (!m.isBlank()) s.lockout.add(Math.round(Double.parseDouble(m.trim()) * 1e6)); } catch (NumberFormatException ignored) {}
         }
         s.type2Plan = p25monitor.motorola.Type2BandPlan.Kind.of(p.getProperty("type2Plan", "auto")).key;
+        s.edacsMode = p25monitor.edacs.EdacsSite.Mode.of(p.getProperty("edacsMode", "std")).key;
         try { s.obtBaseMHz = Double.parseDouble(p.getProperty("obtBase", "0").trim()); } catch (Exception ignored) {}
         try { s.obtSpacingKHz = Double.parseDouble(p.getProperty("obtSpacing", "0").trim()); } catch (Exception ignored) {}
         try { s.obtOffset = Integer.parseInt(p.getProperty("obtOffset", "380").trim()); } catch (Exception ignored) {}
@@ -514,6 +526,7 @@ public class RadioSystem {
         if (NXDN.equalsIgnoreCase(k)) return NXDN;
         if (ANALOG.equalsIgnoreCase(k)) return ANALOG;
         if (TYPE2.equalsIgnoreCase(k)) return TYPE2;
+        if (EDACS.equalsIgnoreCase(k)) return EDACS;
         if (CONVENTIONAL.equalsIgnoreCase(k)) return CONVENTIONAL;
         return TRUNKED;
     }

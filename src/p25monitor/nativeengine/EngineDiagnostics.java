@@ -22,9 +22,9 @@ final class EngineDiagnostics {
         boolean p25 = !nxdn && !dmr && !analog;   // the frame, talkgroup-check and I/Q rows below are P25 only
         r.add(new String[]{"Talkgroup", (nxdn ? "NXDN " : dmr ? "DMR " : "") + (c.conventional ? "conventional " : "") + c.tg + alias + (c.priority < 100 ? "  (priority " + c.priority + ")" : "")});
         r.add(new String[]{"Status", status});
-        String mode = analog || c.type2 && c.analogVoice ? "analog FM" : nxdn ? "NXDN" : dmr ? (c.slot >= 0 ? "DMR timeslot " + (c.slot + 1) : "DMR")
+        String mode = analog || (c.type2 || c.edacs) && c.analogVoice ? "analog FM" : c.edacs ? "ProVoice" : nxdn ? "NXDN" : dmr ? (c.slot >= 0 ? "DMR timeslot " + (c.slot + 1) : "DMR")
                 : c.phase2 ? "Phase 2 TDMA slot " + (c.slot + 1) : "Phase 1 FDMA";
-        r.add(new String[]{"Channel", mhz(c.freq) + " MHz  " + mode + (c.conventional ? "" : c.type2 ? String.format("  Type II ch %03X", c.channel) : "  ch " + (c.channel >> 12) + "-" + (c.channel & 0xfff)) + (c.tuner != null ? "  on tuner T" + c.tuner.id : "")});
+        r.add(new String[]{"Channel", mhz(c.freq) + " MHz  " + mode + (c.conventional ? "" : c.type2 ? String.format("  Type II ch %03X", c.channel) : c.edacs ? "  EDACS LCN " + c.channel : "  ch " + (c.channel >> 12) + "-" + (c.channel & 0xfff)) + (c.tuner != null ? "  on tuner T" + c.tuner.id : "")});
         if (vd != null) {
             r.add(new String[]{"Frequency offset", String.format(Locale.ROOT, "%+.0f Hz measured (filter correction %+.0f Hz, FLL %d / AFC %d steps)", vd.frequencyError(), vd.afcHz, vd.fllSteps, vd.afcSteps)});
             r.add(new String[]{"Demodulator", vd.demodSummary() + (vd.demodSwitches > 0 ? "  (" + vd.demodSwitches + " switches)" : "")});
