@@ -108,6 +108,23 @@ public final class AnalogEngineTests {
         s.kind = RadioSystem.ANALOG;
         s.scanDelay = 7;
 
+        // Scan speed (Systems page, analog): time on each group of channels
+        check(ne.scanDwellMs() == 1500, "analog scans 1.5 s per channel group by default (" + ne.scanDwellMs() + " ms)");
+        s.scanDwell = 3.0;
+        check(ne.scanDwellMs() == 3000, "the setting is read live (3 s)");
+        s.scanDwell = 0.2;
+        check(ne.scanDwellMs() == 1000, "never faster than 1 s");
+        s.scanDwell = 99;
+        check(ne.scanDwellMs() == 10_000, "never slower than 10 s");
+        s.kind = RadioSystem.CONVENTIONAL;
+        check(ne.scanDwellMs() == 5000, "digital conventional systems keep 5 s (they need longer to sync)");
+        s.kind = RadioSystem.ANALOG;
+        s.scanDwell = 2.5;
+        p25monitor.analog.FmReceiver fm = new p25monitor.analog.FmReceiver(0, new p25monitor.analog.FmReceiver.Listener() {
+            public void start(double toneHz) {} public void tone(double toneHz) {} public void audio(float[] pcm) {} public void end() {}
+        });
+        check(fm.carrierSince == 0, "no carrier: the scan is not held for a tone check");
+
         // Lockout (Monitor page): skipped from then on, saved with the system
         ne.running = true;
         long third = 155_400_000L;
@@ -139,6 +156,7 @@ public final class AnalogEngineTests {
         RadioSystem back = RadioSystem.load(dir);
         check(back.analog() && back.toneFor(f) == 100.0 && back.toneFor(155_250_000L) == 123.0, "kind and tones survive save and load");
         check(back.scanDelay == 7, "the scan delay is saved with the system (" + back.scanDelay + ")");
+        check(back.scanDwell == 2.5, "the scan speed is saved with the system (" + back.scanDwell + " s)");
         check(back.lockout.equals(java.util.Set.of(other)), "the lockout is saved with the system (" + back.lockout + ")");
         ne.running = true; ne.unlock(other);
         check(!ne.lockedOut(other) && ne.lockedOutChannels().isEmpty(), "Unlock brings the channel back");

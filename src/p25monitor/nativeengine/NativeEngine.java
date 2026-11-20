@@ -976,7 +976,7 @@ public final class NativeEngine {
         synchronized (this) {
             for (ActiveCall c : callMap.values()) if (!c.ended && c.conventional && now - c.lastVoice < 1500) dec++;
             if (scanTuner != null && scanGroups.size() > 1 && (mode == Mode.RTL || huntable)
-                    && speaker.holdFreq == 0 && !scanBusy(now) && now - lastScanAt >= Long.getLong("trunkdeck.convScanMs", 5_000L)) {
+                    && speaker.holdFreq == 0 && !scanBusy(now) && now - lastScanAt >= scanDwellMs()) {
                 lastScanAt = now;
                 int next = nextScanGroup();
                 if (next != scanIndex) {
@@ -1008,11 +1008,30 @@ public final class NativeEngine {
         return scanIndex;
     }
 
+    /** Analog: a carrier whose CTCSS tone is still being checked holds the scan this long at most. */
+    static final long TONE_CHECK_MS = 1500;
+
+    /**
+     * How long a scanning receiver stays on each group of channels: the system's setting on analog (Systems page,
+     * default 1.5 s: the squelch opens in about 60 ms), 5 s on digital conventional systems, which need longer to sync.
+     */
+    long scanDwellMs() {
+        Long o = Long.getLong("trunkdeck.convScanMs");
+        if (o != null) return o;
+        RadioSystem s = sys;
+        return s != null && s.analog() ? Math.round(RadioSystem.clampDwell(s.scanDwell) * 1000) : 5_000L;
+    }
+
     boolean scanBusy(long now) {
         if (scanTuner == null) return false;
         if (calls.callsOn(scanTuner) > 0) return true;
         if (analogDelay(now)) return true;
-        for (ChannelDecoder d : decodersOn(scanTuner)) if (now - d.lastFrameAt < 1200) return true;
+        for (ChannelDecoder d : decodersOn(scanTuner)) {
+            if (now - d.lastFrameAt < 1200) return true;
+            p25monitor.analog.FmReceiver fm = d.analog;
+            long cs = fm == null ? 0 : fm.carrierSince;
+            if (cs > 0 && now - cs < TONE_CHECK_MS && !lockedOut(d.freqHz)) return true;   // a carrier, tone not checked yet
+        }
         return false;
     }
 

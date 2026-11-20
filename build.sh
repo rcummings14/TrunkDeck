@@ -61,6 +61,7 @@ if [ "${1:-}" = "test" ]; then
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test p25monitor.rr.RrAllSystemsTests   # RadioReference import of every decodable system type (1.7.6)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test p25monitor.rr.ChannelTableTests   # a pasted frequency table (RadioReference page, CHIRP CSV, spreadsheet) becomes channels
   "$JAVA" ${TEST_OPTS:-} -cp build/classes${CPS}build/test p25monitor.dsp.PpmMeterTests   # PPM calibration popup: waterfall rows, signal centre, no signal from noise
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test p25monitor.CallHistoryTests   # call log: CSV export and daily history for Excel, saved column layout
   "$JAVA" --enable-native-access=ALL-UNNAMED -Dtrunkdeck.lib=lib -Djava.awt.headless=true -Dtrunkdeck.src=. ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.SoapyTests   # SDRplay/HackRF/LimeSDR/USRP via SoapySDR with simulated modules (1.7.0); -Dsoapy.prefix=<conda env with SoapySDR 0.8 + g++> (default $CONDA_PREFIX), skipped otherwise
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.P25MessageTests   # PDU / AMBTC grants, voice-channel group updates, more LC and TSBK messages (1.7.6)
   "$JAVA" ${TEST_OPTS:-} -cp build/classes${CPS}build/test p25monitor.p25.CodeTablesTests   # coding tables built from the TIA-102 standards = the earlier tables (1.4.6)

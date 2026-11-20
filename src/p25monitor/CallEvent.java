@@ -13,6 +13,10 @@ public class CallEvent {
     /** A call that is listed but not the one on the speaker (it may still be decoded and recorded). */
     public boolean background;
     public long receivedAt = System.currentTimeMillis();
+    /** Set when the engine ends the call (its length and level are final). */
+    public volatile boolean ended;
+    /** Already written to the daily call history (Monitor page). */
+    public boolean historySaved;
 
     public boolean isEncrypted() { return event.toLowerCase().contains("encrypt") || details.toUpperCase().contains("ENCRYPT"); }
     public boolean isEmergency() { return event.toUpperCase().contains("EMERGENCY") || details.toUpperCase().contains("EMERGENCY"); }

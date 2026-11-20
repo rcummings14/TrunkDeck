@@ -65,6 +65,12 @@ public class MonitorPage extends JPanel {
             lockBtn = MainFrame.button("Lockout", null, Theme.CYAN), lockedBtn = MainFrame.button("Locked out", null, Theme.AMBER);
     final JLabel holdLbl = new JLabel();
     final JPanel holdBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+    /** Live call log: save it for Excel, and (if turned on) keep a CSV file per day. */
+    final JButton exportBtn = MainFrame.button("Export CSV\u2026", null, Theme.CYAN);
+    final JCheckBox historyBox = new JCheckBox("Save daily history");
+    java.util.List<javax.swing.table.TableColumn> allLogCols;
+    int[] logDefW, activeDefW;
+    static final int[] LOG_COLS = {0, 1, 2, 3, 4, 5, 6, 7, 8};
     final JComboBox<String> speakerBox = new JComboBox<>(new String[]{"One call at a time (priority)", "Mix all calls", "Hold one talkgroup", "Queue all calls (one after another)"});
     /** Countdown shown when a system will auto-start after TrunkDeck opens. Hidden otherwise. */
     final JPanel autoStartBar = new JPanel(new BorderLayout(12, 0));
@@ -143,9 +149,21 @@ public class MonitorPage extends JPanel {
         clear.addActionListener(e -> { live.rows.clear(); live.fireTableDataChanged(); });
         logPlay.setToolTipText("Play or pause the selected call's recording");
         logPlay.addActionListener(e -> playLogSelection());
+        exportBtn.setToolTipText("Save the call log as a CSV file for Excel: the rows you selected (Ctrl+A selects all, Ctrl- or Shift-click picks rows), or every row if fewer than two are selected");
+        exportBtn.addActionListener(e -> exportLog());
+        historyBox.setOpaque(false);
+        historyBox.setSelected(Boolean.parseBoolean(f.app.settings.getProperty("log.history", "false")));
+        historyBox.setToolTipText("<html>Also write every call to a CSV file, one per day, to review in Excel later:<br>" + esc(String.valueOf(CallHistory.folder())) + "</html>");
+        historyBox.addActionListener(e -> {
+            f.app.settings.setProperty("log.history", String.valueOf(historyBox.isSelected()));
+            f.app.saveSettings();
+            if (historyBox.isSelected()) f.toast("Calls are saved to a CSV file per day in " + CallHistory.folder());
+        });
         logTools.add(logPlay);
         logTools.add(hideData);
         logTools.add(clear);
+        logTools.add(exportBtn);
+        logTools.add(historyBox);
         logCard.add(logTools, BorderLayout.SOUTH);
 
         // right column
@@ -334,13 +352,65 @@ public class MonitorPage extends JPanel {
         statusStrip.setBorder(new EmptyBorder(0, 0, 8, 0));
         allActiveCols = Layouts.columns(activeTable);
         allActiveCols.get(9).setPreferredWidth(170);
-        Layouts.showColumns(activeTable, allActiveCols, ADV_COLS);
+        allLogCols = Layouts.columns(table);
+        logDefW = ColumnLayout.widths(allLogCols);
+        activeDefW = ColumnLayout.widths(allActiveCols);
+        applyLogCols();
+        applyActiveCols();
+        ColumnLayout.remember(table, f.app, () -> "ui.cols.log", this::applyLogCols);
+        ColumnLayout.remember(activeTable, f.app, this::activeColsKey, this::applyActiveCols);
         updateListenNote();
         focus(null);
     }
 
     static final int[] ADV_COLS = {0, 1, 2, 3, 4, 5, 6, 7, 8}, SIMPLE_COLS = {0, 2, 1, 9, 5};
     java.util.List<javax.swing.table.TableColumn> allActiveCols;
+
+    /** Saved column order and widths (Simple and Advanced show different active-call columns, so each has its own). */
+    String activeColsKey() { return simple ? "ui.cols.active.simple" : "ui.cols.active.advanced"; }
+    void applyActiveCols() {
+        ColumnLayout.apply(activeTable, allActiveCols, simple ? SIMPLE_COLS : ADV_COLS, activeDefW, f.app.settings.getProperty(activeColsKey()));
+        allActiveCols.get(2).setHeaderValue(simple ? "Talkgroup" : "Alias");
+    }
+    void applyLogCols() { ColumnLayout.apply(table, allLogCols, LOG_COLS, logDefW, f.app.settings.getProperty("ui.cols.log")); }
+
+    /** Export CSV...: the selected rows (two or more), else the whole log, oldest first. */
+    void exportLog() {
+        int[] sel = table.getSelectedRows();
+        List<Row> rows = new ArrayList<>();
+        if (sel.length >= 2) { for (int r : sel) if (r < live.rows.size()) rows.add(live.rows.get(r)); }
+        else rows.addAll(live.rows);
+        if (rows.isEmpty()) { f.toast("The call log is empty."); return; }
+        Collections.reverse(rows);
+        JFileChooser fc = new JFileChooser(f.app.settings.getProperty("log.exportDir", System.getProperty("user.home")));
+        fc.setDialogTitle(sel.length >= 2 ? "Export the " + rows.size() + " selected calls" : "Export the call log (" + rows.size() + " calls)");
+        fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("CSV for Excel (*.csv)", "csv"));
+        fc.setSelectedFile(new java.io.File("trunkdeck-calls-" + new SimpleDateFormat("yyyy-MM-dd-HHmm").format(new Date()) + ".csv"));
+        if (fc.showSaveDialog(f) != JFileChooser.APPROVE_OPTION) return;
+        Path p = fc.getSelectedFile().toPath();
+        if (!p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".csv")) p = p.resolveSibling(p.getFileName() + ".csv");
+        if (java.nio.file.Files.exists(p) && JOptionPane.showConfirmDialog(f, p.getFileName() + " already exists. Replace it?", "Export CSV",
+                JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
+        List<String[]> out = new ArrayList<>();
+        for (Row r : rows) out.add(CallHistory.fields(r.e, r.tg, f.app.current));
+        try {
+            CallHistory.write(p, out);
+            if (p.getParent() != null) { f.app.settings.setProperty("log.exportDir", p.getParent().toString()); f.app.saveSettings(); }
+            f.toast("Exported " + out.size() + " call" + (out.size() == 1 ? "" : "s") + " to " + p);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(f, "Could not save " + p + "\n" + ex.getMessage() + "\n(Is it open in Excel?)", "Export CSV", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    /** Daily history (when turned on): a voice call when it ends, other events as they arrive. Follows Voice calls only. */
+    void history(CallEvent e) {
+        if (!historyBox.isSelected() || e.historySaved) return;
+        if (hideData.isSelected() && !e.isVoiceCall() && !e.isEmergency()) return;
+        e.historySaved = true;
+        RadioSystem s = f.app.current;
+        Talkgroup t = s == null || e.talkgroup < 0 ? null : s.find(e.talkgroup);
+        CallHistory.append(CallHistory.folder(), CallHistory.fields(e, t, s), msg -> SwingUtilities.invokeLater(() -> f.toast("Call history could not be saved: " + msg)));
+    }
 
     /**
      * Simple view: status lights, active calls (talkgroup, radio, state), the speaker and the selected talkgroup's
@@ -357,16 +427,14 @@ public class MonitorPage extends JPanel {
             center.add(statusStrip, BorderLayout.NORTH);
             center.add(activeCard, BorderLayout.CENTER);
             rightCol.add(rightScroll, BorderLayout.CENTER);
-            Layouts.showColumns(activeTable, allActiveCols, SIMPLE_COLS);
-            allActiveCols.get(2).setHeaderValue("Talkgroup");
+            applyActiveCols();
         } else {
             rightCol.remove(rightScroll);
             leftCol.setTopComponent(activeCard);
             rightSplit.setTopComponent(rightScroll);
             center.add(leftCol, BorderLayout.CENTER);
             rightCol.add(rightSplit, BorderLayout.CENTER);
-            Layouts.showColumns(activeTable, allActiveCols, ADV_COLS);
-            allActiveCols.get(2).setHeaderValue("Alias");
+            applyActiveCols();
         }
         center.add(rightCol, BorderLayout.EAST);
         listenRow.setVisible(!on);
@@ -735,7 +803,7 @@ public class MonitorPage extends JPanel {
     /** The talkgroup to hold: only the one on the air right now. */
     int touchHoldTarget() { return f.display.shownTalkgroup(); }
 
-    void updated() { live.fireTableDataChanged(); }
+    void updated() { if (!live.rows.isEmpty()) live.fireTableRowsUpdated(0, live.rows.size() - 1); }   // keeps the selection (Export CSV)
 
     void showAutoStart(String name, int seconds) {
         autoStartLbl.setText(App.autoStartMessage(name, seconds));
@@ -753,6 +821,7 @@ public class MonitorPage extends JPanel {
     void reset() { live.rows.clear(); live.fireTableDataChanged(); hotModel.clear(); focus(null); }
 
     void add(CallEvent e, Talkgroup listed, Talkgroup any) {
+        if (!e.isVoiceCall() || e.ended) history(e);   // voice calls are saved when they end, with their length
         if (hideData.isSelected() && !e.isVoiceCall() && !e.isEmergency()) return;
         live.rows.add(0, new Row(e, any));
         if (live.rows.size() > 1000) live.rows.remove(live.rows.size() - 1);

@@ -67,7 +67,7 @@ public class MainFrame extends JFrame {
         this.app = app;
         nativeEngine = new p25monitor.nativeengine.NativeEngine(app, new p25monitor.nativeengine.NativeEngine.Listener() {
             public void callStarted(CallEvent e) { SwingUtilities.invokeLater(() -> onEvent(e)); }
-            public void callUpdated(CallEvent e) { SwingUtilities.invokeLater(() -> { monitor.updated(); display.repaint(); }); }
+            public void callUpdated(CallEvent e) { SwingUtilities.invokeLater(() -> { monitor.updated(); if (e.ended) monitor.history(e); display.repaint(); }); }
             public void messages(int n, String last) { SwingUtilities.invokeLater(() -> display.onMessages(n, last)); }
             public void callFollowed(CallEvent e) { SwingUtilities.invokeLater(() -> { showOnDisplay(e); monitor.updated(); }); }
         });

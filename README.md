@@ -50,11 +50,18 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   * **Down** / **Up** step through the channels in the order you entered them, wrapping around, and hold each one.
   * **Scan delay** (Systems page): how many seconds scanning waits on a channel after a transmission ends, so you hear
     the reply. 0 to 30, default 2.
+  * **Scan speed** (Systems page): seconds on each group of channels when they don't all fit in the receivers'
+    windows. 1 to 10, default 1.5 (was 5).
   * **Scan** goes back to all channels.
   * **Lockout** skips the channel you are hearing (not played, recorded or scanned), saved with the system.
     **Locked out (n)** unlocks them.
   * The display shows *HOLDING*, the channel name and its frequency. Other channels the receivers already cover are
     still recorded while you hold.
+* **Call log for Excel:** **Export CSV…** under the live call log saves the selected rows (or all of them), and
+  **Save daily history** (optional, off by default) writes every call to a CSV file per day in the recordings folder's
+  `call-history` folder. Each call has its date, time, talkgroup, radio, frequency, length and signal level.
+* **Column order and widths** of Active calls and the live call log are remembered after a restart. Right-click a
+  column header → **Reset columns**.
 * **Paste a frequency table** into the Channels box of a conventional system (analog FM, P25, DMR or NXDN): rows
   copied from a RadioReference frequency page (with or without the header row), a CHIRP CSV, or spreadsheet columns. Paste with Ctrl+V or right-click → Paste.
   The rows of that system's mode are added with their names and tones (CTCSS for analog, NAC for P25, colour code for

@@ -24,6 +24,11 @@ public class SystemsPage extends JPanel {
     /** Analog scan delay in seconds (0 = move on as soon as the transmission ends). */
     final JSpinner scanDelay = new JSpinner(new SpinnerNumberModel(RadioSystem.SCAN_DELAY_DEFAULT, 0, RadioSystem.SCAN_DELAY_MAX, 1));
     final JLabel delayLabel = new JLabel("Scan delay");
+    /** Analog: seconds on each group of channels while scanning (when they don't all fit in the receivers' windows). */
+    final JSpinner scanDwell = new JSpinner(new SpinnerNumberModel(RadioSystem.SCAN_DWELL_DEFAULT, RadioSystem.SCAN_DWELL_MIN, RadioSystem.SCAN_DWELL_MAX, 0.5));
+    final JLabel dwellLabel = new JLabel("Scan speed");
+    final JLabel dwellHelp = new JLabel();
+    final JPanel dwellBox = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
     final JLabel delayHelp = new JLabel();
     final JPanel delayBox = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
     /** Analog: channels locked out from the Monitor page (unlocked there). */
@@ -173,6 +178,16 @@ public class SystemsPage extends JPanel {
         delayBox.add(lockedLbl);
         delayHelp.setText(helpHtml("After a transmission ends, scanning waits this long on that channel so you hear the reply. 0 moves on at once. 2 is the default. Takes effect right away, even while running."));
         y = row(g, c, y, delayLabel, delayBox, delayHelp);
+        scanDwell.setEditor(new JSpinner.NumberEditor(scanDwell, "0.0"));
+        JTextField dwellText = ((JSpinner.DefaultEditor) scanDwell.getEditor()).getTextField();
+        dwellText.setColumns(3);
+        dwellText.setOpaque(true);
+        dwellText.setForeground(new Color(220, 228, 236));
+        dwellBox.setOpaque(false);
+        dwellBox.add(scanDwell);
+        dwellBox.add(new JLabel("seconds on each group of channels"));
+        dwellHelp.setText(helpHtml("Only matters when the channels don't all fit in your receivers' windows and one receiver steps through them in groups. Shorter scans faster: 1.5 is the default, 1 the fastest (the squelch opens in about 0.06 s, and a carrier waiting for its PL tone check holds the scan up to 1.5 s). Takes effect right away."));
+        y = row(g, c, y, dwellLabel, dwellBox, dwellHelp);
         y = row(g, c, y, "Max simultaneous calls", traffic, "How many calls the engine decodes at the same time (each uses about 4% of one CPU core). Calls must also fall inside a dongle's window.");
         JPanel checks = new JPanel(new GridLayout(0, 1));
         checks.setOpaque(false);
@@ -366,6 +381,9 @@ public class SystemsPage extends JPanel {
         delayLabel.setVisible(analog);
         delayBox.setVisible(analog);
         delayHelp.setVisible(analog);
+        dwellLabel.setVisible(analog);
+        dwellBox.setVisible(analog);
+        dwellHelp.setVisible(analog);
         dmrHelp.setText(helpHtml(type2
                 ? (obt ? "VHF/UHF systems use their own band plan: copy the base frequency, spacing and offset from the system's RadioReference page. (untested)"
                        : "Turns the channel numbers in grants into frequencies. Auto picks 800 or 900 MHz from the control channel and checks the 800 MHz variant against the channel number the site announces. (untested)")
@@ -408,6 +426,7 @@ public class SystemsPage extends JPanel {
         dmrSlot.setSelectedIndex(s.timeslot == 1 ? 1 : s.timeslot == 2 ? 2 : 0);
         squelch.setValue(Math.max(p25monitor.analog.FmReceiver.SQUELCH_MIN, Math.min(p25monitor.analog.FmReceiver.SQUELCH_MAX, s.squelch)));
         scanDelay.setValue(Math.max(0, Math.min(RadioSystem.SCAN_DELAY_MAX, s.scanDelay)));
+        scanDwell.setValue(RadioSystem.clampDwell(s.scanDwell));
         showLockout(s);
         type2Plan.setSelectedIndex(Math.max(0, java.util.Arrays.asList(TYPE2_PLANS).indexOf(p25monitor.motorola.Type2BandPlan.Kind.of(s.type2Plan).key)));
         obtPlan.setText(s.obtBaseMHz > 0 ? RadioSystem.fmt(s.obtBaseMHz) + ", " + s.obtSpacingKHz + ", " + s.obtOffset : "");
@@ -515,6 +534,7 @@ public class SystemsPage extends JPanel {
         s.timeslot = dmrSlot.getSelectedIndex();
         s.squelch = (Integer) squelch.getValue();
         s.scanDelay = (Integer) scanDelay.getValue();
+        s.scanDwell = RadioSystem.clampDwell(((Number) scanDwell.getValue()).doubleValue());
         s.name = name.getText().trim(); s.site = site.getText().trim();
         s.nac = nac.getText().trim();
         s.colorCode = -1;
@@ -642,7 +662,7 @@ public class SystemsPage extends JPanel {
         s.nac = o.nac; s.wacn = o.wacn; s.sysId = o.sysId;
         s.rfss = o.rfss; s.siteNumber = o.siteNumber; s.modulation = o.modulation; s.nativeModulation = o.nativeModulation; s.trafficChannels = o.trafficChannels; s.ignoreDataCalls = o.ignoreDataCalls;
         s.preferredTuner = o.preferredTuner; s.recordAll = o.recordAll; s.decodeMeter = o.decodeMeter; s.notes = o.notes;
-        s.dmrFlavor = o.dmrFlavor; s.colorCode = o.colorCode; s.timeslot = o.timeslot; s.squelch = o.squelch; s.scanDelay = o.scanDelay; s.lockout.addAll(o.lockout);
+        s.dmrFlavor = o.dmrFlavor; s.colorCode = o.colorCode; s.timeslot = o.timeslot; s.squelch = o.squelch; s.scanDelay = o.scanDelay; s.scanDwell = o.scanDwell; s.lockout.addAll(o.lockout);
         s.type2Plan = o.type2Plan; s.obtBaseMHz = o.obtBaseMHz; s.obtSpacingKHz = o.obtSpacingKHz; s.obtOffset = o.obtOffset;
         s.nxdnChannels = new java.util.TreeMap<>(o.nxdnChannels);
         s.rrSid = o.rrSid; s.rrSites = o.rrSites; s.rrUpdated = o.rrUpdated; s.rrSeen = o.rrSeen;

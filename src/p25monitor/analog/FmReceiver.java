@@ -100,6 +100,8 @@ public final class FmReceiver {
     public FmReceiver(double requiredTone, Listener out) { this.required = requiredTone; this.out = out; }
 
     public boolean open() { return carrier; }
+    /** When the squelch opened on a carrier (ms), 0 while closed: the scan waits briefly for its tone to be checked. */
+    public volatile long carrierSince;
     public boolean active() { return active; }
     /** The CTCSS tone currently detected, or 0. */
     public double tone() { return tone; }
@@ -131,10 +133,10 @@ public final class FmReceiver {
         noiseHz = Float.isNaN(noiseHz) ? rms : 0.7f * noiseHz + 0.3f * rms;
         if (!carrier) {
             openRun = rms < openHz ? openRun + 1 : 0;
-            if (openRun >= openBlocks) { carrier = true; closeRun = 0; }
+            if (openRun >= openBlocks) { carrier = true; closeRun = 0; carrierSince = System.currentTimeMillis(); }
         } else {
             closeRun = rms > closeHz ? closeRun + 1 : 0;
-            if (closeRun >= 4) { carrier = false; openRun = 0; squelchClosed(); }
+            if (closeRun >= 4) { carrier = false; openRun = 0; carrierSince = 0; squelchClosed(); }
         }
     }
 

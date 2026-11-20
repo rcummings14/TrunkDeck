@@ -280,6 +280,7 @@ final class CallManager {
             closeTx(c, "call ended: " + why);
             if (e.streaming != null) e.streaming.callEnded(c.id);
             finishAudio(c);
+            c.ev.ended = true;
             e.listener.callUpdated(c.ev);
             if (e.running && !stopping) serviceWaiting(now);
         }

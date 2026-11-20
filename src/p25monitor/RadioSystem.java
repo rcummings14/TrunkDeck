@@ -60,6 +60,13 @@ public class RadioSystem {
     /** Analog channels locked out from the Monitor page (Hz): not played, recorded or scanned. Saved with the system. */
     public final java.util.Set<Long> lockout = java.util.concurrent.ConcurrentHashMap.newKeySet();
     public static final int SCAN_DELAY_DEFAULT = 2, SCAN_DELAY_MAX = 30;
+    /**
+     * Analog: seconds a scanning receiver stays on each group of channels when they don't all fit in the receivers'
+     * windows ({@value #SCAN_DWELL_MIN} to {@value #SCAN_DWELL_MAX}). Other kinds of system stay 5 s (digital needs longer to sync).
+     */
+    public double scanDwell = SCAN_DWELL_DEFAULT;
+    public static final double SCAN_DWELL_DEFAULT = 1.5, SCAN_DWELL_MIN = 1.0, SCAN_DWELL_MAX = 10.0;
+    public static double clampDwell(double v) { return Double.isNaN(v) ? SCAN_DWELL_DEFAULT : Math.max(SCAN_DWELL_MIN, Math.min(SCAN_DWELL_MAX, Math.round(v * 2) / 2.0)); }
     /** Motorola Type II band plan: auto, 800reband, 800standard, 800splinter, 900 or obt (VHF/UHF, uses the three values below). */
     public String type2Plan = "auto";
     /** VHF/UHF (OBT) band plan: first receive frequency, channel spacing, and the channel number of the first receive channel. */
@@ -410,6 +417,7 @@ public class RadioSystem {
         }
         if (analog()) {
             p.setProperty("squelch", String.valueOf(squelch)); p.setProperty("scanDelay", String.valueOf(scanDelay));
+            p.setProperty("scanDwell", String.valueOf(scanDwell));
             String lo = lockoutProperty();
             if (!lo.isEmpty()) p.setProperty("lockout", lo);
         }
@@ -465,6 +473,7 @@ public class RadioSystem {
         try { s.squelch = Math.max(p25monitor.analog.FmReceiver.SQUELCH_MIN, Math.min(p25monitor.analog.FmReceiver.SQUELCH_MAX,
                 Integer.parseInt(p.getProperty("squelch", String.valueOf(p25monitor.analog.FmReceiver.SQUELCH_DEFAULT)).trim()))); } catch (Exception ignored) {}
         try { s.scanDelay = Math.max(0, Math.min(SCAN_DELAY_MAX, Integer.parseInt(p.getProperty("scanDelay", String.valueOf(SCAN_DELAY_DEFAULT)).trim()))); } catch (Exception ignored) {}
+        try { s.scanDwell = clampDwell(Double.parseDouble(p.getProperty("scanDwell", String.valueOf(SCAN_DWELL_DEFAULT)).trim())); } catch (Exception ignored) {}
         for (String m : p.getProperty("lockout", "").split(",")) {
             try { if (!m.isBlank()) s.lockout.add(Math.round(Double.parseDouble(m.trim()) * 1e6)); } catch (NumberFormatException ignored) {}
         }

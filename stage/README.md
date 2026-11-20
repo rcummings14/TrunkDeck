@@ -36,6 +36,13 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
 * **Level** in the live call log: each call's average signal level while it was on the air (dB, like the Active calls
   list). The log's **Secs** is now the real length on analog, Type II, DMR and NXDN calls too (it was several times too
   long).
+* **Export CSV…** on the live call log saves it for Excel: the rows you selected (Ctrl+A for all, Ctrl- or Shift-click
+  to pick rows), or the whole log if fewer than two are selected. **Save daily history** (off until you tick it) also
+  writes every call to `calls-YYYY-MM-DD.csv`, one file per day, in the `call-history` folder inside your recordings
+  folder, so you can look at trends across days and restarts. With *Voice calls only* ticked, only calls are saved.
+* **Column layout is remembered:** drag the columns of *Active calls* and the *live call log* into the order and widths
+  you like and they come back after a restart (Simple and Advanced view each keep their own). Right-click a column
+  header → **Reset columns** to go back to the usual layout.
 * **PPM calibration with a waterfall:** *Engine* page → **Calibrate…** next to each RTL-SDR (and each SoapySDR receiver,
   untested). See *PPM calibration tips*.
 * **Paste a frequency table** into **Systems → Channels MHz** for a conventional kind (analog FM, P25, DMR, NXDN).
@@ -477,6 +484,11 @@ scanner display on the Monitor page. They are not shown for other kinds of syste
   seconds before moving on, so the reply isn't missed. 0 moves on at once; the default is 2. A change applies straight
   away, even while the system is running. It matters when the channels don't all fit in one receiver's window and the
   receiver steps through channel groups.
+* **Scan speed** (Systems page, analog FM only): how many seconds that receiver stays on each group of channels, 1 to
+  10, default 1.5 (it was 5 before). The squelch opens in about 0.06 s, so a shorter time misses nothing that is on the
+  air; a carrier whose PL tone is still being checked holds the scan up to 1.5 s. It applies straight away. Channels that
+  fit in your receivers' windows are always heard at the same time, without scanning. Digital conventional systems keep
+  5 s, since they need longer to sync.
 
 Also:
 * **Mute** a talkgroup to skip it (it's still logged). **What to play:** *Only talkgroups in my list* or *Favorites only* skips the rest.
