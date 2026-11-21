@@ -172,6 +172,13 @@ public final class RrTests {
             CountyInfo convCounty = rr.getCountyInfo(9101);
             check(convCounty.subcats().size() == 1 && convCounty.subcats().get(0).scid() == 8801, "county lists a conventional channel group");
             List<Freq> raw = rr.getSubcatFreqs(8801);
+            check(raw.get(0).mode().equals("P25") && raw.get(2).mode().equals("FMN") && raw.get(4).mode().equals("DMR") && raw.get(4).colorCode().equals("7"),
+                    "mode numbers from the web service read as names (2 P25, 4 FMN, 6 DMR), colour code from its own field: " + raw.get(0).mode() + " " + raw.get(2).mode() + " " + raw.get(4).mode());
+            check(RrImport.modesIn(raw).equals(List.of(RrImport.ConvMode.P25, RrImport.ConvMode.DMR, RrImport.ConvMode.FM)), "the group offers P25, DMR and analog FM: " + RrImport.modesIn(raw));
+            RadioSystem dmrConv = RrImport.fromConventional(RrImport.ConvMode.DMR, "Town PD", raw);
+            check(dmrConv.dmrConventional() && dmrConv.channels.size() == 1 && dmrConv.colorCode == 7 && dmrConv.find(781) != null && dmrConv.find(781).alphaTag.equals("PD DMR"),
+                    "DMR conventional: channel, colour code 7 and talkgroup 781 come through");
+            check(RrImport.nacFromTone("770 NAC").equals("770") && RrImport.nacFromTone("NAC 2D5").equals("2D5") && RrImport.nacFromTone("$2D5").equals("2D5"), "NAC read as RadioReference writes it: \"770 NAC\"");
             List<RadioSystem.Channel> p25 = RrImport.p25Channels(raw);
             check(p25.size() == 3 && p25.get(0).mhz == 154.25 && p25.get(0).name.equals("FIRE DISP") && p25.get(0).nac.equals("2D5"), "P25 channels kept, FM left out, NAC from the tone: " + p25);
             check(p25.get(2).name.equals("FIRE ENC"), "an encrypted P25 channel is still a channel (calls on it are skipped later)");

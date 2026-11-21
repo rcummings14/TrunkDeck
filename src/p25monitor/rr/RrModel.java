@@ -26,9 +26,14 @@ public final class RrModel {
     public record CountyInfo(int ctid, String name, int stid, List<TrsRef> systems, List<Subcat> subcats) {}
     /**
      * One conventional frequency (getSubcatFreqs). {@code tone} is often the NAC on P25; {@code tg} is a talkgroup
-     * number when RadioReference has one; {@code mode} is the emission (P25, FM, DMR, ...).
+     * number when RadioReference has one; {@code mode} is the emission name (P25, FMN, DMR, ...: the web service sends a
+     * mode number, which {@link RrSoap#getSubcatFreqs} turns into its name); {@code colorCode} is a DMR channel's colour code.
      */
-    public record Freq(int fid, double outMhz, String alpha, String descr, String tone, String tg, String mode, int enc) {}
+    public record Freq(int fid, double outMhz, String alpha, String descr, String tone, String tg, String mode, int enc, String colorCode) {
+        public Freq(int fid, double outMhz, String alpha, String descr, String tone, String tg, String mode, int enc) {
+            this(fid, outMhz, alpha, descr, tone, tg, mode, enc, "");
+        }
+    }
     /** ZipInfo. */
     public record ZipInfo(int zip, String city, int stid, int ctid) {}
     /** trsSysidDef. */

@@ -39,7 +39,7 @@ public final class RrSoap {
      */
     Path diskCache;
     public static final long CACHE_DAYS = 30;
-    static final Set<String> CACHED = Set.of("getCountryList", "getCountryInfo", "getStateInfo", "getCountyInfo");
+    static final Set<String> CACHED = Set.of("getCountryList", "getCountryInfo", "getStateInfo", "getCountyInfo", "getMode");
     /** Answers taken from the local cache instead of RadioReference (tests). */
     public final AtomicInteger cacheHits = new AtomicInteger();
 
@@ -143,14 +143,37 @@ public final class RrSoap {
         return new TrsDetails(sid, r.text("sName"), type, flavor, r.integer("sVoice"), r.text("sCity"), typeName, flavorName, ids);
     }
 
-    /** Conventional frequencies of one subcategory (getSubcatFreqs). Output frequency only; input is not monitored. */
+    /**
+     * Conventional frequencies of one subcategory (getSubcatFreqs). Output frequency only; input is not monitored.
+     * The web service gives each frequency's mode as a number (6 for DMR, 2 for P25); it comes back here as the name.
+     */
     public List<Freq> getSubcatFreqs(int scid) throws RrException {
         List<Freq> l = new ArrayList<>();
         for (Node n : call("getSubcatFreqs", "scid", scid).items()) {
             double mhz = n.decimal("out");
-            if (mhz > 25 && mhz < 1300) l.add(new Freq(n.integer("fid"), mhz, n.text("alpha"), n.text("descr"), n.text("tone"), n.text("tg"), n.text("mode"), n.integer("enc")));
+            if (mhz > 25 && mhz < 1300) l.add(new Freq(n.integer("fid"), mhz, n.text("alpha"), n.text("descr"), n.text("tone"), n.text("tg"),
+                    modeName(n.text("mode")), n.integer("enc"), n.text("colorCode")));
         }
         return l;
+    }
+
+    /** RadioReference's conventional mode numbers as of November 2026 (getMode), used if that call fails. */
+    static final Map<String, String> MODES = Map.ofEntries(Map.entry("1", "FM"), Map.entry("2", "P25"), Map.entry("3", "AM"),
+            Map.entry("4", "FMN"), Map.entry("5", "Telm"), Map.entry("6", "DMR"), Map.entry("7", "NXDN48"), Map.entry("8", "D-STAR"),
+            Map.entry("9", "USB"), Map.entry("10", "LSB"), Map.entry("11", "YSF"), Map.entry("12", "NXDN96"));
+    private Map<String, String> modes;
+
+    /** The name of a mode number ("6" → "DMR"). Anything that is not a number is passed through. */
+    String modeName(String mode) {
+        String m = mode == null ? "" : mode.trim();
+        if (!m.matches("\\d+")) return m;
+        if (modes == null) {
+            Map<String, String> got = new HashMap<>();
+            try { for (Node n : call("getMode", "mode", 0).items()) { String id = n.text("mode").trim(), name = n.text("modeName").trim(); if (!id.isEmpty() && !name.isEmpty()) got.put(id, name); } }
+            catch (RrException ignored) {}
+            modes = got.isEmpty() ? MODES : got;
+        }
+        return modes.getOrDefault(m, MODES.getOrDefault(m, m));
     }
 
     public List<Site> getTrsSites(int sid) throws RrException {

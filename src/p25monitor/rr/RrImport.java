@@ -199,7 +199,8 @@ public final class RrImport {
             for (RadioSystem.Channel c : l) if (Math.abs(c.mhz - f.outMhz()) < 1e-6) seen = true;
             if (seen) continue;
             String cc = "";
-            String tone = f.tone() == null ? "" : f.tone().trim();
+            // RadioReference keeps the colour code in its own field; older entries have it in the tone column.
+            String tone = f.colorCode() != null && !f.colorCode().isBlank() ? f.colorCode().trim() : f.tone() == null ? "" : f.tone().trim();
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?i)^(?:CC\\s*)?(\\d{1,2})$").matcher(tone);
             if (m.matches()) {
                 int n = Integer.parseInt(m.group(1));
@@ -217,6 +218,7 @@ public final class RrImport {
         s.channels = dmrChannels(freqs);
         s.notes = "From RadioReference. DMR conventional (untested).";
         for (RadioSystem.Channel c : s.channels) if (c.nac != null && !c.nac.isBlank()) { try { s.colorCode = Integer.parseInt(c.nac); } catch (NumberFormatException ignored) {} break; }
+        s.talkgroups.addAll(talkgroupsFrom(freqs, RrImport::dmrMode));
         return s;
     }
 
@@ -312,7 +314,7 @@ public final class RrImport {
     public static String nacFromTone(String tone) {
         if (tone == null) return "";
         String t = tone.trim();
-        t = t.replaceFirst("(?i)^nac\\s*", "");
+        t = t.replaceFirst("(?i)^nac\\s*", "").replaceFirst("(?i)\\s*nac$", "");   // "NAC 2D5" or, as RadioReference writes it, "770 NAC"
         t = t.replaceFirst("(?i)^(\\$|0x)", "");
         if (!t.matches("(?i)[0-9a-f]{3}")) return "";
         return t.toUpperCase(Locale.ROOT);
@@ -332,11 +334,14 @@ public final class RrImport {
     }
 
     /** Talkgroups mentioned on those P25 frequencies (the tg field), skipping ones that are not a number. */
-    public static List<Talkgroup> talkgroupsFrom(List<Freq> freqs) {
+    public static List<Talkgroup> talkgroupsFrom(List<Freq> freqs) { return talkgroupsFrom(freqs, RrImport::p25Mode); }
+
+    /** Talkgroups mentioned on the frequencies of one mode (P25 or DMR). */
+    static List<Talkgroup> talkgroupsFrom(List<Freq> freqs, java.util.function.Predicate<String> mode) {
         Map<Integer, Talkgroup> m = new LinkedHashMap<>();
         if (freqs == null) return new ArrayList<>();
         for (Freq f : freqs) {
-            if (f == null || !p25Mode(f.mode())) continue;
+            if (f == null || !mode.test(f.mode())) continue;
             int dec;
             try { dec = Integer.parseInt(f.tg().trim()); } catch (Exception e) { continue; }
             if (dec <= 0 || m.containsKey(dec)) continue;
