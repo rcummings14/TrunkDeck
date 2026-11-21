@@ -188,7 +188,7 @@ public final class RrImport {
         return mode != null && mode.toUpperCase(Locale.ROOT).contains("DMR");
     }
 
-    /** DMR channels RadioReference listed. A tone of 0-15 is kept as the colour code. */
+    /** DMR channels RadioReference listed. A tone of 0-15 ("7" or RadioReference's "CC7") is kept as the colour code. */
     public static List<RadioSystem.Channel> dmrChannels(List<Freq> freqs) {
         List<RadioSystem.Channel> l = new ArrayList<>();
         if (freqs == null) return l;
@@ -200,8 +200,9 @@ public final class RrImport {
             if (seen) continue;
             String cc = "";
             String tone = f.tone() == null ? "" : f.tone().trim();
-            if (tone.matches("\\d{1,2}")) {
-                int n = Integer.parseInt(tone);
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?i)^(?:CC\\s*)?(\\d{1,2})$").matcher(tone);
+            if (m.matches()) {
+                int n = Integer.parseInt(m.group(1));
                 if (n <= 15) cc = String.valueOf(n);
             }
             l.add(new RadioSystem.Channel(f.outMhz(), cc, name));

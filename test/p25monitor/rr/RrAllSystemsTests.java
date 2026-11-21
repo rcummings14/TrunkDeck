@@ -94,6 +94,8 @@ public final class RrAllSystemsTests {
         check(nxc.nxdnConventional() && nxc.channels.size() == 1 && nxc.channels.get(0).mhz == 451.0, "NXDN conventional channels");
         RadioSystem dm = RrImport.fromConventional(RrImport.ConvMode.DMR, "Roads", group);
         check(dm.dmrConventional() && dm.channels.size() == 1 && dm.colorCode == 1, "DMR conventional channels with colour code");
+        RadioSystem cc = RrImport.fromDmr("Falmouth", List.of(new Freq(1, 155.79, "PD", "", "CC7", "", "DMR", 0), new Freq(2, 155.8, "B", "", "cc 3", "", "DMR", 0), new Freq(3, 155.9, "C", "", "CC16", "", "DMR", 0)));
+        check(cc.colorCode == 7 && cc.channels.get(1).nac.equals("3") && cc.channels.get(2).nac.isEmpty(), "RadioReference's \"CC7\" tone reads as colour code 7: " + cc.channelText());
         RadioSystem pp = RrImport.fromConventional(RrImport.ConvMode.P25, "PD", group);
         check(pp.conventional() && pp.channels.size() == 1 && pp.find(101) != null, "P25 conventional channels and talkgroups");
     }

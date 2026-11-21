@@ -7,9 +7,10 @@ package p25monitor.dmr;
  * start on a sample boundary: the sample where the instantaneous frequency jumps is the symbol edge, and the dump is placed
  * just before that edge.
  *
- * <p>Deviation scale and carrier offset are measured, not assumed. Every sync word is made only of the outer levels
- * (+3 and -3), so each accepted sync gives the mean of the + symbols and of the - symbols: half their difference over 6 is
- * the unit deviation and their midpoint is the carrier offset. That works at any gain and with either polarity.
+ * <p>Deviation scale and carrier offset are measured, not assumed. The carrier offset follows every symbol (its error from
+ * the nearest level). Every sync word is made only of the outer levels (+3 and -3), so each accepted sync gives the mean of
+ * the + symbols and of the - symbols: half their difference over 6 is the unit deviation. Before the first lock the scale
+ * comes from the average symbol size. That works at any gain and with either polarity.
  * Written for this program; not taken from another decoder.
  */
 public final class Fsk4Demod {
@@ -26,7 +27,7 @@ public final class Fsk4Demod {
     private float prevHz;
     /** Multiplies the ETSI deviations. Learned from sync words; some recordings measure about twice ±648 / ±1944 Hz. */
     private float scale = 1f;
-    /** Added to every symbol, in Hz. Learned from sync words. */
+    /** Added to every symbol, in Hz. Follows the carrier symbol by symbol. */
     private float offset;
     /**
      * 12.5 kHz channel filter in front of the discriminator: 65-tap windowed sinc, 9 kHz cutoff at 48 kHz. A discriminator
@@ -105,6 +106,18 @@ public final class Fsk4Demod {
         float unit = scale * DEV;
         float d = sym - offset;
         int dibit = d >= 0 ? (d > 2 * unit ? 1 : 0) : (d < -2 * unit ? 3 : 2); // +3 → 01, +1 → 00, −1 → 10, −3 → 11
+        // Carrier offset follows every symbol: the error from the nearest of the four levels, when it is plausibly that
+        // level. Measuring it only from sync words (once a burst, and from the wrong symbols when a sync with bit errors was
+        // accepted a few symbols late) lost a third of the bursts and most of the voice on real recordings.
+        int nearest = d >= 2 * unit ? 3 : d >= 0 ? 2 : d >= -2 * unit ? 1 : 0;
+        float err = sym - (offset + (2 * nearest - 3) * unit);
+        if (Math.abs(err) < unit) offset = Math.max(-1500f, Math.min(1500f, offset + 0.02f * err));
+        // Before the first lock there is no sync word to measure the deviation from. Random four-level data averages
+        // two units from the centre, so the scale starts from that; a low-deviation transmitter otherwise never syncs.
+        if (!framer.locked()) {
+            float m = Math.abs(sym - offset) / (2f * DEV);
+            scale += 0.003f * (Math.max(0.4f, Math.min(3.5f, m)) - scale);
+        }
         symRing[(int) (symCount & 255)] = sym;
         symCount++;
         framer.dibit(dibit);
@@ -114,7 +127,7 @@ public final class Fsk4Demod {
         }
     }
 
-    /** A sync word just landed. Its 24 symbols sit 78 to 55 symbols back and are all at ±3. */
+    /** A sync word just landed. Its 24 symbols sit 78 to 55 symbols back and are all at ±3. Sets the deviation scale only. */
     private void calibrate() {
         float pos = 0, neg = 0;
         int np = 0, nn = 0;
@@ -126,7 +139,6 @@ public final class Fsk4Demod {
         pos /= np; neg /= nn;
         float measured = (pos - neg) / (6f * DEV);
         scale += 0.5f * (Math.max(0.4f, Math.min(3.5f, measured)) - scale);
-        offset += 0.5f * (Math.max(-1500f, Math.min(1500f, (pos + neg) / 2)) - offset);
     }
 
     /**
