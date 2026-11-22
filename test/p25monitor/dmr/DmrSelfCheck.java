@@ -29,6 +29,7 @@ public final class DmrSelfCheck {
         stream("inverted polarity", 1f, 0, true, 0, false);
         stream("inverted + 2x + sample offset 4", 2f, -300, true, 4, false);
         stream("with noise", 1f, 0, false, 3, true);
+        radioSide();
         direct();
         System.out.println(fails == 0 ? "ALL " + checks + " CHECKS PASSED" : fails + " OF " + checks + " CHECKS FAILED");
         if (fails > 0) System.exit(1);
@@ -318,5 +319,53 @@ public final class DmrSelfCheck {
         rx.baseband(iq[0], iq[1], iq[0].length);
         System.out.println("       slot1 frames " + rec.frames[1] + ", slot2 frames " + rec.frames[2]);
         check("direct mode: voice reported on slot 2, none on slot 1", rec.frames[2] >= 6 * 6 * 3 * 0.8 && rec.frames[1] == 0);
+    }
+
+    // ------------------------------------------------------------------ radio side
+    /**
+     * A radio (not a repeater): MS sync, one 30 ms burst every 60 ms and no carrier in between, only receiver noise, the
+     * way an SDR records a handheld on simplex or on a repeater input (the SigIdWiki DMR sample). Measuring that noise
+     * as deviation kept the demodulator from ever locking.
+     */
+    static void radioSide() {
+        System.out.println("stream: radio side, noise between bursts");
+        boolean[] emb = lc72(0, TG1, SRC1);
+        byte[] f = DmrAmbe.SILENCE;
+        boolean[] hdr = DmrBurst.build(DmrSync.Kind.MS_DATA, CC, DmrBurst.VOICE_LC, DmrBurst.linkControl(0, 0, TG1, SRC1, false));
+        List<boolean[]> all = new ArrayList<>(List.of(hdr, hdr, hdr));
+        int[] lcss = {DmrEmbedded.LCSS_FIRST, DmrEmbedded.LCSS_CONT, DmrEmbedded.LCSS_CONT, DmrEmbedded.LCSS_LAST};
+        for (int s = 0; s < 8; s++) {
+            boolean[][] frag = DmrEmbedded.fragments(emb);
+            all.add(DmrVoice.burst(f, f, f, true, DmrSync.Kind.MS_VOICE, 0, null));
+            for (int k = 0; k < 4; k++) all.add(DmrVoice.burst(f, f, f, false, DmrSync.Kind.NONE, DmrEmbedded.emb(CC, 0, lcss[k]), frag[k]));
+            all.add(DmrVoice.burst(f, f, f, false, DmrSync.Kind.NONE, DmrEmbedded.emb(CC, 0, 0), null));
+        }
+        Random r = new Random(13);
+        int sps = Fsk4Demod.SPS, gap = (144 + 12) * sps;
+        List<float[]> iq = new ArrayList<>();
+        double phase = 0;
+        for (int k = 0; k < 2 * gap; k++) iq.add(new float[]{(float) r.nextGaussian(), (float) r.nextGaussian()});
+        for (boolean[] b : all) {
+            for (int d : Fsk4Demod.dibitsOf(b)) {
+                double w = 2 * Math.PI * (-DmrBits.levelOf(d) * Fsk4Demod.DEV + 300) / Fsk4Demod.FS;   // inverted, 300 Hz off
+                for (int s = 0; s < sps; s++) {
+                    phase += w;
+                    iq.add(new float[]{(float) Math.cos(phase) + (float) (r.nextGaussian() * 0.05), (float) Math.sin(phase) + (float) (r.nextGaussian() * 0.05)});
+                }
+            }
+            for (int k = 0; k < gap; k++) iq.add(new float[]{(float) r.nextGaussian(), (float) r.nextGaussian()});   // transmitter off
+        }
+        float[] i = new float[iq.size()], q = new float[iq.size()];
+        for (int k = 0; k < i.length; k++) { i[k] = iq.get(k)[0]; q[k] = iq.get(k)[1]; }
+        Rec rec = new Rec();
+        DmrReceiver rx = new DmrReceiver(1L, CC, 0, null, 0, null, rec);
+        for (int pos = 0; pos < i.length; pos += 4096) {
+            int len = Math.min(4096, i.length - pos);
+            rx.baseband(Arrays.copyOfRange(i, pos, pos + len), Arrays.copyOfRange(q, pos, pos + len), len);
+        }
+        int got = rec.frames[1] + rec.frames[2], want = 8 * 6 * 3;
+        System.out.println("       voice frames " + got + "/" + want + ", bad frames " + rec.badFrames);
+        check("radio side with noise between bursts: voice decoded", got >= want * 0.6);
+        check("radio side with noise between bursts: no bad frames handed on", rec.badFrames == 0);
     }
 }

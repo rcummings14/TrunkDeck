@@ -229,7 +229,9 @@ final class ControlChannel {
                 c.edacs = true; c.analogVoice = !digital;
                 c.tg = group; c.src = src; c.channel = lcn; c.start = now; c.lastSeen = now;
                 c.freq = hz;
-                c.emergency = emergency;
+                c.emergencyPending = emergency;   // shown once voice is heard (CallManager.confirmEmergency)
+                Integer endedLcn = e.recentlyEndedChannel.get(key);
+                c.leftover = ended != null && now - ended < LEFTOVER_MS && endedLcn != null && endedLcn == lcn;
                 c.t = e.tg(group);
                 if (c.t != null) c.priority = c.t.priority;
                 e.callMap.put(key, c);
@@ -237,10 +239,13 @@ final class ControlChannel {
             } else {
                 c.lastSeen = now;
                 if (src > 0 && c.src != src) { c.src = src; c.ev.from = String.valueOf(src); c.ev.radioId = src; e.listener.callUpdated(c.ev); }
-                c.emergency |= emergency;
+                if (emergency && !c.emergencyPending) { c.emergencyPending = true; if (c.voiceFrames > 0 || c.vd == null) e.calls.confirmEmergency(c); }
             }
         }
     }
+
+    /** EDACS: a grant this soon after the same talkgroup's call ended on the same LCN may be the site repeating it. */
+    static final long LEFTOVER_MS = 5000;
 
     void unitGrant(int target, int src, int channel, boolean update) {
         long now = System.currentTimeMillis();

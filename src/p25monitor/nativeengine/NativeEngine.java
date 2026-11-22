@@ -175,6 +175,8 @@ public final class NativeEngine {
     final ChannelMap map = new ChannelMap();
     final Map<String, ActiveCall> callMap = new ConcurrentHashMap<>();
     final Map<String, Long> recentlyEnded = new ConcurrentHashMap<>();
+    /** Channel (EDACS LCN) of each recently ended call, by the same key. */
+    final Map<String, Integer> recentlyEndedChannel = new ConcurrentHashMap<>();
     AudioOut audio = new AudioOut();
     Streaming streaming;
     ScheduledExecutorService house;
@@ -185,6 +187,8 @@ public final class NativeEngine {
     volatile boolean lsmPreferred;
     volatile String ccDemodLogged = "";
     volatile long retunes, follows, phase2Calls;
+    /** EDACS grants followed to a channel that never carried a signal (not counted as missed calls). */
+    volatile long emptyGrants;
     final java.util.concurrent.atomic.AtomicBoolean ambeMissingLogged = new java.util.concurrent.atomic.AtomicBoolean();
     final TdmaChannels tdma = new TdmaChannels(this);
     final Map<String, Long> undecodable = new ConcurrentHashMap<>();
@@ -254,7 +258,7 @@ public final class NativeEngine {
     public synchronized void start(RadioSystem s, Mode m) throws Exception {
         starts++;
         if (running) stop(true);   // a restart: streams stay connected (1.4.4)
-        undecodable.clear(); tdma.clear(); ambeMissingLogged.set(false); voiceOnCcLogged.clear(); retunes = 0; follows = 0; phase2Calls = 0; lastDiag = null; iqRecorded = 0;
+        undecodable.clear(); tdma.clear(); ambeMissingLogged.set(false); voiceOnCcLogged.clear(); retunes = 0; follows = 0; phase2Calls = 0; emptyGrants = 0; recentlyEndedChannel.clear(); lastDiag = null; iqRecorded = 0;
         lsmPreferred = "lsm".equalsIgnoreCase(s.nativeModulation); ccDemodLogged = "";
         usage.clear(); missed.clear(); missedRecent.clear(); peakConcurrent = 0; tuners.clear(); huntCount = 0; fixedWideCenter = 0; widePlanned = false;
         conventional = s.fixedChannels(); parkedDecoders.clear(); scanTuner = null; scanGroups = List.of(); scanIndex = 0; lastScanAt = 0;

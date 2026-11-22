@@ -10,7 +10,8 @@ package p25monitor.dmr;
  * <p>Deviation scale and carrier offset are measured, not assumed. The carrier offset follows every symbol (its error from
  * the nearest level). Every sync word is made only of the outer levels (+3 and -3), so each accepted sync gives the mean of
  * the + symbols and of the - symbols: half their difference over 6 is the unit deviation. Before the first lock the scale
- * comes from the average symbol size. That works at any gain and with either polarity.
+ * comes from the average size of the steady symbols (noise between a radio's bursts is left out). That works at any gain
+ * and with either polarity.
  * Written for this program; not taken from another decoder.
  */
 public final class Fsk4Demod {
@@ -36,6 +37,15 @@ public final class Fsk4Demod {
      * narrow.
      */
     private static final int TAPS = 65;
+    /** RMS spread (Hz) inside a symbol's middle samples below which the symbol counts as signal, not noise. */
+    static final float STEADY_HZ = 800f;
+    /**
+     * Total sample-to-sample frequency movement (Hz) over one symbol above which it is noise. A 4FSK symbol moves at most
+     * one level change (3888 Hz at the ETSI deviation) plus a little; noise moves about ten times that.
+     */
+    static final float EDGE_NOISE = 6000f;
+    private final float[] pendEdge = new float[SPS];
+    private float pendJump;
     private static final float[] LPF = lowpass(TAPS, 9000.0 / FS);
     private final float[] fi = new float[TAPS], fq = new float[TAPS];
     private int fPos;
@@ -52,6 +62,8 @@ public final class Fsk4Demod {
         symCount = 0;
         java.util.Arrays.fill(box, 0);
         java.util.Arrays.fill(edge, 0);
+        java.util.Arrays.fill(pendEdge, 0);
+        pendJump = 0;
         java.util.Arrays.fill(symRing, 0);
         java.util.Arrays.fill(fi, 0);
         java.util.Arrays.fill(fq, 0);
@@ -93,7 +105,17 @@ public final class Fsk4Demod {
         box[boxPos] = hz;
         if (++boxPos == SPS) boxPos = 0;
         samp++;
-        if (haveHz) { edge[(int) (samp % SPS)] += Math.abs(hz - prevHz); edgeSamples++; }
+        // Symbol edges are collected one symbol at a time and kept only when that symbol was not noise: noise jumps by
+        // thousands of hertz on every sample, and between a radio's bursts it buried the real edges and walked the clock.
+        if (haveHz) { float j = Math.abs(hz - prevHz); pendEdge[(int) (samp % SPS)] += j; pendJump += j; }
+        if ((int) (samp % SPS) == dumpPhase) {
+            if (pendJump < EDGE_NOISE * Math.max(1f, scale)) {
+                for (int k = 0; k < SPS; k++) edge[k] += pendEdge[k];
+                edgeSamples += SPS;
+            }
+            java.util.Arrays.fill(pendEdge, 0);
+            pendJump = 0;
+        }
         prevHz = hz;
         haveHz = true;
         if (!frozen && sinceTune++ >= SPS * 3 && edgeSamples >= SPS * 8) alignClock();
@@ -103,6 +125,11 @@ public final class Fsk4Demod {
         float sum = 0;
         for (int k = 2; k < SPS - 2; k++) sum += box[(boxPos + k) % SPS];
         float sym = sum / (SPS - 4);
+        // How much the frequency moves inside those middle samples. A real 4FSK symbol holds its level there (a few
+        // hundred hertz at most); noise jumps by thousands.
+        float sq = 0;
+        for (int k = 2; k < SPS - 2; k++) { float e = box[(boxPos + k) % SPS] - sym; sq += e * e; }
+        boolean steady = sq < STEADY_HZ * STEADY_HZ * (SPS - 4);
         float unit = scale * DEV;
         float d = sym - offset;
         int dibit = d >= 0 ? (d > 2 * unit ? 1 : 0) : (d < -2 * unit ? 3 : 2); // +3 → 01, +1 → 00, −1 → 10, −3 → 11
@@ -114,7 +141,9 @@ public final class Fsk4Demod {
         if (Math.abs(err) < unit) offset = Math.max(-1500f, Math.min(1500f, offset + 0.02f * err));
         // Before the first lock there is no sync word to measure the deviation from. Random four-level data averages
         // two units from the centre, so the scale starts from that; a low-deviation transmitter otherwise never syncs.
-        if (!framer.locked()) {
+        // Only steady symbols count. A radio (not a repeater) sends a 30 ms burst every 60 ms, and measuring the noise in
+        // between pushed the scale to 1.5 to 2 times the real deviation, so a radio-side signal never locked.
+        if (steady && !framer.locked()) {
             float m = Math.abs(sym - offset) / (2f * DEV);
             scale += 0.003f * (Math.max(0.4f, Math.min(3.5f, m)) - scale);
         }
@@ -154,7 +183,7 @@ public final class Fsk4Demod {
             slipOne();
             return;
         }
-        if (framer.probing()) return;
+        if (framer.probing() || framer.following()) return;
         if (everLocked) {
             if (unlockedAt < 0) unlockedAt = samp;
             if (samp - unlockedAt < FS / 2) return;

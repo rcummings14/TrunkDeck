@@ -63,6 +63,8 @@ final class ChannelDecoder {
      * the samples they already deliver; nothing here invents a dBm figure.
      */
     volatile double signalDb = Double.NaN;
+    /** Highest {@code signalDb} since the decoder started: was there ever a carrier on the channel. */
+    volatile double peakDb = Double.NEGATIVE_INFINITY;
     volatile double syncPower = Double.NaN;   // channel power while frames are being received
     volatile boolean enabled = true;
     /** Exceptions thrown by this decoder (within 10 s of each other) and whether it is to be replaced. */
@@ -281,6 +283,7 @@ final class ChannelDecoder {
             double inst = 10 * Math.log10(p / m + 1e-12);
             power = 0.8 * power + 0.2 * inst;
             signalDb = Double.isNaN(signalDb) ? inst : 0.8 * signalDb + 0.2 * inst;
+            if (signalDb > peakDb) peakDb = signalDb;
         }
         // Break detector: a C4FM carrier turns at most ~1.2 rad in 3 samples at 48 kHz (1.8 kHz peak deviation).
         // Lost samples make it jump by a random angle, which the channel filter smears over a few samples; an

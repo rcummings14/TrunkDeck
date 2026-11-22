@@ -84,6 +84,11 @@ public final class DmrFramer {
     public boolean locked() { return locked; }
     /** True while a possible inverted voice sync is being checked. The symbol clock should not be stepped meanwhile. */
     public boolean probing() { return pCount > 0; }
+    /**
+     * True while bursts B to F of a voice superframe are still due. A radio's own voice has a sync only once every 360 ms,
+     * so the symbol clock should not be stepped between them.
+     */
+    public boolean following() { return fCount > 0; }
     public boolean inverted() { return inverted; }
     /** Counts accepted sync words. A caller can watch this to learn that a sync has just landed. */
     public int syncSerial() { return syncSerial; }

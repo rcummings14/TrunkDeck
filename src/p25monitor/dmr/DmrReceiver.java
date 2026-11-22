@@ -172,6 +172,11 @@ public final class DmrReceiver {
         if (burst.slotHint == 1 || burst.slotHint == 2) { slotExact = true; return burst.slotHint; }
         if (parityEpoch != burst.epoch) { parityEpoch = burst.epoch; parityOfSlot1 = -1; parityConf = 0; }
         int par = (int) (burst.gridIndex & 1);
+        // A radio's own bursts (MS sync, a repeater input or simplex) have no CACH to name the slot. Its bursts are two
+        // grid steps apart, so the grid parity alone keeps one radio on one slot; the first one heard is called slot 1.
+        // Guessing by alternation put every other burst of a single talker on the other slot, which has no call, and lost
+        // half the audio.
+        if (cach == null && parityOfSlot1 < 0) { parityOfSlot1 = par; parityConf = 1; }
         boolean exact = cach != null && cach.ok && cach.errors == 0;
         if (exact) {
             int p1 = cach.nextSlot == 1 ? par : par ^ 1;
