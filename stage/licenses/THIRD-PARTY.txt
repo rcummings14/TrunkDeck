@@ -28,6 +28,13 @@ SLF4J API 2.0.7 - MIT - Copyright (c) 2004-2023 QOS.ch - https://www.slf4j.org
   app/lib/slf4j-api-2.0.7.jar (logging interface used by the JMBE voice codec). Licence: slf4j-MIT.txt
 The jars in app/lib are the unmodified releases from Maven Central / the project's GitHub release.
 
+Included as source code (compiled into app/trunkdeck.jar)
+--------------------------------------------------------
+SDRTrunk (DMR decoder) - GNU GPL v3 or later - Copyright (C) 2014-2025 Dennis Sheirer - https://github.com/DSheirer/sdrtrunk
+  The DMR decoding classes, in source/src/io/github/dsheirer (package io.github.dsheirer), from commit b177fd77.
+  Changes for TrunkDeck are marked in each file and listed in source/src/io/github/dsheirer/README-TRUNKDECK.txt.
+  Licence: GPL-3.0.txt
+
 Downloaded by the installer (not in this zip)
 ---------------------------------------------
 Eclipse Temurin JDK 25 (OpenJDK) - GNU GPL v2 with the Classpath Exception - https://adoptium.net

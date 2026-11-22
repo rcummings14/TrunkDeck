@@ -35,8 +35,7 @@ if [ "${1:-}" = "test" ]; then
   "$JAVA" --enable-native-access=ALL-UNNAMED -Dtrunkdeck.lib=lib -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.RdioScannerTests   # Rdio Scanner uploads (1.4.8); -Djmbe=<jmbe jar> adds the real-engine upload checks
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.DisplayBarsTests   # bar colours (1.4.9)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.DisplayColorTests   # every custom colour and preset reaches the panel
-  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.DmrTests   # synthetic DMR bursts (untested on air)
-  "$JAVA" ${TEST_OPTS:-} -cp build/classes${CPS}build/test p25monitor.dmr.DmrSystemTests   # Tier III grant layout, MBC absolute grants, PI header, emergency, P_CLEAR (1.7.6)
+  "$JAVA" ${TEST_OPTS:-} -cp build/classes${CPS}build/test p25monitor.dmr.DmrDecoderTests   # DMR decoder on test-transmitter signals (both slots, alias, noise, colour code, Tier III grant, AMBE)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.DmrEngineTests   # DMR calls per slot, emergency, encryption, private grants (1.7.6)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nxdn.NxdnTests   # NXDN coding, frames, receiver, NXDN48/96 demod (1.7.6)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.NxdnEngineTests   # NXDN calls in the engine, Type-C channel resolution (1.7.6)

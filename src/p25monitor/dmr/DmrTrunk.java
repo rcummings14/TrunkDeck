@@ -24,7 +24,6 @@ public final class DmrTrunk {
     }
 
     public final Flavor flavor;
-    public final DmrCsbk.Masks masks = new DmrCsbk.Masks();
     public int restRepeater = -1, restSlot = -1;
     public long restHz;
     public boolean restMoved;
@@ -83,44 +82,5 @@ public final class DmrTrunk {
     public long tier3Hz(int lpcn, long baseHz) {
         Long hz = lpcnHz.get(lpcn);
         return hz != null ? hz : baseHz + (long) lpcn * 12_500L;
-    }
-
-    /**
-     * A Tier III grant whose MBC block gave absolute channel parameters ({@link DmrCsbk#absolute}). The downlink is the
-     * frequency of the pair nearer the control channel being received (the site's downlink band), and the LPCN is
-     * remembered. A frequency more than 50 MHz from the control channel is refused as a misread.
-     */
-    public Grant onAbsolute(DmrCsbk header, long[] abs, long controlHz) {
-        if (flavor != Flavor.TIER3 || header == null || !header.grant() || abs == null) return null;
-        long tx = abs[1], rx = abs[2];
-        long down = controlHz > 0 && Math.abs(rx - controlHz) < Math.abs(tx - controlHz) ? rx : tx;
-        if (controlHz > 0 && Math.abs(down - controlHz) > 50_000_000L) return null;
-        lpcnHz.put((int) abs[0], down);
-        lastGrant = new Grant(header.target, header.source, (int) abs[0], header.slot, down, header.groupCall(), header.emergency);
-        return lastGrant;
-    }
-
-    /** @param baseHz first control frequency, used as logical-channel 0 */
-    public Grant onCsbk(DmrCsbk csbk, long baseHz, List<Long> channels) {
-        restMoved = false;
-        if (csbk == null || !csbk.ok) return null;
-        if (csbk.connectVoice && flavor == Flavor.CONNECT_PLUS) {
-            long hz = lcnFrequency(csbk.lcn, channels);
-            lastGrant = new Grant(csbk.target, csbk.source, csbk.lcn, csbk.slot, hz);
-            return lastGrant;
-        }
-        if (csbk.grant() && flavor == Flavor.TIER3) {
-            if (csbk.absoluteGrant()) return null;   // the frequency is in the MBC block that follows
-            lastGrant = new Grant(csbk.target, csbk.source, csbk.lcn, csbk.slot, tier3Hz(csbk.lcn, baseHz), csbk.groupCall(), csbk.emergency);
-            return lastGrant;
-        }
-        if (csbk.rest() && (flavor == Flavor.CAPACITY_PLUS || flavor == Flavor.XPT)) {
-            int prevR = restRepeater, prevS = restSlot;
-            restRepeater = csbk.repeater;
-            restSlot = csbk.slot;
-            if (channels != null && restRepeater >= 0 && restRepeater < channels.size()) restHz = channels.get(restRepeater);
-            restMoved = prevR != restRepeater || prevS != restSlot;
-        }
-        return null;
     }
 }

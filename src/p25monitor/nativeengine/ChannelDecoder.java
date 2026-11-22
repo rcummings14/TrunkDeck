@@ -251,8 +251,8 @@ final class ChannelDecoder {
 
     /** Tests: run at the start of every block (fault injection). */
     volatile Runnable faultHook;
-    /** DMR demod on this same 48 kHz channel. Null on a P25 channel. */
-    p25monitor.dmr.DmrReceiver dmr;
+    /** DMR decoder on this same 48 kHz channel. Null on a P25 channel. */
+    p25monitor.dmr.DmrDecoder dmr;
     /** NXDN demod (both rates) on this same 48 kHz channel. Null unless the system is NXDN. */
     p25monitor.nxdn.NxdnDemod nxdn;
     /** Analog FM receiver (squelch, CTCSS) on this same 48 kHz channel. Null unless the system is analog. */

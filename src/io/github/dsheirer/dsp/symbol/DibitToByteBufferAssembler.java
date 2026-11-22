@@ -1,0 +1,151 @@
+/*
+ * *****************************************************************************
+ * Copyright (C) 2014-2026 Dennis Sheirer
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * ****************************************************************************
+ *
+ * Modified for TrunkDeck (2026): imports changed to io.github.dsheirer.compat (small stand-ins for SLF4J, Apache
+ * Commons and Guava) and Apache Commons FastMath calls changed to java.lang.Math. The decoding logic is unchanged.
+ */
+package io.github.dsheirer.dsp.symbol;
+
+import io.github.dsheirer.sample.Listener;
+import io.github.dsheirer.sample.buffer.IByteBufferProvider;
+import java.nio.BufferOverflowException;
+import java.nio.ByteBuffer;
+import io.github.dsheirer.compat.Logger;
+import io.github.dsheirer.compat.LoggerFactory;
+
+/**
+ * Assembles reusable byte buffers from an incoming stream of Dibits.
+ */
+public class DibitToByteBufferAssembler implements Listener<Dibit>, IByteBufferProvider
+{
+    private final static Logger LOGGER = LoggerFactory.getLogger(DibitToByteBufferAssembler.class);
+    private ByteBuffer mCurrentBuffer;
+    private int mBufferSize;
+    private byte mCurrentByte;
+    private int mDibitCount;
+    private Listener<ByteBuffer> mBufferListener;
+
+    /**
+     * Constructs an assembler to produce reusable byte buffers of the specified size
+     *
+     * @param bufferSize
+     */
+    public DibitToByteBufferAssembler(int bufferSize)
+    {
+        mBufferSize = bufferSize;
+        getNextBuffer();
+    }
+
+    /**
+     * Broadcasts the current buffer to the registered listener and creates a new buffer, resetting
+     * the buffer pointer to zero so that new dibits can be loaded.
+     */
+    private void getNextBuffer()
+    {
+        closeAndBroadcast();
+        mCurrentBuffer = ByteBuffer.allocate(mBufferSize);
+    }
+
+    /**
+     * Closes the current buffer and broadcasts it to an optionally registered listener
+     */
+    private void closeAndBroadcast()
+    {
+        if(mCurrentBuffer != null && mBufferListener != null)
+        {
+            mCurrentBuffer.flip();
+            mBufferListener.receive(mCurrentBuffer);
+        }
+    }
+
+    @Override
+    public void receive(Dibit dibit)
+    {
+        mCurrentByte <<= 2;
+
+        switch(dibit)
+        {
+            case D01_PLUS_3:
+                mCurrentByte |= 0x01;
+                break;
+            case D00_PLUS_1:
+                //no-op - value is already 00
+                break;
+            case D10_MINUS_1:
+                mCurrentByte |= 0x02;
+                break;
+            case D11_MINUS_3:
+                mCurrentByte |= 0x03;
+                break;
+        }
+
+        mDibitCount++;
+
+        if(mDibitCount >= 4)
+        {
+            if(!mCurrentBuffer.hasRemaining())
+            {
+                getNextBuffer();
+            }
+
+            try
+            {
+                mCurrentBuffer.put(mCurrentByte);
+            }
+            catch (BufferOverflowException e)
+            {
+                //This shouldn't happen.
+                LOGGER.info("Detected buffer overflow in dibit buffer assembler - continuing");
+            }
+            mCurrentByte = 0x00;
+            mDibitCount = 0;
+        }
+    }
+
+    /**
+     * Flush any buffered bits to the registered listener.
+     */
+    public void flush()
+    {
+        closeAndBroadcast();
+    }
+
+    /**
+     * Registers the listener to receive fully assembled byte buffers from this assembler.
+     */
+    @Override
+    public void setBufferListener(Listener<ByteBuffer> listener)
+    {
+        mBufferListener = listener;
+    }
+
+    /**
+     * Removes the listener from receiving buffers from this assembler
+     */
+    @Override
+    public void removeBufferListener(Listener<ByteBuffer> listener)
+    {
+        mBufferListener = null;
+    }
+
+    @Override
+    public boolean hasBufferListeners()
+    {
+        return mBufferListener != null;
+    }
+}

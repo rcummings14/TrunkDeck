@@ -43,6 +43,14 @@ coding and their check rows, the scrambling sequence, and the reordering of the 
 BCH generator is computed from the code parameters, and the Golay and Hamming decoders are TrunkDeck's own. No source
 code, class structure or comments were copied. The voice itself is decoded by JMBE, as for P25.
 
+TrunkDeck's DMR decoder is built on SDRTrunk's, by Dennis Sheirer (GPL-3.0-or-later,
+https://github.com/DSheirer/sdrtrunk), included as source code in source/src/io/github/dsheirer: the DMR symbol
+processor, burst framer, message processor and message classes, and the DSP and error correction classes they use.
+Each file keeps its copyright and licence header; files changed for TrunkDeck say so in their header, and
+source/src/io/github/dsheirer/README-TRUNKDECK.txt lists the SDRTrunk version and every change. The adapter that
+connects it to TrunkDeck (source/src/p25monitor/dmr/DmrDecoder.java) and the small stand-in classes in
+io/github/dsheirer/compat are TrunkDeck's own.
+
 Third-party software
 --------------------
 The full list, with licence texts, is in licenses/THIRD-PARTY.txt. In short:

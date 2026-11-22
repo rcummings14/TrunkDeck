@@ -1,0 +1,260 @@
+/*
+ * *****************************************************************************
+ * Copyright (C) 2014-2024 Dennis Sheirer
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * ****************************************************************************
+ *
+ * Modified for TrunkDeck (2026): imports changed to io.github.dsheirer.compat (small stand-ins for SLF4J, Apache
+ * Commons and Guava) and Apache Commons FastMath calls changed to java.lang.Math. The decoding logic is unchanged.
+ */
+
+package io.github.dsheirer.module.decode.dmr.message.data.lc.shorty;
+
+import io.github.dsheirer.bits.BinaryMessage;
+import io.github.dsheirer.bits.BitSetFullException;
+import io.github.dsheirer.bits.CorrectedBinaryMessage;
+import io.github.dsheirer.module.decode.dmr.bptc.BPTC_68_36;
+import io.github.dsheirer.module.decode.dmr.message.data.lc.LCMessageFactory;
+import io.github.dsheirer.module.decode.dmr.message.type.LCSS;
+import io.github.dsheirer.compat.Logger;
+import io.github.dsheirer.compat.LoggerFactory;
+
+/**
+ * Reassembles fragments into Short Link Control Messages
+ */
+public class SLCAssembler
+{
+    private final static Logger mLog = LoggerFactory.getLogger(SLCAssembler.class);
+    private CorrectedBinaryMessage mAssemblingMessage;
+    //Soft bits parallel to the assembling message, or null when any fragment doesn't provide soft bits.
+    private float[] mAssemblingSoftBits;
+    private int mSoftBitsOffset;
+    private int mFragmentCount = 0;
+    private long mTimestamp;
+    private BPTC_68_36 mBPTC = new BPTC_68_36();
+
+    /**
+     * Constructs an instance
+     */
+    public SLCAssembler()
+    {
+    }
+
+    /**
+     * Resets this assembler when a sync loss is detected to prevent malformed SLC messages.
+     */
+    public void reset()
+    {
+        mAssemblingMessage = null;
+        mAssemblingSoftBits = null;
+        mFragmentCount = 0;
+        mTimestamp = System.currentTimeMillis();
+    }
+
+    /**
+     * Processes the short link control fragment
+     * @return a short link control message or null if the message is not yet fully assembled
+     */
+    public ShortLCMessage process(LCSS lcss, BinaryMessage fragment, long timestamp)
+    {
+        return process(lcss, fragment, null, timestamp);
+    }
+
+    /**
+     * Processes the short link control fragment
+     * @param lcss link control start/stop for the fragment
+     * @param fragment of 17 bits
+     * @param softFragment soft bits for the fragment where a positive value favors a 1 bit, or null.
+     * @param timestamp of the fragment
+     * @return a short link control message or null if the message is not yet fully assembled
+     */
+    public ShortLCMessage process(LCSS lcss, BinaryMessage fragment, float[] softFragment, long timestamp)
+    {
+        mTimestamp = timestamp;
+
+        ShortLCMessage message = null;
+
+        switch(lcss)
+        {
+            case FIRST_FRAGMENT:
+                message = dispatch();
+                start(0);
+                add(fragment, softFragment);
+                break;
+            case CONTINUATION_FRAGMENT:
+                if(mAssemblingMessage == null)
+                {
+                    start(17);
+                }
+                add(fragment, softFragment);
+                break;
+            case LAST_FRAGMENT:
+                if(mAssemblingMessage == null)
+                {
+                    start(51);
+                }
+                add(fragment, softFragment);
+                message = dispatch();
+                break;
+            case SINGLE_FRAGMENT:
+            default:
+                message = createSingleFragment(fragment);
+                break;
+        }
+
+        return message;
+    }
+
+    /**
+     * Creates a single fragment short link control message
+     * @param binaryMessage from cach payload
+     * @return short link control message
+     */
+    private ShortLCMessage createSingleFragment(BinaryMessage binaryMessage)
+    {
+        CorrectedBinaryMessage corrected = new CorrectedBinaryMessage(17);
+        for(int x = 0; x < 17; x++)
+        {
+            if(binaryMessage.get(x))
+            {
+                corrected.set(x);
+            }
+        }
+
+        return LCMessageFactory.createShort(corrected, mTimestamp, 0);
+    }
+
+    /**
+     * Starts assembling a new message
+     * @param offset for the first fragment
+     */
+    private void start(int offset)
+    {
+        mAssemblingMessage = new CorrectedBinaryMessage(68);
+        mAssemblingMessage.setPointer(offset);
+        mAssemblingSoftBits = new float[68];
+        mSoftBitsOffset = offset;
+    }
+
+    private ShortLCMessage dispatch()
+    {
+        ShortLCMessage message = null;
+
+        if(mFragmentCount == 4)
+        {
+            message = decode(mAssemblingMessage, mAssemblingSoftBits, mTimestamp);
+        }
+
+        mAssemblingMessage = null;
+        mAssemblingSoftBits = null;
+        mFragmentCount = 0;
+        return message;
+    }
+
+    /**
+     * Performs error detection and correction and extracts the message from the BPTC protected interleaved message.
+     * When the hard decision result fails BPTC error correction or the CRC-8 check and soft bits are provided,
+     * retries with soft decision decoding and uses the soft decision result if it passes the CRC-8 check.
+     * @param interleaved message
+     * @param softBits for the interleaved message, or null.
+     * @param timestamp for the decoded message.
+     * @return decoded message.
+     */
+    private ShortLCMessage decode(BinaryMessage interleaved, float[] softBits, long timestamp)
+    {
+        if(interleaved != null)
+        {
+            ShortLCMessage slco = create(mBPTC.extract(interleaved), timestamp);
+
+            if(!slco.isValid() && softBits != null)
+            {
+                CorrectedBinaryMessage softCorrected = mBPTC.extractSoft(softBits);
+
+                if(softCorrected != null)
+                {
+                    ShortLCMessage softSlco = create(softCorrected, timestamp);
+
+                    if(softSlco.isValid())
+                    {
+                        return softSlco;
+                    }
+                }
+            }
+
+            return slco;
+        }
+
+        return null;
+    }
+
+    /**
+     * Creates a short link control message from the corrected message.
+     * @param corrected message with the BPTC corrected bit count
+     * @param timestamp for the message
+     * @return message
+     */
+    private static ShortLCMessage create(CorrectedBinaryMessage corrected, long timestamp)
+    {
+        //Note: slco is timeslot-agnostic, so we use timeslot 0 every time
+        ShortLCMessage slco = LCMessageFactory.createShort(corrected, timestamp, 0);
+        //Valid requires both the CRC-8 check (set by the factory) and successful BPTC error correction
+        slco.setValid(slco.isValid() && corrected.getCorrectedBitCount() >= 0);
+        return slco;
+    }
+
+    /**
+     * Adds the cach payload to the currently assembling message
+     * @param payload fragment bits
+     * @param softPayload fragment soft bits, or null
+     */
+    private void add(BinaryMessage payload, float[] softPayload)
+    {
+        if(payload == null || payload.size() != 17)
+        {
+            return;
+        }
+
+        mFragmentCount++;
+
+        if(mAssemblingSoftBits != null && softPayload != null && softPayload.length == 17 &&
+                mSoftBitsOffset + 17 <= mAssemblingSoftBits.length)
+        {
+            System.arraycopy(softPayload, 0, mAssemblingSoftBits, mSoftBitsOffset, 17);
+            mSoftBitsOffset += 17;
+        }
+        else
+        {
+            mAssemblingSoftBits = null;
+        }
+
+        try
+        {
+            if(mAssemblingMessage == null)
+            {
+                mAssemblingMessage = new CorrectedBinaryMessage(68);
+            }
+
+            for(int x = 0; x < 17; x++)
+            {
+                mAssemblingMessage.add(payload.get(x));
+            }
+        }
+        catch(BitSetFullException bsfe)
+        {
+            //Something went wrong and we overfilled the bitset
+            dispatch();
+        }
+    }
+}
