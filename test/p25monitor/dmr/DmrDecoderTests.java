@@ -49,7 +49,7 @@ public final class DmrDecoderTests {
     }
 
     /** Both slots of a repeater, interleaved with CACH, padded with idle bursts; random dibits before. */
-    static int[] repeaterDibits(int tg1, int src1, String alias1, int tg2, int src2) {
+    public static int[] repeaterDibits(int tg1, int src1, String alias1, int tg2, int src2) {
         int sf = 9;
         List<boolean[]> s1 = DmrSignal.call(tg1, src1, sf, alias1), s2 = DmrSignal.call(tg2, src2, sf, null);
         List<Integer> dib = new ArrayList<>();
@@ -73,7 +73,7 @@ public final class DmrDecoderTests {
      * 4FSK at 48 kHz, 10 samples per symbol, +/-1944 Hz outer deviation. {@code rrc}: the symbol levels go through a
      * root raised cosine filter (alpha 0.2) before the FM modulator, as in a real DMR transmitter.
      */
-    static float[][] modulate(int[] dibits, boolean rrc, double offsetHz, double noise) {
+    public static float[][] modulate(int[] dibits, boolean rrc, double offsetHz, double noise) {
         int sps = DmrSignal.SPS, n = dibits.length * sps;
         double[] level = new double[n];
         if (rrc) {

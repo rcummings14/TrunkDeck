@@ -103,6 +103,8 @@ public final class DmrDecoder {
     private long samples, lastValidAt = -SYNC_HOLD_SAMPLES;
     private long messages, valid, colourDrops, slotDrops, csbkOk, csbkBad, voiceBursts;
     private volatile double carrierHz = Double.NaN;
+    /** The message being handled had its colour code checked (or any colour code is wanted). */
+    private boolean colourChecked;
 
     /**
      * @param hz         channel frequency
@@ -178,6 +180,12 @@ public final class DmrDecoder {
 
     public boolean synced() { return samples - lastValidAt < SYNC_HOLD_SAMPLES; }
 
+    /**
+     * The carrier's offset from the channel centre (Hz, positive = signal above), as the symbol processor measures it
+     * while decoding; NaN before it has. The processor reports the correction it applies, the opposite sign.
+     */
+    public double carrierErrorHz() { double c = carrierHz; return Double.isNaN(c) ? Double.NaN : -c; }
+
     public String status() {
         return String.format(java.util.Locale.ROOT, "dmr messages=%d valid=%d voice=%d colourDrop=%d slotDrop=%d csbk ok=%d bad=%d carrier=%s",
                 messages, valid, voiceBursts, colourDrops, slotDrops, csbkOk, csbkBad,
@@ -204,10 +212,13 @@ public final class DmrDecoder {
         int cc = colourCode(m, slot);
         if (wantColor >= 0 && cc >= 0 && cc != wantColor) { colourDrops++; return; }
         if ((wantSlot == 1 || wantSlot == 2) && (slot == 1 || slot == 2) && slot != wantSlot) { slotDrops++; return; }
+        // Only a message whose colour code was checked keeps the channel synced. A CACH short LC carries none, so a
+        // neighbouring repeater's CACH would otherwise keep a channel that has drifted onto it looking locked.
+        colourChecked = wantColor < 0 || cc >= 0;
         if (m instanceof CSBKMessage csbk) { onCsbk(csbk, slot); return; }
         if (!m.isValid()) return;
         valid++;
-        lastValidAt = samples;
+        if (colourChecked) lastValidAt = samples;
         if (m instanceof VoiceMessage voice) { onVoice(voice, slot, cc); return; }
         if (m instanceof PiHeader) { encrypted(slot, cc); return; }
         if (m instanceof VoiceHeader header) { onLc(header.getLCMessage(), slot, cc, true); return; }
@@ -288,7 +299,7 @@ public final class DmrDecoder {
         if (!csbk.isValid()) { csbkBad++; if (out != null) out.controlError(); return; }
         csbkOk++;
         valid++;
-        lastValidAt = samples;
+        if (colourChecked) lastValidAt = samples;
         if (out == null) return;
         out.control(csbk.toString());
         if (csbk.getOpcode() == Opcode.STANDARD_CLEAR) {

@@ -55,6 +55,8 @@ final class ChannelDecoder {
     double afcHz;               // correction applied on top of the nominal offset
     volatile long lastFrameAt, lastTsbkAt;
     volatile long lastNidSampleAt = -1_000_000;
+    /** A DMR or NXDN decoder on this channel has synced at least once. */
+    volatile boolean digitalLocked;
     float[] oi = new float[0], oq = new float[0];
     double power;               // channel power (dB relative to the ADC's full scale)
     /**
@@ -316,6 +318,10 @@ final class ChannelDecoder {
         for (Demod pa : paths) pa.demod.process(oi, oq, m);
         if (dmr != null && m > 0) dmr.baseband(oi, oq, m);
         if (nxdn != null && m > 0) nxdn.baseband(oi, oq, m);
+        // A synced DMR / NXDN decoder is frame lock, as decoded P25 frames are: the FLL leaves the filter alone and,
+        // once locked, holds it (see fll()). Without this the FLL followed adjacent-channel signals between
+        // transmissions and walked the filter a whole channel (12.5 kHz) away.
+        if ((dmr != null && dmr.synced()) || (nxdn != null && nxdn.synced())) { lastNidSampleAt = samples; digitalLocked = true; }
         if (analog != null && m > 0) analog.baseband(oi, oq, m);
         if (type2 != null && m > 0) type2.baseband(oi, oq, m);
         if (edacs != null && m > 0) edacs.baseband(oi, oq, m);
@@ -361,7 +367,7 @@ final class ChannelDecoder {
         // signal is nearby (adjacent-channel splatter, intermod, a spur); 1.2.0 let the FLL pull the filter up to 3 kHz onto
         // it, and the next transmission started off frequency (lost and damaged frames, see FllHoldTests). AFC on frame
         // syncs keeps trimming the offset while frames arrive.
-        if (holdAfterLock && nidOk() > 0) return;
+        if (holdAfterLock && (nidOk() > 0 || digitalLocked)) return;
         java.util.function.DoubleSupplier as = anchor;
         double anc = as == null ? Double.NaN : as.getAsDouble();
         if (!Double.isNaN(anc) && Math.abs(afcHz - anc) > ANCHOR_RANGE_HZ) {   // wandered off: back to the dongle's known offset
@@ -420,7 +426,14 @@ final class ChannelDecoder {
     }
 
     /** Total measured carrier offset in Hz (AFC + residual). */
-    double frequencyError() { return afcHz + active.demod.freqErrorHz; }
+    double frequencyError() {
+        // On a DMR / NXDN channel the P25 demodulator's residual means nothing; their own symbol processor measures it.
+        if (dmr != null || nxdn != null) {
+            double r = dmr != null ? dmr.carrierErrorHz() : nxdn.carrierErrorHz();
+            return afcHz + (Double.isNaN(r) ? 0 : r);
+        }
+        return afcHz + active.demod.freqErrorHz;
+    }
     boolean locked(long now) { return now - lastFrameAt < 2500 || (dmr != null && dmr.synced()) || (nxdn != null && nxdn.synced()) || (analog != null && analog.open()) || (type2 != null && type2.locked()) || (edacs != null && edacs.locked()) || (provoice != null && provoice.locked()); }
 
     /** Resets since the last frame lock. Drives the trunked "give up after 8" rule, and goes back to 0 when sync returns. */

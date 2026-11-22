@@ -72,6 +72,13 @@ public final class NxdnDecoder {
     /** "NXDN48" or "NXDN96" while synced, else null. */
     public synchronized String mode() { return synced() ? owner.name : null; }
 
+    /** The carrier's offset from the channel centre (Hz, positive = signal above) while synced, else NaN. */
+    public synchronized double carrierErrorHz() {
+        if (!synced()) return Double.NaN;
+        double c = owner.carrierHz;
+        return Double.isNaN(c) ? Double.NaN : -c;
+    }
+
     public synchronized String status() {
         return "nxdn " + (owner == null ? "searching" : owner.name) + " messages=" + messages + " voice frames=" + voiceFrames;
     }
@@ -151,6 +158,8 @@ public final class NxdnDecoder {
         final float[] holdI, holdQ;
         int held;
         long lastValid = Long.MIN_VALUE / 2;
+        /** The symbol processor's frequency correction (Hz), the opposite sign of the carrier's offset. */
+        volatile double carrierHz = Double.NaN;
 
         Lane(TransmissionMode mode, String name) {
             this.name = name;
@@ -172,7 +181,9 @@ public final class NxdnDecoder {
             NXDNMessageProcessor processor = new NXDNMessageProcessor(config);
             processor.setMessageListener(m -> onMessage(this, m));
             NXDNMessageFramer framer = new NXDNMessageFramer(processor, mode);
-            symbols = new NXDNSymbolProcessor(new Feedback(rate), framer, mode);
+            Feedback feedback = new Feedback(rate);
+            feedback.setFrequencyCorrectionListener(f -> carrierHz = f);
+            symbols = new NXDNSymbolProcessor(feedback, framer, mode);
             symbols.setSamplesPerSymbol(samplesPerSymbol);
         }
 
