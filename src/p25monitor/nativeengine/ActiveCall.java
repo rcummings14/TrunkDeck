@@ -19,6 +19,12 @@ final class ActiveCall {
     boolean type2, analogVoice;
     /** EDACS call ({@code analogVoice}: analog FM, else ProVoice); {@code channel} is the LCN. */
     boolean edacs;
+    /**
+     * EDACS: the grant carried the emergency flag. The call is shown as an emergency ({@code emergency}) only once voice
+     * is decoded on its channel (never for a call that is not followed), so grants nobody transmits on do not flash red. {@code leftover}: the same talkgroup's
+     * call on the same LCN ended a moment before this grant (the site repeats the assignment after the call).
+     */
+    boolean emergencyPending, leftover;
     boolean encrypted, emergency, phase2, followed, unitToUnit, conventional, patch, eligible, hang, waiting;
     volatile boolean ended;
     // voice diagnostics

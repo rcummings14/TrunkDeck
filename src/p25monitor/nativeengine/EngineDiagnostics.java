@@ -19,7 +19,8 @@ final class EngineDiagnostics {
         String alias = c.alias().isEmpty() ? "" : "  " + c.alias();
         String proto = c.ev == null || c.ev.protocol == null ? "" : c.ev.protocol;
         boolean nxdn = proto.equals("NXDN"), dmr = proto.equals("DMR"), analog = proto.equals("Analog FM");
-        boolean p25 = !nxdn && !dmr && !analog;   // the frame, talkgroup-check and I/Q rows below are P25 only
+        boolean p25 = !nxdn && !dmr && !analog && !c.edacs;   // the frame, talkgroup-check and I/Q rows below are P25 only
+        boolean edacsAnalog = c.edacs && c.analogVoice;
         r.add(new String[]{"Talkgroup", (nxdn ? "NXDN " : dmr ? "DMR " : "") + (c.conventional ? "conventional " : "") + c.tg + alias + (c.priority < 100 ? "  (priority " + c.priority + ")" : "")});
         r.add(new String[]{"Status", status});
         String mode = analog || (c.type2 || c.edacs) && c.analogVoice ? "analog FM" : c.edacs ? "ProVoice" : nxdn ? "NXDN" : dmr ? (c.slot >= 0 ? "DMR timeslot " + (c.slot + 1) : "DMR")
@@ -27,8 +28,15 @@ final class EngineDiagnostics {
         r.add(new String[]{"Channel", mhz(c.freq) + " MHz  " + mode + (c.conventional ? "" : c.type2 ? String.format("  Type II ch %03X", c.channel) : c.edacs ? "  EDACS LCN " + c.channel : "  ch " + (c.channel >> 12) + "-" + (c.channel & 0xfff)) + (c.tuner != null ? "  on tuner T" + c.tuner.id : "")});
         if (vd != null) {
             r.add(new String[]{"Frequency offset", String.format(Locale.ROOT, "%+.0f Hz measured (filter correction %+.0f Hz, FLL %d / AFC %d steps)", vd.frequencyError(), vd.afcHz, vd.fllSteps, vd.afcSteps)});
+            if (c.edacs) {
+                double idle = e.calls.idleLevel(c.tuner, vd);
+                r.add(new String[]{"Signal", String.format(Locale.ROOT, "%s peak during the call, %.1f dB now (dB of the ADC full scale)%s",
+                        Double.isInfinite(vd.peakDb) ? "-" : String.format(Locale.ROOT, "%.1f dB", vd.peakDb), vd.power,
+                        Double.isNaN(idle) ? "" : String.format(Locale.ROOT, ", idle channels %.1f dB", idle))});
+            } else {
             r.add(new String[]{"Demodulator", vd.demodSummary() + (vd.demodSwitches > 0 ? "  (" + vd.demodSwitches + " switches)" : "")});
             r.add(new String[]{"Signal", String.format(Locale.ROOT, "%s while receiving, %.1f dB now (dB of the ADC full scale), %s", Double.isNaN(vd.syncPower) ? "-" : String.format(Locale.ROOT, "%.1f dB", vd.syncPower), vd.power, vd.locked(now) ? "frame sync OK" : "no frame sync")});
+            }
             if (vd.tdma()) {
                 var p = vd.p2;
                 r.add(new String[]{"TDMA frames", String.format(Locale.ROOT, "channel: %d fragments in sync (%d sync losses), ISCH %d ok / %d bad, %d MAC PDUs ok / %d bad; this slot: %d voice bursts (%d AMBE+2 frames), %d transmissions, %d end-of-transmission (MAC_END_PTT / idle)",
@@ -42,12 +50,13 @@ final class EngineDiagnostics {
             r.add(new String[]{"Frequency offset", String.format(Locale.ROOT, "max %.0f Hz during the call", c.maxAbsOffset)});
             r.add(new String[]{"Frames", p25 ? String.format(Locale.ROOT, "%d voice LDUs, %d transmissions", c.ldus, c.ptts) : c.ptts + " transmissions"});
         }
-        String codec = c.phase2 ? "AMBE+2" : "IMBE";
-        if (c.imbeFrames > 0) r.add(new String[]{codec + " error histogram", TunerAdvice.histSummary(c)});
+        String codec = c.phase2 ? "AMBE+2" : c.edacs ? "ProVoice" : "IMBE";
+        if (edacsAnalog) r.add(new String[]{"Analog audio", c.voiceFrames == 0 ? "none yet" : String.format(Locale.ROOT, "%.1f s", c.voiceMs / 1000.0)});
+        else if (c.imbeFrames > 0) r.add(new String[]{codec + " error histogram", TunerAdvice.histSummary(c)});
         if (c.imbeFrames >= 50 && c.imbeBad * 5 > c.imbeFrames)
             r.add(new String[]{"Recommendation", p25 ? "Voice is still damaged: tick Record voice-channel I/Q, let it save 2-3 calls, and send one or two of the .wav files (I/Q folder) together with this text."
                     : "Voice is still damaged: check the antenna, gain and signal level on this channel. (Record voice-channel I/Q works for P25 calls only.)"});
-        r.add(new String[]{codec + " voice frames", c.imbeFrames == 0 ? (c.imbe == null ? (c.phase2 ? "AMBE+2 codec not available (needs JMBE 2.x)" : "voice codec not installed") : c.encrypted ? "encrypted - not decoded" : "none yet")
+        if (!edacsAnalog) r.add(new String[]{codec + " voice frames", c.imbeFrames == 0 ? (c.imbe == null ? (c.phase2 ? "AMBE+2 codec not available (needs JMBE 2.x)" : "voice codec not installed") : c.encrypted ? "encrypted - not decoded" : "none yet")
                 : String.format(Locale.ROOT, "%d decoded, %.2f corrected bits/frame (clean speech 0-1), %.1f%% repeated, %.1f%% muted as noise", c.imbeFrames, (double) c.imbeErrSum / c.imbeFrames, 100.0 * c.imbeRepeat / c.imbeFrames, 100.0 * c.imbeBad / c.imbeFrames)});
         if (p25) r.add(new String[]{"Talkgroup check", c.lcMismatch == 0 ? (c.lastLcTg == -1 ? "not confirmed yet" : c.phase2 ? "OK (MAC PDUs of the slot match)" : "OK (link control matches)") : c.lcMismatch + (c.phase2 ? " MAC PDUs" : " voice frames") + " for other talkgroups rejected"});
         r.add(new String[]{"Audio", String.format(Locale.ROOT, "%d ms buffered (jitter buffer %d ms), %d underruns, %d frames dropped (session)", e.audio.queuedMs(), e.audio.prebufferMs, e.audio.underruns, e.audio.droppedFrames)});
@@ -86,7 +95,8 @@ final class EngineDiagnostics {
         for (ActiveCall c : cs) if (!c.ended && c.eligible) r.add(new String[]{"Call TG " + c.tg, callLine(c, now)});
         r.add(new String[]{"Concurrent calls", e.calls.decoding() + " decoding now, peak " + e.peakConcurrent + " (limit " + e.calls.maxCalls() + "), " + e.follows + " calls decoded this session (" + e.phase2Calls + " Phase 2 slots)"});
         long tot = e.missed.values().stream().mapToLong(Long::longValue).sum();
-        r.add(new String[]{"Missed calls", tot == 0 ? "none" : tot + " (" + e.missed.entrySet().stream().map(x -> x.getValue() + " " + x.getKey()).reduce((a, b) -> a + ", " + b).orElse("") + ")" + (e.missedRecent.isEmpty() ? "" : "  | last: " + e.missedRecent.peekLast())});
+        r.add(new String[]{"Missed calls", (tot == 0 ? "none" : tot + " (" + e.missed.entrySet().stream().map(x -> x.getValue() + " " + x.getKey()).reduce((a, b) -> a + ", " + b).orElse("") + ")" + (e.missedRecent.isEmpty() ? "" : "  | last: " + e.missedRecent.peekLast()))
+                + (e.emptyGrants == 0 ? "" : "  | " + e.emptyGrants + " EDACS grants with nothing transmitted (not counted)")});
         List<String> outside = new ArrayList<>();
         for (var x : new TreeMap<>(e.usage).entrySet()) if (e.calls.covering(x.getKey()) == null) outside.add(mhz(x.getKey()));
         if (!outside.isEmpty()) r.add(new String[]{"Voice channels outside all windows now", String.join(", ", outside) + " MHz"});

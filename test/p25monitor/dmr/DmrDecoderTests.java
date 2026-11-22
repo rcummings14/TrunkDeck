@@ -25,6 +25,8 @@ public final class DmrDecoderTests {
         repeater("RRC shaped, carrier +400 Hz", true, 400, 0);
         repeater("RRC shaped, noise", true, 0, 0.10);
         repeater("RRC shaped, heavy noise (about 5 dB SNR)", true, 150, 0.40);
+        radioSide("radio side (MS sync, no carrier between bursts)", 0.10);
+        radioSide("radio side, heavy noise", 0.35);
         colourCodeFilter();
         grantTier3();
         ambe();
@@ -145,6 +147,69 @@ public final class DmrDecoderTests {
         check(name + ": both calls ended", rec.ends >= 2);
         check(name + ": talker alias assembled once", rec.alias == 1 && "1234:TESTALIAS".equals(rec.aliasText));
         check(name + ": synchronised", rx.synced() || rec.frames[1] > 0);
+    }
+
+    /**
+     * A handheld's own transmission (simplex or a repeater input): MS syncs, no CACH, one 30 ms burst every 60 ms and no
+     * carrier in between (only noise). The old decoder needed a special fix for this; the decoder must lock on it.
+     */
+    static void radioSide(String name, double noise) {
+        System.out.println("stream: " + name);
+        int sf = 9, tg = DmrSignal.TG1, src = DmrSignal.SRC1;
+        List<boolean[]> bursts = new ArrayList<>();
+        boolean[] lc = DmrSignal.lc72(0, tg, src);
+        boolean[] hdr = DmrBurst.build(DmrSync.Kind.MS_DATA, DmrSignal.CC, DmrBurst.VOICE_LC, DmrBurst.linkControl(0, 0, tg, src, false));
+        bursts.add(hdr); bursts.add(hdr); bursts.add(hdr);
+        boolean[][] frag = DmrEmbedded.fragments(lc);
+        int[] lcss = {DmrEmbedded.LCSS_FIRST, DmrEmbedded.LCSS_CONT, DmrEmbedded.LCSS_CONT, DmrEmbedded.LCSS_LAST};
+        byte[] f = DmrAmbe.SILENCE;
+        for (int s = 0; s < sf; s++) {
+            bursts.add(DmrVoice.burst(f, f, f, true, DmrSync.Kind.MS_VOICE, 0, null));
+            for (int k = 0; k < 4; k++) bursts.add(DmrVoice.burst(f, f, f, false, DmrSync.Kind.NONE, DmrEmbedded.emb(DmrSignal.CC, 0, lcss[k]), frag[k]));
+            bursts.add(DmrVoice.burst(f, f, f, false, DmrSync.Kind.NONE, DmrEmbedded.emb(DmrSignal.CC, 0, 0), null));
+        }
+        boolean[] term = DmrBurst.build(DmrSync.Kind.MS_DATA, DmrSignal.CC, DmrBurst.TERMINATOR, DmrBurst.terminator(0, 0, tg, src, false));
+        bursts.add(term); bursts.add(term);
+        // 60 ms per burst at 4800 symbols/s = 288 symbols: 132 of burst, 156 of no carrier
+        int gap = 288 * DmrSignal.SPS - 132 * DmrSignal.SPS;
+        Random r = new Random(17);
+        List<float[]> partsI = new ArrayList<>(), partsQ = new ArrayList<>();
+        partsI.add(noiseOnly(r, 20000, noise)); partsQ.add(noiseOnly(r, 20000, noise));
+        for (boolean[] b : bursts) {
+            float[][] iq = modulate(DmrSignal.dibitsOf(b), true, 120, noise);
+            partsI.add(iq[0]); partsQ.add(iq[1]);
+            partsI.add(noiseOnly(r, gap, noise)); partsQ.add(noiseOnly(r, gap, noise));
+        }
+        partsI.add(noiseOnly(r, 20000, noise)); partsQ.add(noiseOnly(r, 20000, noise));
+        float[][] all = {concat(partsI), concat(partsQ)};
+        DmrSignal.Rec rec = new DmrSignal.Rec();
+        DmrDecoder rx = new DmrDecoder(1L, DmrSignal.CC, 0, null, 0, null, rec, 48000);
+        feed(rx, all);
+        int want = sf * 6 * 3, got = rec.frames[0] + rec.frames[1] + rec.frames[2];
+        int maxSlot = Math.max(rec.frames[0], Math.max(rec.frames[1], rec.frames[2]));
+        System.out.println("       frames " + got + "/" + want + " (slots " + Arrays.toString(rec.frames) + "), bad " + rec.badFrames + ", ends " + rec.ends);
+        System.out.println("       " + rx.status());
+        check(name + ": voice decoded (" + got + " of " + want + ")", got >= want * 0.85);
+        check(name + ": one talker stays on one slot", maxSlot == got);
+        check(name + ": no bad frames handed on", rec.badFrames == 0);
+        check(name + ": call ended", rec.ends >= 1);
+    }
+
+    /** {@code n} samples of receiver noise with no carrier. */
+    static float[] noiseOnly(Random r, int n, double noise) {
+        float[] v = new float[n];
+        double sd = Math.max(noise, 0.05);
+        for (int k = 0; k < n; k++) v[k] = (float) (r.nextGaussian() * sd);
+        return v;
+    }
+
+    static float[] concat(List<float[]> parts) {
+        int n = 0;
+        for (float[] p : parts) n += p.length;
+        float[] out = new float[n];
+        int at = 0;
+        for (float[] p : parts) { System.arraycopy(p, 0, out, at, p.length); at += p.length; }
+        return out;
     }
 
     /** A decoder set to another colour code hears nothing. */

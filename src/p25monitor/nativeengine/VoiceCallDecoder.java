@@ -649,6 +649,7 @@ final class VoiceCallDecoder {
         c.lastVoice = now; c.lastSeen = Math.max(c.lastSeen, now);
         c.voiceFrames++; c.ldus++;
         c.voiceMs += frames.length * 20L;
+        if (c.emergencyPending && !c.emergency) e.calls.confirmEmergency(c);
         if (c.encrypted || c.imbe == null) return;
         playFrames(c, frames);
     }
@@ -675,6 +676,7 @@ final class VoiceCallDecoder {
         c.lastVoice = now; c.lastSeen = Math.max(c.lastSeen, now);
         c.voiceFrames++; c.imbeFrames++;
         c.voiceMs += pcm.length / 8;   // 8 kHz audio
+        if (c.emergencyPending && !c.emergency) e.calls.confirmEmergency(c);
         if (c.encrypted) return;
         emit(c, pcm, pcm.length, new int[]{c.tg, c.lastLcTg, 0, 0});
     }

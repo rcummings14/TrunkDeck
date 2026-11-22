@@ -124,12 +124,30 @@ final class CallManager {
         return null;
     }
 
+    static String eventName(ActiveCall c) {
+        return (c.phase2 ? "Phase 2 " : "") + (c.emergency ? "Emergency " : "") + (c.encrypted ? "Encrypted " : "") + (c.unitToUnit ? "Unit To Unit Call" : c.patch ? "Patch Group Call" : "Group Call");
+    }
+
+    /**
+     * EDACS: shows a call whose grant carried the emergency flag as an emergency. Called only on its first decoded voice:
+     * a call that is not followed (not in the list, muted, no tuner) is never shown red from the grant alone. Some sites
+     * send emergency-flagged grants from a console ID to many talkgroups at once with nothing transmitted; the flag is
+     * still written to the message log with the grant.
+     */
+    void confirmEmergency(ActiveCall c) {
+        synchronized (e) {
+            if (!c.emergencyPending || c.emergency || c.ended) return;
+            c.emergency = true;
+            if (c.ev != null) { c.ev.event = eventName(c); e.listener.callUpdated(c.ev); }
+        }
+    }
+
     void newCall(ActiveCall c) {
         String why = skipReason(c);
         CallEvent ev = new CallEvent();
         ev.timestamp = e.ts.format(new Date(c.start));
         ev.protocol = c.type2 ? (c.analogVoice ? "Motorola Type II (analog)" : "Motorola Type II (P25)") : c.edacs ? (c.analogVoice ? "EDACS (analog)" : "EDACS ProVoice") : "APCO-25";
-        ev.event = (c.phase2 ? "Phase 2 " : "") + (c.emergency ? "Emergency " : "") + (c.encrypted ? "Encrypted " : "") + (c.unitToUnit ? "Unit To Unit Call" : c.patch ? "Patch Group Call" : "Group Call");
+        ev.event = eventName(c);
         ev.from = c.src > 0 ? String.valueOf(c.src) : "";
         ev.to = String.valueOf(c.tg);
         ev.talkgroup = c.unitToUnit ? -1 : c.tg;
@@ -244,6 +262,7 @@ final class CallManager {
             long now = System.currentTimeMillis();
             e.callMap.values().remove(c);
             e.recentlyEnded.put(c.key(), now);
+            if (c.edacs) e.recentlyEndedChannel.put(c.key(), c.channel);
             long end = Math.max(c.lastSeen, c.lastVoice);
             c.ev.durationMs = Math.max(Math.max(0, Math.min(now, end) - c.start), c.voiceMs);   // voiceMs, not frames x 180 ms: analog/DMR/NXDN frames are shorter
             if (c.levelN == 0 && c.voiceFrames > 0) e.diag.sampleLevel(c);   // a call shorter than one sample
@@ -252,12 +271,19 @@ final class CallManager {
             boolean stopping = why.equals("engine stopped");
             if (v != null) {
                 if (c.tuner != null && c.tuner != e.ccTuner && c.voiceFrames > 3) e.voice.learnPpm(c.tuner, v);
-                if (c.imbeFrames > 0)
+                if (c.imbeFrames > 0 && c.edacs)
+                    e.log(String.format(Locale.ROOT, "TG %d call (T%d %s): %s, level %s, offset %+.0f Hz",
+                            c.tg, c.tuner == null ? 0 : c.tuner.id, NativeEngine.mhz(c.freq),
+                            c.analogVoice ? String.format(Locale.ROOT, "%.1f s of analog audio", c.voiceMs / 1000.0)
+                                    : String.format(Locale.ROOT, "%d ProVoice frames, %.2f corrected bits/frame, %.0f%% muted", c.imbeFrames, (double) c.imbeErrSum / c.imbeFrames, 100.0 * c.imbeBad / c.imbeFrames),
+                            Double.isNaN(v.signalDb) ? "-" : String.format(Locale.ROOT, "%.1f dB", v.peakDb), v.frequencyError()));
+                else if (c.imbeFrames > 0)
                     e.log(String.format(Locale.ROOT, "TG %d call (T%d %s%s): %d voice frames, %.2f corrected bits/frame, %.0f%% muted, %.0f%% repeated; %s; level %s; offset %+.0f Hz; %s; %s errors %s",
                             c.tg, c.tuner == null ? 0 : c.tuner.id, NativeEngine.mhz(c.freq), c.phase2 ? " slot " + (c.slot + 1) : "", c.imbeFrames, (double) c.imbeErrSum / c.imbeFrames, 100.0 * c.imbeBad / c.imbeFrames, 100.0 * c.imbeRepeat / c.imbeFrames,
                             v.demodSummary(), Double.isNaN(v.syncPower) ? "-" : String.format(Locale.ROOT, "%.1f dB", v.syncPower), v.frequencyError(), TunerAdvice.streamSummary(v), c.phase2 ? "AMBE+2" : "IMBE", TunerAdvice.histSummary(c)));
                 if (ChannelDecoder.TRACE) e.log("TG " + c.tg + " trace: " + v.traceText());
-                if (c.voiceFrames == 0 && !c.encrypted && !c.conventional && !stopping) {
+                if (c.voiceFrames == 0 && c.edacs && !stopping) edacsNoVoice(c, v, now);
+                else if (c.voiceFrames == 0 && !c.encrypted && !c.conventional && !stopping) {
                     boolean sync = v.syncs() > c.syncBase;
                     String ph = c.phase2 ? "PHASE 2" : "PHASE 1";
                     c.ev.details = (sync ? ph + " SYNC BUT NO VOICE FRAMES ON " : "NO " + ph + " SIGNAL ON ") + NativeEngine.mhz(c.freq) + (sync || c.tuner == null ? "" : " - CHECK PPM/GAIN OF T" + c.tuner.id);
@@ -285,6 +311,46 @@ final class CallManager {
             e.listener.callUpdated(c.ev);
             if (e.running && !stopping) serviceWaiting(now);
         }
+    }
+
+    /** Carrier margin over the idle channels' level: below it, nothing was transmitted on the voice channel. */
+    static final double CARRIER_DB = 6;
+
+    /**
+     * An EDACS call with no voice. If its channel never rose above the level of the idle channels on the same tuner,
+     * nothing was transmitted (a grant without a carrier, or the site repeating a grant after the call): logged, not
+     * counted as a missed call. With a signal but no voice it is a missed call (offset, gain).
+     */
+    void edacsNoVoice(ActiveCall c, ChannelDecoder v, long now) {
+        double floor = idleLevel(c.tuner, v);
+        boolean carrier = Double.isNaN(floor) || v.peakDb > floor + CARRIER_DB;
+        String f = NativeEngine.mhz(c.freq);
+        if (!carrier) {
+            e.emptyGrants++;
+            c.ev.details = "NOTHING TRANSMITTED ON " + f + (c.leftover ? " (REPEAT OF THE CALL THAT JUST ENDED)" : "");
+            e.log(String.format(Locale.ROOT, "TG %d: nothing transmitted on %s (%s; level %.1f dB, idle channels %.1f dB)", c.tg, f,
+                    c.leftover ? "repeat of the call that just ended" : "grant without a carrier", v.peakDb, floor));
+            return;
+        }
+        String mode = c.analogVoice ? "ANALOG AUDIO" : "PROVOICE VOICE";
+        c.ev.details = "SIGNAL BUT NO " + mode + " ON " + f + (c.tuner == null ? "" : " - CHECK PPM/GAIN OF T" + c.tuner.id);
+        e.undecodable.put(c.key(), now);
+        countMissed(c.analogVoice ? "no EDACS analog audio" : "no EDACS ProVoice decoded", c);
+        e.log(String.format(Locale.ROOT, "TG %d: %s (offset %+.0f Hz, level %.1f dB%s)", c.tg, c.ev.details.toLowerCase(Locale.ROOT), v.frequencyError(), v.peakDb,
+                Double.isNaN(floor) ? "" : String.format(Locale.ROOT, ", idle channels %.1f dB", floor)));
+    }
+
+    /** Lowest level of the other channel decoders on the tuner (idle channels: the noise level), NaN if none. */
+    double idleLevel(Tuner t, ChannelDecoder self) {
+        if (t == null) return Double.NaN;
+        double low = Double.NaN;
+        java.util.List<ChannelDecoder> ds = new ArrayList<>(t.decoders);
+        if (t == e.ccTuner) ds.addAll(e.ccDecoders);
+        for (ChannelDecoder d : ds) {
+            if (d == self || Double.isNaN(d.signalDb) || d.samples < 48_000L) continue;
+            if (Double.isNaN(low) || d.signalDb < low) low = d.signalDb;
+        }
+        return low;
     }
 
     void countMissed(String reason, ActiveCall c) {
@@ -332,6 +398,7 @@ final class CallManager {
             }
             serviceWaiting(now);
             e.recentlyEnded.values().removeIf(t -> now - t > 10000);
+            e.recentlyEndedChannel.keySet().retainAll(e.recentlyEnded.keySet());
             if (now - e.usageDecayAt > 60_000) {   // usage half-life about 10 minutes
                 e.usageDecayAt = now;
                 e.usage.replaceAll((f, w) -> w * 0.933);
