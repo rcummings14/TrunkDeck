@@ -68,7 +68,7 @@ final class DmrSignal {
         return l;
     }
 
-    static final class Rec implements DmrDecoder.Listener {
+    static class Rec implements DmrDecoder.Listener {
         final int[] frames = new int[3];
         final int[] groupSlotTg = new int[3];
         int wrongSlot, ends, alias, badFrames, units;

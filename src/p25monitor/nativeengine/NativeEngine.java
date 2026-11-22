@@ -187,6 +187,11 @@ public final class NativeEngine {
     volatile boolean lsmPreferred;
     volatile String ccDemodLogged = "";
     volatile long retunes, follows, phase2Calls;
+    /** DMR Capacity Plus rest channel / XPT free repeater, and when it was last named. */
+    volatile long dmrRestHz, dmrRestAt;
+    /** DMR repeaters an XPT channel grant says carry a call now: frequency -> until (ms). */
+    final Map<Long, Long> dmrWanted = new ConcurrentHashMap<>();
+    private volatile String lastXptCall = ""; private volatile long lastXptCallAt;
     /** EDACS grants followed to a channel that never carried a signal (not counted as missed calls). */
     volatile long emptyGrants;
     final java.util.concurrent.atomic.AtomicBoolean ambeMissingLogged = new java.util.concurrent.atomic.AtomicBoolean();
@@ -258,7 +263,7 @@ public final class NativeEngine {
     public synchronized void start(RadioSystem s, Mode m) throws Exception {
         starts++;
         if (running) stop(true);   // a restart: streams stay connected (1.4.4)
-        undecodable.clear(); tdma.clear(); ambeMissingLogged.set(false); voiceOnCcLogged.clear(); retunes = 0; follows = 0; phase2Calls = 0; emptyGrants = 0; recentlyEndedChannel.clear(); lastDiag = null; iqRecorded = 0;
+        undecodable.clear(); tdma.clear(); ambeMissingLogged.set(false); voiceOnCcLogged.clear(); retunes = 0; follows = 0; phase2Calls = 0; emptyGrants = 0; recentlyEndedChannel.clear(); dmrRestHz = 0; dmrRestAt = 0; dmrWanted.clear(); lastDiag = null; iqRecorded = 0;
         lsmPreferred = "lsm".equalsIgnoreCase(s.nativeModulation); ccDemodLogged = "";
         usage.clear(); missed.clear(); missedRecent.clear(); peakConcurrent = 0; tuners.clear(); huntCount = 0; fixedWideCenter = 0; widePlanned = false;
         conventional = s.fixedChannels(); parkedDecoders.clear(); scanTuner = null; scanGroups = List.of(); scanIndex = 0; lastScanAt = 0;
@@ -834,7 +839,24 @@ public final class NativeEngine {
             public void encrypted(long hz, int sl, int color) { voice.onDmrEncrypted(hz, sl, color); }
             public void end(long hz, int sl) { voice.onDmrEnd(hz, sl); }
             public void grant(p25monitor.dmr.DmrTrunk.Grant g) { voice.onDmrGrant(g); d.lastFrameAt = System.currentTimeMillis(); }
-            public void rest(int repeater, int sl, long hz, boolean moved) { if (moved) log("DMR rest channel (untested) -> repeater " + repeater + " slot " + sl + (hz > 0 ? " " + mhz(hz) + " MHz" : "")); d.lastFrameAt = System.currentTimeMillis(); }
+            public void rest(int repeater, int sl, long hz, boolean moved) {
+                long now = System.currentTimeMillis();
+                if (moved) log("DMR " + (sl == 0 ? "free repeater (XPT)" : "rest channel") + " (untested) -> repeater " + repeater + (sl == 0 ? "" : " slot " + sl)
+                        + (hz > 0 ? " " + mhz(hz) + " MHz" : " (not in the frequency list: list every repeater, repeater 1 first)"));
+                if (hz > 0) { dmrRestHz = hz; dmrRestAt = now; }
+                d.lastFrameAt = now;
+            }
+            public void xptCall(int repeater, long hz, int tg, int src) {
+                long now = System.currentTimeMillis();
+                if (hz > 0) dmrWanted.put(hz, now + 3000);
+                String sig = tg + "/" + repeater;
+                if (!sig.equals(lastXptCall) || now - lastXptCallAt > 10_000) {
+                    lastXptCall = sig; lastXptCallAt = now;
+                    log("DMR XPT call TG " + tg + (src > 0 ? " from " + src : "") + " on repeater " + repeater
+                            + (hz > 0 ? " " + mhz(hz) + " MHz" : " (not in the frequency list: list every repeater, repeater 1 first)"));
+                }
+                d.lastFrameAt = now;
+            }
             public void alias(int src, String text) { log("DMR talker alias " + src + " " + text); }
             public void unitAudio(long hz, int sl, int color, int target, int src, byte[][] ambe) { voice.onDmr(hz, sl, color, target, src, false, ambe); d.lastFrameAt = System.currentTimeMillis(); }
             public void control(String text) { onDmrControl(freq, d, text); }
@@ -1228,6 +1250,52 @@ public final class NativeEngine {
     }
 
     /** Frequency offset of tuner t at f: from a locked decoder on it, else what earlier calls measured (NaN if unknown). */
+    /**
+     * DMR trunking (untested on air): a DMR call is heard only where a decoder listens, and the control tuner decodes
+     * the listed repeaters inside its window. When a repeater outside it is wanted - one an XPT channel grant or a call
+     * names, else the XPT free repeater / Capacity Plus rest channel, where the next call starts - a roaming tuner with
+     * no call on it moves over it and decodes every listed repeater in its window.
+     */
+    void dmrWatch(long now) {
+        if (sys == null || !sys.dmrTrunk()) return;
+        dmrWanted.entrySet().removeIf(en -> en.getValue() <= now);
+        List<Long> want = new ArrayList<>(dmrWanted.keySet());
+        synchronized (this) {
+            for (var en : callMap.entrySet()) {
+                ActiveCall c = en.getValue();
+                if (en.getKey().startsWith("D") && !c.ended && c.freq > 0 && now - c.lastSeen < 3000 && !want.contains(c.freq)) want.add(c.freq);
+            }
+        }
+        long rest = dmrRestHz;
+        if (rest > 0 && now - dmrRestAt < 15_000 && !want.contains(rest)) want.add(rest);
+        long target = 0;
+        for (long f : want) if (!dmrDecoded(f)) { target = f; break; }
+        if (target == 0) return;
+        Tuner r = null;
+        for (Tuner t : tuners) if (t.role == Tuner.Role.ROAMING && calls.callsOn(t) == 0 && now - t.lastRetuneAt > 1000 && (r == null || t.lastRetuneAt < r.lastRetuneAt)) r = t;
+        if (r == null) return;
+        final Tuner roamer = r;
+        List<Long> listed = new ArrayList<>();
+        for (double mhz : sys.frequencies()) listed.add(Math.round(mhz * 1e6));
+        Map<Long, Double> weight = new HashMap<>();
+        for (long f : listed) weight.put(f, 1.0);
+        long centre = TunerPlanner.plan(List.of(target), weight, f -> calls.coveredElsewhere(roamer, f), r.halfSpan(), r.dcGuard, r.center);
+        if (centre <= 0 || !calls.retuneRoamer(r, centre, "DMR repeater " + mhz(target) + " MHz")) return;
+        List<Long> park = new ArrayList<>();
+        for (long f : listed) if (r.covers(f) && !dmrDecodedElsewhere(r, f)) park.add(f);
+        if (!park.contains(target) && r.covers(target)) park.add(target);
+        installParked(r, park);
+    }
+
+    /** A decoder on any tuner listens to {@code f}. */
+    boolean dmrDecoded(long f) { return dmrDecodedElsewhere(null, f); }
+
+    boolean dmrDecodedElsewhere(Tuner self, long f) {
+        for (ChannelDecoder d : ccDecoders) if (d.freqHz == f && d.dmr != null && self != ccTuner) return true;
+        for (Tuner t : tuners) if (t != self) for (ChannelDecoder d : t.decoders) if (d.freqHz == f && d.dmr != null) return true;
+        return false;
+    }
+
     double tunerAnchor(Tuner t, ChannelDecoder self, long f) {
         long now = System.currentTimeMillis();
         if (t == ccTuner) for (ChannelDecoder o : ccDecoders) if (o.locked(now) && o.freqHz > 0) return o.frequencyError() * f / o.freqHz;
@@ -1251,6 +1319,7 @@ public final class NativeEngine {
             watchSync(now);
             noteTunerProblems();
             if (conventional) { conventionalHousekeeping(now); return; }
+            try { dmrWatch(now); } catch (Throwable t) { log("DMR repeater watch: " + t); }
             synchronized (this) { cc.plan(now); }
             boolean anyLock = false;
             for (ChannelDecoder d : ccDecoders) if (d.locked(now)) anyLock = true;

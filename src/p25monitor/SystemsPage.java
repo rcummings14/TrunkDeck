@@ -399,7 +399,7 @@ public class SystemsPage extends JPanel {
                 ? "1 opens on the weakest signals, 10 needs a strong, clean signal. Raise it if static opens the squelch; lower it if weak transmissions are missed. 5 is the default."
                 : kind == 2
                 ? "Listen to timeslot 1, timeslot 2, or both. (untested)"
-                : "Tier III follows a control-channel grant. Capacity Plus and XPT follow the rest channel. Connect Plus follows a voice grant. (untested)"));
+                : "Tier III follows a control-channel grant. Capacity Plus follows the rest channel; XPT follows the free repeater (list every repeater, repeater 1 first: repeater N is the Nth frequency). Connect Plus follows a voice grant. (untested)"));
         String note = kind == 1 ? "P25 conventional has not been tested on a real radio system yet."
                 : kind == 2 ? "DMR conventional has not been tested on a real radio system yet."
                 : kind == 3 ? "DMR trunking (Tier III, Capacity Plus, Connect Plus and XPT) has not been tested on a real radio system yet."

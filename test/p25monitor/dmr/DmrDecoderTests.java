@@ -27,6 +27,7 @@ public final class DmrDecoderTests {
         repeater("RRC shaped, heavy noise (about 5 dB SNR)", true, 150, 0.40);
         radioSide("radio side (MS sync, no carrier between bursts)", 0.10);
         radioSide("radio side, heavy noise", 0.35);
+        xptFreeRepeater();
         colourCodeFilter();
         grantTier3();
         ambe();
@@ -210,6 +211,39 @@ public final class DmrDecoderTests {
         int at = 0;
         for (float[] p : parts) { System.arraycopy(p, 0, out, at, p.length); at += p.length; }
         return out;
+    }
+
+    /** Hytera XPT: the CACH short LC names the free repeater; repeater N is the Nth listed frequency. */
+    static void xptFreeRepeater() {
+        System.out.println("stream: XPT free repeater");
+        boolean[] tx = XptSignal.bptc68(XptSignal.shortLc(2));
+        io.github.dsheirer.module.decode.dmr.message.data.lc.shorty.SLCAssembler asm = new io.github.dsheirer.module.decode.dmr.message.data.lc.shorty.SLCAssembler();
+        io.github.dsheirer.module.decode.dmr.message.type.LCSS[] order = {io.github.dsheirer.module.decode.dmr.message.type.LCSS.FIRST_FRAGMENT,
+                io.github.dsheirer.module.decode.dmr.message.type.LCSS.CONTINUATION_FRAGMENT, io.github.dsheirer.module.decode.dmr.message.type.LCSS.CONTINUATION_FRAGMENT,
+                io.github.dsheirer.module.decode.dmr.message.type.LCSS.LAST_FRAGMENT};
+        Object slc = null;
+        for (int k = 0; k < 4; k++) {
+            io.github.dsheirer.bits.BinaryMessage frag = new io.github.dsheirer.bits.BinaryMessage(17);
+            for (int j = 0; j < 17; j++) if (tx[17 * k + j]) frag.set(j);
+            Object got = asm.process(order[k], frag, 0L);
+            if (got != null) slc = got;
+        }
+        check("the test XPT short LC decodes as the free repeater (" + slc + ")",
+                slc instanceof io.github.dsheirer.module.decode.dmr.message.data.lc.shorty.HyteraXPTChannel x && x.isValid() && x.getFreeRepeater() == 2);
+
+        long f1 = 451_700_000L, f2 = 452_700_000L;
+        List<String> rests = new ArrayList<>();
+        DmrSignal.Rec rec = new DmrSignal.Rec() {
+            @Override public void rest(int r, int s, long h, boolean m) { rests.add(r + "/" + s + "/" + h + "/" + m); }
+        };
+        DmrDecoder rx = new DmrDecoder(f1, DmrSignal.CC, 0, new DmrTrunk(DmrTrunk.Flavor.XPT), f1, List.of(f1, f2), rec, 48000);
+        feed(rx, modulate(XptSignal.idleDibits(2, 80), true, 0, 0.1));
+        check("XPT decoder reports repeater 2 (452.7 MHz) as free: " + (rests.isEmpty() ? "nothing" : rests.get(0) + " x" + rests.size()),
+                !rests.isEmpty() && rests.get(0).equals("2/0/" + f2 + "/true"));
+        rests.clear();
+        DmrDecoder cap = new DmrDecoder(f1, DmrSignal.CC, 0, new DmrTrunk(DmrTrunk.Flavor.CAPACITY_PLUS), f1, List.of(f1, f2), rec, 48000);
+        feed(cap, modulate(XptSignal.idleDibits(2, 80), true, 0, 0.1));
+        check("a Capacity Plus decoder ignores XPT free repeater messages", rests.isEmpty());
     }
 
     /** A decoder set to another colour code hears nothing. */

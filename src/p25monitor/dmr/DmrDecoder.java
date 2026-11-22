@@ -27,6 +27,7 @@ import io.github.dsheirer.module.decode.dmr.message.data.csbk.Opcode;
 import io.github.dsheirer.module.decode.dmr.message.data.csbk.motorola.CapacityPlusNeighbors;
 import io.github.dsheirer.module.decode.dmr.message.data.csbk.motorola.CapacityPlusSiteStatus;
 import io.github.dsheirer.module.decode.dmr.message.data.csbk.motorola.ConnectPlusVoiceChannelUser;
+import io.github.dsheirer.module.decode.dmr.message.data.csbk.hytera.HyteraXPTSiteState;
 import io.github.dsheirer.module.decode.dmr.message.data.csbk.standard.grant.BroadcastTalkgroupVoiceChannelGrant;
 import io.github.dsheirer.module.decode.dmr.message.data.csbk.standard.grant.ChannelGrant;
 import io.github.dsheirer.module.decode.dmr.message.data.csbk.standard.grant.DuplexPrivateVoiceChannelGrant;
@@ -37,7 +38,9 @@ import io.github.dsheirer.module.decode.dmr.message.data.header.VoiceHeader;
 import io.github.dsheirer.module.decode.dmr.message.data.lc.LCMessage;
 import io.github.dsheirer.module.decode.dmr.message.data.lc.full.TalkerAliasComplete;
 import io.github.dsheirer.module.decode.dmr.message.data.lc.full.motorola.CapacityPlusWideAreaVoiceChannelUser;
+import io.github.dsheirer.module.decode.dmr.message.data.lc.full.hytera.HyteraXptChannelGrant;
 import io.github.dsheirer.module.decode.dmr.message.data.lc.shorty.CapacityPlusRestChannel;
+import io.github.dsheirer.module.decode.dmr.message.data.lc.shorty.HyteraXPTChannel;
 import io.github.dsheirer.module.decode.dmr.message.data.terminator.Terminator;
 import io.github.dsheirer.module.decode.dmr.message.type.ServiceOptions;
 import io.github.dsheirer.module.decode.dmr.message.voice.VoiceEMBMessage;
@@ -47,13 +50,14 @@ import java.util.List;
 /**
  * DMR channel decoder: half-band decimation to 24 kHz, baseband low-pass filter, FM discriminator, root raised cosine
  * matched filter, 4FSK symbol processor (sync detection, timing and equalizer), burst framer and message processor
- * (BPTC, embedded LC, CSBK, multi-block control, CRC masks). The decoding chain is the (Dennis Sheirer,
- * GPL-3.0-or-later), included as source in io.github.dsheirer - see README-TRUNKDECK.txt there. This class turns its
+ * (BPTC, embedded LC, CSBK, multi-block control, CRC masks). The decoding chain is Dennis Sheirer's
+ * (GPL-3.0-or-later), included as source in io.github.dsheirer - see README-TRUNKDECK.txt there. This class turns its
  * messages into {@link Listener} events, so calls, grants and audio take TrunkDeck's usual paths.
  *
  * <p>Voice frames are the raw 72-bit AMBE+2 words, corrected and concealed by {@link DmrAmbe.Concealer}.
  * Trunking follows the system's flavour ({@link DmrTrunk}): Tier III and Connect Plus grants are reported,
- * Capacity Plus / XPT rest channel changes are reported. Untested on air.
+ * Capacity Plus rest channel and Hytera XPT free repeater changes are reported, and an XPT channel grant names the
+ * repeater a call has gone to. Untested on air.
  */
 public final class DmrDecoder {
     /** What the decoder reports. Calls are per timeslot (1 or 2). */
@@ -73,6 +77,11 @@ public final class DmrDecoder {
         default void controlError() {}
         /** The call on this slot has its emergency bit set (voice link control). */
         default void emergency(long hz, int slot) {}
+        /**
+         * Hytera XPT channel grant: a call for {@code talkgroup} is on repeater {@code repeater} ({@code hz}, 0 when that
+         * repeater is not listed). Its timeslot is not in the message; the call itself starts when that repeater is heard.
+         */
+        default void xptCall(int repeater, long hz, int talkgroup, int source) {}
     }
 
     private static final int SYMBOL_RATE = 4800;
@@ -266,6 +275,9 @@ public final class DmrDecoder {
     private void onLc(LCMessage lc, int slot, int cc, boolean header) {
         if (lc == null || !lc.isValid()) return;
         if (lc instanceof CapacityPlusRestChannel r) { rest(r.getRestChannel()); return; }
+        // Hytera XPT: the CACH short LC names the free repeater (where the next call starts); 0 = all busy
+        if (lc instanceof HyteraXPTChannel x) { xptFree(x.getFreeRepeater()); return; }
+        if (lc instanceof HyteraXptChannelGrant g) { xptGrant(g); return; }
         if (lc instanceof CapacityPlusWideAreaVoiceChannelUser w) rest(w.getRestChannel());
         if (slot != 1 && slot != 2) return;
         Slot s = slots[slot];
@@ -309,6 +321,7 @@ public final class DmrDecoder {
         }
         if (csbk instanceof CapacityPlusSiteStatus status) { rest(status.getRestChannel()); return; }
         if (csbk instanceof CapacityPlusNeighbors neighbors) { rest(neighbors.getRestChannel()); return; }
+        if (csbk instanceof HyteraXPTSiteState site) { xptFree(site.getFreeRepeater()); return; }
         if (trunk == null) return;
         if (csbk instanceof ConnectPlusVoiceChannelUser user && trunk.flavor == DmrTrunk.Flavor.CONNECT_PLUS) {
             DMRChannel ch = user.getChannel();
@@ -350,9 +363,28 @@ public final class DmrDecoder {
 
     /** Capacity Plus / XPT rest channel: repeater N (counting from 1) is the Nth listed frequency. */
     private void rest(DMRChannel rest) {
-        if (rest == null || trunk == null || out == null) return;
-        if (trunk.flavor != DmrTrunk.Flavor.CAPACITY_PLUS && trunk.flavor != DmrTrunk.Flavor.XPT) return;
-        int repeater = rest.getChannelNumber(), slot = rest.getTimeslot();
+        if (rest == null || trunk == null || trunk.flavor != DmrTrunk.Flavor.CAPACITY_PLUS) return;
+        rest(rest.getChannelNumber(), rest.getTimeslot());
+    }
+
+    /** Hytera XPT free repeater (counting from 1; 0 = every repeater busy). It names a repeater, not a timeslot. */
+    private void xptFree(int repeater) {
+        if (repeater <= 0 || trunk == null || trunk.flavor != DmrTrunk.Flavor.XPT) return;
+        rest(repeater, 0);
+    }
+
+    /** Hytera XPT channel grant (full LC): the call is on that repeater now. */
+    private void xptGrant(HyteraXptChannelGrant g) {
+        if (trunk == null || trunk.flavor != DmrTrunk.Flavor.XPT || out == null) return;
+        int repeater = g.getChannel();
+        if (repeater <= 0) return;
+        int tg = g.getTalkgroup() == null ? 0 : g.getTalkgroup().getValue();
+        int src = g.getSourceRadio() == null ? 0 : g.getSourceRadio().getValue();
+        out.xptCall(repeater, DmrTrunk.lcnFrequency(repeater, channels), tg, src);
+    }
+
+    private void rest(int repeater, int slot) {
+        if (out == null) return;
         boolean moved = repeater != trunk.restRepeater || slot != trunk.restSlot;
         trunk.restRepeater = repeater;
         trunk.restSlot = slot;
