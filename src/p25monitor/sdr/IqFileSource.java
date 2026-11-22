@@ -6,7 +6,7 @@ import java.nio.file.*;
 import java.nio.channels.SeekableByteChannel;
 
 /**
- * Reads I/Q recordings for testing: WAV (2-channel I/Q, 8/16/24/32-bit PCM or 32-bit float; e.g. baseband
+ * Reads I/Q recordings for testing: WAV or RF64 (2-channel I/Q, 8/16/24/32-bit PCM or 32-bit float; e.g. baseband
  * recordings, SDR#, sigidwiki IF samples) and raw files: .cu8/.bin (rtl_sdr output), .cs8, .cs16, .cf32/.raw.
  * Raw files need the sample rate (and optionally centre frequency) given by the caller or in the file name
  * (e.g. "..._2400000Hz_..." / "..._453537500Hz_..." / SDR# style "_453.537MHz_2400kHz_").
@@ -54,7 +54,10 @@ public final class IqFileSource implements IqSource {
         try (SeekableByteChannel ch = Files.newByteChannel(path)) {
             ByteBuffer h = ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN);
             ch.read(h); h.flip();
-            if (h.getInt() != 0x46464952) throw new IOException("Not a RIFF/WAV file");
+            int magic = h.getInt();
+            // RIFF, or RF64 / BW64 (EBU Tech 3306 / ITU-R BS.2088: what SDR#, SDR++ and SDRuno write for long recordings;
+            // the real sizes are in the ds64 chunk, and the data chunk's own size is 0xFFFFFFFF, read below as "to the end")
+            if (magic != 0x46464952 && magic != 0x34364652 && magic != 0x34365742) throw new IOException("Not a RIFF/WAV file");
             h.getInt();
             if (h.getInt() != 0x45564157) throw new IOException("Not a WAV file");
             long pos = 12;

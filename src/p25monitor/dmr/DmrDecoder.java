@@ -216,7 +216,9 @@ public final class DmrDecoder {
 
     private void onMessage(IMessage m) {
         messages++;
-        if (m == null) return;
+        // The framer reports "sync lost" about once a second while it finds no sync, and that message calls itself
+        // valid: counted as a frame, a channel with no DMR on it (and the colour code set to any) looked synced.
+        if (m == null || m instanceof io.github.dsheirer.message.SyncLossMessage) return;
         int slot = m.getTimeslot();
         int cc = colourCode(m, slot);
         if (wantColor >= 0 && cc >= 0 && cc != wantColor) { colourDrops++; return; }

@@ -28,6 +28,7 @@ public final class DmrDecoderTests {
         radioSide("radio side (MS sync, no carrier between bursts)", 0.10);
         radioSide("radio side, heavy noise", 0.35);
         xptFreeRepeater();
+        noiseNotSynced();
         colourCodeFilter();
         grantTier3();
         ambe();
@@ -211,6 +212,25 @@ public final class DmrDecoderTests {
         int at = 0;
         for (float[] p : parts) { System.arraycopy(p, 0, out, at, p.length); at += p.length; }
         return out;
+    }
+
+    /** No DMR on the channel: noise, then an analog FM carrier. With the colour code set to any, it must not look synced. */
+    static void noiseNotSynced() {
+        System.out.println("stream: no DMR (colour code any)");
+        Random r = new Random(11);
+        DmrDecoder rx = new DmrDecoder(0, -1, 0, null, 0, null, new DmrSignal.Rec(), 48000);
+        int n = 48000 * 10, synced = 0, blocks = 0;
+        float[] ni = noiseOnly(r, n, 0.05), nq = noiseOnly(r, n, 0.05);
+        float[] ci = new float[n], cq = new float[n];
+        double ph = 0;
+        for (int k = 0; k < n; k++) { ph += 2 * Math.PI * 2500 * Math.sin(2 * Math.PI * 1000 * k / 48000.0) / 48000; ci[k] = (float) (0.3 * Math.cos(ph)) + ni[k] * 0.1f; cq[k] = (float) (0.3 * Math.sin(ph)) + nq[k] * 0.1f; }
+        for (float[][] part : new float[][][]{{ni, nq}, {ci, cq}})
+            for (int s = 0; s < n; s += 4800) {
+                rx.baseband(java.util.Arrays.copyOfRange(part[0], s, s + 4800), java.util.Arrays.copyOfRange(part[1], s, s + 4800), 4800);
+                blocks++;
+                if (rx.synced()) synced++;
+            }
+        check("noise and an analog carrier never look like DMR (synced " + synced + " of " + blocks + " blocks)", synced == 0);
     }
 
     /** Hytera XPT: the CACH short LC names the free repeater; repeater N is the Nth listed frequency. */
