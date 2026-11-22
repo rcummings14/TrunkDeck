@@ -254,7 +254,7 @@ final class ChannelDecoder {
     /** DMR decoder on this same 48 kHz channel. Null on a P25 channel. */
     p25monitor.dmr.DmrDecoder dmr;
     /** NXDN demod (both rates) on this same 48 kHz channel. Null unless the system is NXDN. */
-    p25monitor.nxdn.NxdnDemod nxdn;
+    p25monitor.nxdn.NxdnDecoder nxdn;
     /** Analog FM receiver (squelch, CTCSS) on this same 48 kHz channel. Null unless the system is analog. */
     p25monitor.analog.FmReceiver analog;
     /** Motorola Type II control channel receiver on this same 48 kHz channel. Null unless this is a Type II control channel. */

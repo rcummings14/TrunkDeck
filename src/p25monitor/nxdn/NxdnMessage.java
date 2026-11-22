@@ -1,7 +1,5 @@
 package p25monitor.nxdn;
 
-import static p25monitor.nxdn.NxdnCoding.read;
-
 /**
  * A layer 3 message (NXDN TS 1-A). Octet 0 holds two flag bits and the 6-bit message type. Call control messages then
  * carry the CC option (octet 1, 0x80 = emergency), the call type (3 bits) and call option (5 bits) in octet 2, the
@@ -91,11 +89,21 @@ public final class NxdnMessage {
     /** Builds a call-control message (test signals): type, CC option, call type, source, destination. */
     public static boolean[] call(int bits, int type, int ccOption, int callType, int src, int dst) {
         boolean[] m = new boolean[bits];
-        NxdnCoding.write(m, 2, type, 6);
-        NxdnCoding.write(m, 8, ccOption, 8);
-        NxdnCoding.write(m, 16, callType, 3);
-        NxdnCoding.write(m, 24, src, 16);
-        NxdnCoding.write(m, 40, dst, 16);
+        write(m, 2, type, 6);
+        write(m, 8, ccOption, 8);
+        write(m, 16, callType, 3);
+        write(m, 24, src, 16);
+        write(m, 40, dst, 16);
         return m;
+    }
+
+    static int read(boolean[] b, int at, int len) {
+        int v = 0;
+        for (int i = 0; i < len; i++) v = (v << 1) | (at + i < b.length && b[at + i] ? 1 : 0);
+        return v;
+    }
+
+    static void write(boolean[] b, int at, int v, int len) {
+        for (int i = 0; i < len; i++) b[at + i] = ((v >>> (len - 1 - i)) & 1) != 0;
     }
 }

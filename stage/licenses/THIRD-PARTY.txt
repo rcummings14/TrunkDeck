@@ -30,8 +30,8 @@ The jars in app/lib are the unmodified releases from Maven Central / the project
 
 Included as source code (compiled into app/trunkdeck.jar)
 --------------------------------------------------------
-SDRTrunk (DMR decoder) - GNU GPL v3 or later - Copyright (C) 2014-2025 Dennis Sheirer - https://github.com/DSheirer/sdrtrunk
-  The DMR decoding classes, in source/src/io/github/dsheirer (package io.github.dsheirer), from commit b177fd77.
+SDRTrunk (DMR and NXDN decoders) - GNU GPL v3 or later - Copyright (C) 2014-2026 Dennis Sheirer - https://github.com/DSheirer/sdrtrunk
+  The DMR and NXDN decoding classes, in source/src/io/github/dsheirer (package io.github.dsheirer), from commit b177fd77.
   Changes for TrunkDeck are marked in each file and listed in source/src/io/github/dsheirer/README-TRUNKDECK.txt.
   Licence: GPL-3.0.txt
 

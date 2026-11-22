@@ -266,7 +266,7 @@ public final class NativeEngine {
         if (s.type2()) log("Motorola Type II (untested): band plan " + s.type2BandPlan() + "; voice is analog FM or P25 as each grant says. If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         if (s.analog()) log("Analog FM conventional (untested): noise squelch level " + s.squelch + (s.channels.stream().anyMatch(c -> s.toneFor(Math.round(c.mhz * 1e6)) > 0) ? " and CTCSS tone squelch" : "") + ". If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         if (s.nxdn()) log("NXDN " + (s.nxdnTrunk() ? "Type-C trunked" : "conventional") + " (untested; NXDN48 and NXDN96 are detected automatically). If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
-        if (s.dmr()) io.github.dsheirer.compat.Logger.sink = (who, text) -> log(who + ": " + text);
+        if (s.dmr() || s.nxdn()) io.github.dsheirer.compat.Logger.sink = (who, text) -> log(who + ": " + text);
         if (s.dmr()) log("DMR " + (s.dmrTrunk() ? "trunked (" + s.dmrFlavor + ")" : "conventional") + " (untested). If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         SpeakerMode sm;
         try { sm = SpeakerMode.valueOf(app.settings.getProperty("native.speaker", "PRIORITY")); } catch (Exception e) { sm = SpeakerMode.PRIORITY; }
@@ -916,7 +916,7 @@ public final class NativeEngine {
     ChannelDecoder nxdnDecoder(Tuner t, long f) {
         ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {}, 0);
         final long freq = f;
-        d.nxdn = new p25monitor.nxdn.NxdnDemod(new p25monitor.nxdn.NxdnReceiver.Listener() {
+        d.nxdn = new p25monitor.nxdn.NxdnDecoder(new p25monitor.nxdn.NxdnDecoder.Listener() {
             public void call(p25monitor.nxdn.NxdnMessage m, boolean control) {
                 d.lastFrameAt = System.currentTimeMillis();
                 if (control) onNxdnAssignment(freq, m); else voice.onNxdnCall(freq, m);

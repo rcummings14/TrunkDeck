@@ -37,7 +37,8 @@ if [ "${1:-}" = "test" ]; then
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.DisplayColorTests   # every custom colour and preset reaches the panel
   "$JAVA" ${TEST_OPTS:-} -cp build/classes${CPS}build/test p25monitor.dmr.DmrDecoderTests   # DMR decoder on test-transmitter signals (both slots, alias, noise, colour code, Tier III grant, AMBE)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.DmrEngineTests   # DMR calls per slot, emergency, encryption, private grants (1.7.6)
-  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nxdn.NxdnTests   # NXDN coding, frames, receiver, NXDN48/96 demod (1.7.6)
+  "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nxdn.NxdnTests   # NXDN test transmitter: coding, frames, layer 3 messages
+  "$JAVA" ${TEST_OPTS:-} -cp build/classes${CPS}build/test p25monitor.nxdn.NxdnDecoderTests   # NXDN decoder: NXDN48/96 calls, voice, deviation, noise, control channel
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.NxdnEngineTests   # NXDN calls in the engine, Type-C channel resolution (1.7.6)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.NxdnSystemsPageTests   # Systems page NXDN channel table (1.7.6)
   "$JAVA" ${TEST_OPTS:-} -cp build/classes${CPS}build/test p25monitor.analog.AnalogTests   # analog FM squelch, every CTCSS tone, tone squelch (1.7.6)

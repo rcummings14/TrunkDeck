@@ -2,7 +2,7 @@ package p25monitor.nxdn;
 
 import java.util.*;
 
-/** NXDN channel coding, frames, layer 3 messages and the dibit receiver, on signals built here. */
+/** The test transmitter (NxdnCoding, NxdnFrame) checks itself: channel coding, frames and layer 3 messages. */
 public final class NxdnTests {
     static int pass, fail;
     static void check(boolean ok, String what) { if (ok) pass++; else fail++; System.out.println((ok ? "  ok    " : "  FAIL  ") + what); }
@@ -77,104 +77,5 @@ public final class NxdnTests {
         boolean[] bad = NxdnFrame.buildTraffic(0x31, NxdnFrame.sacch(0, 9, null), call, call, null);
         bad[0] = !bad[0];
         check(!NxdnFrame.decode(soft(bad)).lichOk, "LICH bit error fails its parity");
-
-        // receiver: sync, frames, SACCH superframe, voice and release
-        List<String> events = new ArrayList<>();
-        NxdnReceiver rx = new NxdnReceiver(new NxdnReceiver.Listener() {
-            public void call(NxdnMessage m, boolean control) { events.add("call " + m.source() + ">" + m.destination()); }
-            public void voice(byte[][] frames) { events.add("voice " + frames.length); }
-            public void release(NxdnMessage m) { events.add("release"); }
-            public void message(NxdnMessage m, String text) {}
-            public void sacch(boolean[] l3) { events.add("sacch " + new NxdnMessage(l3, false).type); }
-        });
-        List<boolean[]> frames = new ArrayList<>();
-        boolean[] head = NxdnMessage.call(80, NxdnMessage.VCALL, 0, NxdnMessage.CT_GROUP_CONFERENCE, 4001, 300);
-        frames.add(NxdnFrame.buildTraffic(0x31, NxdnFrame.sacch(0, 9, null), head, head, null));
-        boolean[] sl3 = NxdnMessage.call(72, NxdnMessage.VCALL, 0, NxdnMessage.CT_GROUP_CONFERENCE, 4001, 300);
-        for (int k = 0; k < 4; k++)
-            frames.add(NxdnFrame.buildTraffic(0x37, NxdnFrame.sacch(3 - k, 9, Arrays.copyOfRange(sl3, 18 * k, 18 * k + 18)), null, null, vf));
-        boolean[] rel = NxdnMessage.call(80, NxdnMessage.TX_REL, 0, NxdnMessage.CT_GROUP_CONFERENCE, 4001, 300);
-        frames.add(NxdnFrame.buildTraffic(0x31, NxdnFrame.sacch(0, 9, null), rel, rel, null));
-        for (int k = 0; k < 13; k++) rx.dibit(r.nextInt(4));
-        for (boolean[] fr : frames) { for (int d : NxdnReceiver.dibits(NxdnReceiver.SYNC_BITS)) rx.dibit(d); for (int d : NxdnReceiver.dibits(fr)) rx.dibit(d); }
-        String ev = String.join(", ", events);
-        check(ev.startsWith("call 4001>300"), "receiver: call from the FACCH1 header: " + ev);
-        check(Collections.frequency(events, "voice 4") == 4, "receiver: 4 voice frames of 4 AMBE frames");
-        check(events.contains("sacch 1"), "receiver: SACCH superframe assembled into a VCALL");
-        check(ev.endsWith("release"), "receiver: transmission release ends the call");
-        check(rx.frames == 6, "receiver: 6 frames synced (" + rx.frames + ")");
-
-        // reversed polarity still syncs
-        events.clear();
-        NxdnReceiver rx2 = new NxdnReceiver(rxListener(events));
-        for (boolean[] fr : frames) { for (int d : NxdnReceiver.dibits(NxdnReceiver.SYNC_BITS)) rx2.dibit(d ^ 2); for (int d : NxdnReceiver.dibits(fr)) rx2.dibit(d ^ 2); }
-        check(rx2.frames == 6 && events.contains("release"), "receiver: inverted signal decodes too (" + rx2.frames + ")");
-
-        // noise must not lock: random dibits match the sync word (<= 2 wrong bits) about every 2500 symbols, and half of
-        // the frames after them pass the LICH parity; without the CRC confirmation that reported calls on empty channels
-        List<String> noise = new ArrayList<>();
-        NxdnReceiver rxn = new NxdnReceiver(rxListener(noise));
-        boolean everLocked = false;
-        for (int k = 0; k < 2_000_000; k++) { rxn.dibit(r.nextInt(4)); everLocked |= rxn.locked(); }
-        check(noise.isEmpty() && !everLocked && rxn.frames == 0, "receiver: 2 million random dibits never lock and report nothing (" + noise.size() + " events, " + rxn.frames + " frames)");
-
-        // one frame alone is only a candidate; the second one at the right spacing (with a CRC) locks, and both are used
-        List<String> one = new ArrayList<>();
-        NxdnReceiver rx1 = new NxdnReceiver(rxListener(one));
-        for (int d : NxdnReceiver.burst(frames.get(0))) rx1.dibit(d);
-        for (int k = 0; k < 400; k++) rx1.dibit(0);   // a quiet gap (no chance sync word inside it)
-        boolean alone = one.isEmpty() && !rx1.locked();
-        for (int d : NxdnReceiver.burst(frames.get(0))) rx1.dibit(d);
-        for (int d : NxdnReceiver.burst(frames.get(1))) rx1.dibit(d);
-        check(alone && rx1.locked() && one.contains("call") && rx1.frames == 2, "receiver: a lone frame is ignored, two in a row lock and the first is decoded too (" + one + ", " + rx1.frames + " frames)");
-
-        // demodulator on noise only (no signal at all), both rates at once: 20 s, no call or voice
-        List<String> dn = new ArrayList<>();
-        NxdnDemod noiseDemod = new NxdnDemod(rxListener(dn));
-        float[] ni = new float[48000], nq = new float[48000];
-        boolean demodLocked = false;
-        for (int s = 0; s < 20; s++) {
-            for (int k = 0; k < ni.length; k++) { ni[k] = (float) r.nextGaussian(); nq[k] = (float) r.nextGaussian(); }
-            noiseDemod.baseband(ni, nq, ni.length);
-            demodLocked |= noiseDemod.synced();
-        }
-        check(dn.isEmpty() && !demodLocked, "demodulator: 20 s of noise give no lock, call or voice (" + dn.size() + " events)");
-
-        // demodulator: both rates, unknown symbol phase, carrier offset, noise, half gain
-        for (int baud : new int[]{2400, 4800}) {
-            List<String> dev = new ArrayList<>();
-            NxdnDemod dm = new NxdnDemod(rxListener(dev));
-            List<Integer> ds = new ArrayList<>();
-            for (int k = 0; k < 37; k++) ds.add(r.nextInt(4));
-            for (int rep = 0; rep < 2; rep++) for (boolean[] fr : frames) for (int d : NxdnReceiver.burst(fr)) ds.add(d);
-            for (int k = 0; k < 20; k++) ds.add(r.nextInt(4));   // flushes the filter delay
-            int[] dib = ds.stream().mapToInt(Integer::intValue).toArray();
-            int n = dib.length * (48000 / baud) + 7;
-            float[] i = new float[n], q = new float[n];
-            float[] i0 = new float[n], q0 = new float[n];
-            NxdnDemod.modulate(dib, baud, i0, q0);
-            double ph = 0;
-            for (int k = 0; k < n; k++) {   // 7-sample delay, +150 Hz offset, 0.5 gain, noise
-                int src = k - 7;
-                float a = src >= 0 ? i0[src] : 1, b = src >= 0 ? q0[src] : 0;
-                ph += 2 * Math.PI * 150 / 48000.0;
-                float c = (float) Math.cos(ph), sn = (float) Math.sin(ph);
-                i[k] = 0.5f * (a * c - b * sn) + 0.04f * (float) r.nextGaussian();
-                q[k] = 0.5f * (a * sn + b * c) + 0.04f * (float) r.nextGaussian();
-            }
-            dm.baseband(i, q, n);
-            int calls = Collections.frequency(dev, "call"), voices = Collections.frequency(dev, "voice"), rels = Collections.frequency(dev, "release");
-            check(calls == 2 && voices == 8 && rels == 2, (baud == 2400 ? "NXDN48" : "NXDN96") + " demod: 2 calls, 8 voice frames, 2 releases, one lane only ("
-                    + calls + "/" + voices + "/" + rels + ", " + dm.mode() + ")");
-        }
-    }
-
-    static NxdnReceiver.Listener rxListener(List<String> ev) {
-        return new NxdnReceiver.Listener() {
-            public void call(NxdnMessage m, boolean control) { ev.add("call"); }
-            public void voice(byte[][] frames) { ev.add("voice"); }
-            public void release(NxdnMessage m) { ev.add("release"); }
-            public void message(NxdnMessage m, String text) {}
-        };
     }
 }

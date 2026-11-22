@@ -14,13 +14,6 @@ The error-correction and coding tables are built from these definitions when the
 (source/src/p25monitor/p25/CodeTables.java). Each table names the standard section it comes from, and
 source/test/p25monitor/p25/CodeTablesTests.java checks them against the values printed in the standards.
 
-The NXDN decoder (source/src/p25monitor/nxdn) is TrunkDeck's own code, written for this program. The NXDN Forum
-specifications (NXDN TS 1-A and related parts) were not used directly. The protocol facts it relies on were read from
-the open-source sdrtrunk decoder (GPL-3.0, https://github.com/DSheirer/sdrtrunk): the frame sync word, LICH layout,
-PN9 scrambler, interleaver sizes, convolutional code polynomials and puncturing patterns, CRC polynomials, and layer 3
-message field positions. No sdrtrunk source code, class structure or comments were copied. Facts such as polynomials
-and bit positions are part of the air interface and are not copyrightable expression.
-
 The analog FM receiver (source/src/p25monitor/analog) is TrunkDeck's own code. Its CTCSS tone list is the standard
 EIA/TIA set. The general approach (Goertzel tone measurement on 8 kHz audio) was compared with sdrtrunk's
 NBFM decoder; no code was copied.
@@ -31,7 +24,7 @@ programs: gr-smartnet by Nick Foster (GPL, https://github.com/bistromath/gr-smar
 word, 19 x 4 interleave, parity code, check value and the field inversion constants), and trunk-recorder (GPL-3.0,
 https://github.com/TrunkRecorder/trunk-recorder) for the message meanings (grant and update words, talkgroup status
 bits, control channel and system ID words) and the 800 / 900 MHz and VHF/UHF band plans. No source code, class
-structure or comments were copied from either. Like the NXDN facts above, these are properties of the air interface.
+structure or comments were copied from either. Facts such as these are properties of the air interface.
 
 The EDACS and ProVoice decoder (source/src/p25monitor/edacs) is TrunkDeck's own code, written for this program. The
 facts it relies on were read from open-source programs: DSD-FME (https://github.com/lwvmobile/dsd-fme) for the EDACS
@@ -43,13 +36,13 @@ coding and their check rows, the scrambling sequence, and the reordering of the 
 BCH generator is computed from the code parameters, and the Golay and Hamming decoders are TrunkDeck's own. No source
 code, class structure or comments were copied. The voice itself is decoded by JMBE, as for P25.
 
-TrunkDeck's DMR decoder is built on SDRTrunk's, by Dennis Sheirer (GPL-3.0-or-later,
-https://github.com/DSheirer/sdrtrunk), included as source code in source/src/io/github/dsheirer: the DMR symbol
-processor, burst framer, message processor and message classes, and the DSP and error correction classes they use.
-Each file keeps its copyright and licence header; files changed for TrunkDeck say so in their header, and
-source/src/io/github/dsheirer/README-TRUNKDECK.txt lists the SDRTrunk version and every change. The adapter that
-connects it to TrunkDeck (source/src/p25monitor/dmr/DmrDecoder.java) and the small stand-in classes in
-io/github/dsheirer/compat are TrunkDeck's own.
+TrunkDeck's DMR and NXDN decoders are built on SDRTrunk's, by Dennis Sheirer (GPL-3.0-or-later,
+https://github.com/DSheirer/sdrtrunk), included as source code in source/src/io/github/dsheirer: the DMR and NXDN
+symbol processors, framers, message processors and message classes, and the DSP and error correction classes they
+use. Each file keeps its copyright and licence header; files changed for TrunkDeck say so in their header, and
+source/src/io/github/dsheirer/README-TRUNKDECK.txt lists the SDRTrunk version and every change. The adapters that
+connect them to TrunkDeck (source/src/p25monitor/dmr/DmrDecoder.java, source/src/p25monitor/nxdn/NxdnDecoder.java)
+and the small stand-in classes in io/github/dsheirer/compat are TrunkDeck's own.
 
 Third-party software
 --------------------
