@@ -129,8 +129,10 @@ final class CallManager {
     }
 
     /**
-     * EDACS: shows a call whose grant carried the emergency flag as an emergency. Called on its first voice, or at once
-     * when the call is not decoded (nothing to wait for).
+     * EDACS: shows a call whose grant carried the emergency flag as an emergency. Called only on its first decoded voice:
+     * a call that is not followed (not in the list, muted, no tuner) is never shown red from the grant alone. Some sites
+     * send emergency-flagged grants from a console ID to many talkgroups at once with nothing transmitted; the flag is
+     * still written to the message log with the grant.
      */
     void confirmEmergency(ActiveCall c) {
         synchronized (e) {
@@ -142,7 +144,6 @@ final class CallManager {
 
     void newCall(ActiveCall c) {
         String why = skipReason(c);
-        if (why != null && c.emergencyPending) c.emergency = true;   // not decoded: nothing to wait for
         CallEvent ev = new CallEvent();
         ev.timestamp = e.ts.format(new Date(c.start));
         ev.protocol = c.type2 ? (c.analogVoice ? "Motorola Type II (analog)" : "Motorola Type II (P25)") : c.edacs ? (c.analogVoice ? "EDACS (analog)" : "EDACS ProVoice") : "APCO-25";
@@ -161,7 +162,6 @@ final class CallManager {
         if (c.freq > 0 && !c.unitToUnit) e.usage.merge(c.freq, c.eligible ? 1.0 : 0.25, Double::sum);
         e.listener.callStarted(ev);
         if (c.eligible) assign(c);
-        if (c.vd == null) confirmEmergency(c);   // waiting for a tuner: may never be decoded
     }
 
     int callsOn(Tuner t) { int n = 0; for (ActiveCall c : e.callMap.values()) if (c.tuner == t && !c.ended) n++; return n; }

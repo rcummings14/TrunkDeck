@@ -239,7 +239,7 @@ final class ControlChannel {
             } else {
                 c.lastSeen = now;
                 if (src > 0 && c.src != src) { c.src = src; c.ev.from = String.valueOf(src); c.ev.radioId = src; e.listener.callUpdated(c.ev); }
-                if (emergency && !c.emergencyPending) { c.emergencyPending = true; if (c.voiceFrames > 0 || c.vd == null) e.calls.confirmEmergency(c); }
+                if (emergency && !c.emergencyPending) { c.emergencyPending = true; if (c.voiceFrames > 0) e.calls.confirmEmergency(c); }
             }
         }
     }

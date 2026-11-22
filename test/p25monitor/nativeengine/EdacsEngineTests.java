@@ -78,6 +78,16 @@ public final class EdacsEngineTests {
         site.frame(m[0], m[1]);
         ActiveCall r2 = ne.callMap.get("G" + 0x151);
         check(r2 != null && !r2.leftover, "on another LCN it is a new call, not a repeat");
+
+        // Ed's screenshots: one console ID sends emergency grants to many talkgroups that are not followed
+        for (int g : new int[]{0x160, 0x161, 0x162, 0x163}) {
+            m = EdacsSite.standardGrant(g, 15603 & 0x3FFF, g == 0x163 ? 3 : 6, true, true);   // LCN 6 is not in the list: not followed
+            site.frame(m[0], m[1]);
+            site.frame(m[0], m[1]);   // the site repeats it
+            ActiveCall x = ne.callMap.get("G" + g);
+            check(x != null && x.emergencyPending && !x.emergency && !x.ev.isEmergency(),
+                    "emergency grant to TG " + g + " with no voice decoded: not red, followed or not (" + (x == null ? "no call" : x.ev.event + " / " + x.ev.details) + ")");
+        }
         ne.ccTuner = null; ne.ccDecoders.clear();
     }
 
@@ -109,7 +119,7 @@ public final class EdacsEngineTests {
         m = EdacsSite.standardGrant(0x200, 77, 3, true, true);
         site.frame(m[0], m[1]);
         ActiveCall d = ne.callMap.get("G" + 0x200);
-        check(d != null && !d.analogVoice && d.emergency && d.ev.protocol.equals("EDACS ProVoice"), "ProVoice emergency grant: digital call, marked emergency");
+        check(d != null && !d.analogVoice && d.emergencyPending && !d.emergency && d.ev.protocol.equals("EDACS ProVoice"), "ProVoice emergency grant: digital call, emergency held until voice is decoded");
         long seen = c.lastSeen;
         Thread.sleep(5);
         m = EdacsSite.standardGrant(0x123, 4321, 2, false, false);

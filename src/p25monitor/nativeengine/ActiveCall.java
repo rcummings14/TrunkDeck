@@ -21,7 +21,7 @@ final class ActiveCall {
     boolean edacs;
     /**
      * EDACS: the grant carried the emergency flag. The call is shown as an emergency ({@code emergency}) only once voice
-     * is heard on its channel, so grants nobody transmits on do not flash red. {@code leftover}: the same talkgroup's
+     * is decoded on its channel (never for a call that is not followed), so grants nobody transmits on do not flash red. {@code leftover}: the same talkgroup's
      * call on the same LCN ended a moment before this grant (the site repeats the assignment after the call).
      */
     boolean emergencyPending, leftover;
