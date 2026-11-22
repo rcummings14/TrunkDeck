@@ -26,15 +26,19 @@ https://github.com/TrunkRecorder/trunk-recorder) for the message meanings (grant
 bits, control channel and system ID words) and the 800 / 900 MHz and VHF/UHF band plans. No source code, class
 structure or comments were copied from either. Facts such as these are properties of the air interface.
 
-The EDACS and ProVoice decoder (source/src/p25monitor/edacs) is TrunkDeck's own code, written for this program. The
-facts it relies on were read from open-source programs: DSD-FME (https://github.com/lwvmobile/dsd-fme) for the EDACS
-control channel (frame sync, triple-sent messages with the middle copy inverted, the BCH(40,28) code parameters, the
-message layouts for standard and extended addressing, ESK, and the end-of-call dotting), and DSD and mbelib by the
-DSD and mbelib authors (ISC licence, https://github.com/szechyjs/dsd, https://github.com/szechyjs/mbelib) for the
-ProVoice frame (sync patterns, bit layout and interleave schedule, the code words of the 7100 x 4400 IMBE channel
-coding and their check rows, the scrambling sequence, and the reordering of the voice parameters into P25 order). The
-BCH generator is computed from the code parameters, and the Golay and Hamming decoders are TrunkDeck's own. No source
-code, class structure or comments were copied. The voice itself is decoded by JMBE, as for P25.
+The EDACS control channel message decoding (source/src/p25monitor/edacs/EdacsSite.java) is a Java translation of
+the EDACS message parsing in DSD-FME (ISC licence, Copyright (C) 2010 DSD Author, https://github.com/lwvmobile/dsd-fme),
+written by lwvmobile (EDACS-FM) and ilyacodes with portions from ledacs by SP5WWP (The Unlicense). The licence text is
+in licenses/DSD-FME-ISC.txt and at the top of that file. DSD-FME's BCH code (edacs-bch3.c) is not used.
+
+The rest of the EDACS and ProVoice decoder (the 9600 bit/s receiver, frame voting, BCH(40,28) correction, and the
+ProVoice voice channel) is TrunkDeck's own code. The facts it relies on were read from DSD-FME (frame sync,
+triple-sent messages with the middle copy inverted, the BCH code parameters, ESK, the end-of-call dotting) and from
+DSD and mbelib by the DSD and mbelib authors (ISC licence, https://github.com/szechyjs/dsd,
+https://github.com/szechyjs/mbelib) for the ProVoice frame (sync patterns, bit layout and interleave schedule, the
+code words of the 7100 x 4400 IMBE channel coding and their check rows, the scrambling sequence, and the reordering of
+the voice parameters into P25 order). The BCH generator is computed from the code parameters, and the Golay and
+Hamming decoders are TrunkDeck's own. The voice itself is decoded by JMBE, as for P25.
 
 TrunkDeck's DMR and NXDN decoders are built on SDRTrunk's, by Dennis Sheirer (GPL-3.0-or-later,
 https://github.com/DSheirer/sdrtrunk), included as source code in source/src/io/github/dsheirer: the DMR and NXDN

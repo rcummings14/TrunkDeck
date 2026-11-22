@@ -39,18 +39,18 @@ public final class EdacsEngineTests {
             public void grant(int g, int src, int lcn, long hz, boolean dig, boolean em, boolean upd) { ne.cc.edacsGrant(g, src, lcn, hz, dig, em, upd); }
             public void message(String text) {}
         });
-        int[] m = EdacsSite.standardGrant(0x123, 4321, 2, false, false);
+        int[] m = EdacsMessages.standardGrant(0x123, 4321, 2, false, false);
         site.frame(m[0], m[1]);
         ActiveCall c = ne.callMap.get("G" + 0x123);
         check(c != null && c.edacs && c.analogVoice && c.src == 4321 && c.freq == 851_262_500L && c.ev.protocol.equals("EDACS (analog)") && c.ev.channel.equals("LCN 2"),
                 "analog grant starts group 291 from radio 4321 on LCN 2 = 851.2625: " + (c == null ? null : c.ev.protocol + " " + c.ev.channel));
-        m = EdacsSite.standardGrant(0x200, 77, 3, true, true);
+        m = EdacsMessages.standardGrant(0x200, 77, 3, true, true);
         site.frame(m[0], m[1]);
         ActiveCall d = ne.callMap.get("G" + 0x200);
         check(d != null && !d.analogVoice && d.emergency && d.ev.protocol.equals("EDACS ProVoice"), "ProVoice emergency grant: digital call, marked emergency");
         long seen = c.lastSeen;
         Thread.sleep(5);
-        m = EdacsSite.standardGrant(0x123, 4321, 2, false, false);
+        m = EdacsMessages.standardGrant(0x123, 4321, 2, false, false);
         site.frame(m[0], m[1]);
         check(ne.callMap.get("G" + 0x123) == c && c.lastSeen > seen && started.size() == 2, "the repeated assignment keeps the running call alive");
 
@@ -64,14 +64,14 @@ public final class EdacsEngineTests {
         check(c.pcmLen == 160, "analog EDACS audio is recorded on the call");
         ne.voice.onEdacsEnd(c);
         check(c.ended, "dotting on the voice channel ends the call");
-        m = EdacsSite.standardGrant(0x123, 4321, 2, false, false);
+        m = EdacsMessages.standardGrant(0x123, 4321, 2, false, false);
         site.frame(m[0], m[1]);
         check(ne.callMap.get("G" + 0x123) == null || ne.callMap.get("G" + 0x123).ended, "the control channel's last repeats of an ended call don't restart it");
         ActiveCall early = new ActiveCall();
         early.edacs = true; early.analogVoice = true; early.followStart = System.currentTimeMillis();
         ne.voice.onEdacsEnd(early);
         check(!early.ended, "dotting at the very start of an analog call (set-up data) does not end it");
-        m = EdacsSite.standardGrant(0x300, 5, 9, false, false);
+        m = EdacsMessages.standardGrant(0x300, 5, 9, false, false);
         site.frame(m[0], m[1]);
         ActiveCall lost = ne.callMap.get("G" + 0x300);
         check(lost != null && lost.freq == 0 && ne.calls.skipReason(lost).contains("LCN 9"), "an LCN not in the list says so: " + (lost == null ? null : ne.calls.skipReason(lost)));
@@ -84,7 +84,7 @@ public final class EdacsEngineTests {
         List<Boolean> bits = new ArrayList<>();
         Random r = new Random(5);
         for (int k = 0; k < 30; k++) bits.add(r.nextBoolean());
-        for (int k = 0; k < 30; k++) { int[] g = EdacsSite.standardGrant(k, 100 + k, 1 + k % 5, k % 2 == 0, false); for (boolean b : EdacsDemod.encode(g[0], g[1])) bits.add(b); }
+        for (int k = 0; k < 30; k++) { int[] g = EdacsMessages.standardGrant(k, 100 + k, 1 + k % 5, k % 2 == 0, false); for (boolean b : EdacsDemod.encode(g[0], g[1])) bits.add(b); }
         float[][] iq = p25monitor.edacs.EdacsTests.fsk(bits, 3000, 600, 0.2, false, 9);
         for (int k = 0; k < iq[0].length; k += 1200) {
             int n = Math.min(1200, iq[0].length - k);

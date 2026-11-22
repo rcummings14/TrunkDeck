@@ -34,6 +34,12 @@ SDRTrunk (DMR and NXDN decoders) - GNU GPL v3 or later - Copyright (C) 2014-2026
   The DMR and NXDN decoding classes, in source/src/io/github/dsheirer (package io.github.dsheirer), from commit b177fd77.
   Changes for TrunkDeck are marked in each file and listed in source/src/io/github/dsheirer/README-TRUNKDECK.txt.
   Licence: GPL-3.0.txt
+DSD-FME / EDACS-FME (EDACS control channel messages) - ISC licence - Copyright (C) 2010 DSD Author - https://github.com/lwvmobile/dsd-fme
+  The EDACS message parsing in edacs-fme.c (commit dad6d6c3), translated to Java in
+  source/src/p25monitor/edacs/EdacsSite.java. That code is by lwvmobile (EDACS-FM, https://github.com/lwvmobile/edacs-fm)
+  and ilyacodes, with portions from ledacs by SP5WWP (XTAL Labs, The Unlicense, https://github.com/sp5wwp/ledacs).
+  DSD-FME's BCH encoder/decoder (edacs-bch3.c) is not used: its licence does not allow commercial use.
+  Licence: DSD-FME-ISC.txt
 
 Downloaded by the installer (not in this zip)
 ---------------------------------------------
