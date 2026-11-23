@@ -61,7 +61,9 @@ public final class LegacyMigration {
             if (Files.isDirectory(own)) try (DirectoryStream<Path> ds = Files.newDirectoryStream(own, "jmbe-*.jar")) { for (Path p : ds) if (p25monitor.nativeengine.EngineLibs.isCodecJar(p)) have = true; }
             String jp = pref(NODE_DECODER, "path.jmbe.library.1.0.0");
             String configured = s.getProperty("native.jmbe", "");
-            if (!have && jp != null && Files.isRegularFile(Paths.get(jp))) {
+            if (!have && jp != null && Files.isRegularFile(Paths.get(jp)) && !p25monitor.nativeengine.EngineLibs.standalone(Paths.get(jp))) {
+                done.add("JMBE voice codec in " + jp + " not copied: it needs SDRTrunk's separate jmbe-api jar (use Build from source on the Engine page)");
+            } else if (!have && jp != null && Files.isRegularFile(Paths.get(jp))) {
                 Path src = Paths.get(jp);
                 String name = src.getFileName().toString();
                 if (!p25monitor.nativeengine.EngineLibs.isCodecJar(src)) name = "jmbe-imported.jar";

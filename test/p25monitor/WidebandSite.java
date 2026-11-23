@@ -25,6 +25,11 @@ public class WidebandSite {
 
     public static void main(String[] args) throws Exception {
         String mode = args.length > 0 ? args[0] : "airspy";
+        if (System.getProperty("jmbe") == null) {
+            // frames are counted as the engine plays them, and with no voice codec it plays none
+            System.out.println("WidebandSite " + mode + ": skip (run with -Djmbe=<jmbe jar>, e.g. TEST_OPTS=-Djmbe=... bash build.sh test)");
+            return;
+        }
         boolean mixed = mode.equals("mixed");
         double seconds = Double.parseDouble(System.getProperty("secs", "56"));
         double drop = Double.parseDouble(System.getProperty("drop", "0"));

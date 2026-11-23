@@ -25,9 +25,12 @@ public final class TouchTests {
     }
 
     public static void main(String[] a) throws Exception {
-        gainAndHold();
-        listAndPersist();
-        pageAndServer();
+        // an exception (a request timing out) is a failure, not a hang: the page server's threads would keep this JVM up
+        try {
+            gainAndHold();
+            listAndPersist();
+            pageAndServer();
+        } catch (Throwable t) { t.printStackTrace(System.out); fail++; }
         System.out.println("TouchTests: " + pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);
     }

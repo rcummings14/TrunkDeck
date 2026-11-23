@@ -27,7 +27,9 @@ public final class UpgradeTests {
         Files.writeString(profile.resolve("streams.properties"), "stream.0.name=Feed\n");
         // SDRTrunk-side files 1.1.x knew about
         Path sdr = home.resolve("SDRTrunk");
-        Path jmbe = sdr.resolve("jmbe").resolve("jmbe-1.0.9.jar"); Files.createDirectories(jmbe.getParent()); Files.write(jmbe, new byte[]{1, 2, 3});
+        Path jmbe = sdr.resolve("jmbe").resolve("jmbe-1.0.9.jar"); Files.createDirectories(jmbe.getParent());
+        // a codec jar that carries JMBE's interfaces (one without them is not imported: see EngineLibs.standalone)
+        try (java.util.zip.ZipOutputStream z = new java.util.zip.ZipOutputStream(Files.newOutputStream(jmbe))) { z.putNextEntry(new java.util.zip.ZipEntry("jmbe/iface/IAudioCodecLibrary.class")); z.write(new byte[]{1, 2, 3}); z.closeEntry(); }
         Path rec = sdr.resolve("recordings"); Files.createDirectories(rec); Files.write(rec.resolve("20260101_TrunkDeck_TO_100.mp3"), new byte[]{9});
         Path pl = sdr.resolve("playlist"); Files.createDirectories(pl);
         Files.writeString(pl.resolve("TrunkDeck_My_County.xml"), "<playlist/>"); Files.writeString(pl.resolve("TrunkDeck_My_County.xml.backup"), "x");

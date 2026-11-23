@@ -258,10 +258,26 @@ public class BusySite {
         Files.write(p, h.array());
     }
 
-    /** IMBE frames from the public XTS5000 recording (real speech). */
+    /**
+     * IMBE frames from the public XTS5000 recording (real speech), or, where that recording is not present (it is not
+     * part of the repository), 1500 frames of random voice parameters FEC-coded like real ones: the site simulations
+     * check frames bit-exact, which needs distinct frames, not speech (only the JMBE listening checks want speech).
+     */
     public static List<byte[]> imbeFrames() throws Exception {
         List<byte[]> fr = new ArrayList<>();
-        IqFileSource src = new IqFileSource(Path.of(System.getProperty("voiceSample", "samples/P25-C4FM-VC_IF.wav")), 0, 0);
+        Path sample = Path.of(System.getProperty("voiceSample", "samples/P25-C4FM-VC_IF.wav"));
+        if (!Files.exists(sample)) {
+            Random r = new Random(17);
+            Set<String> seen = new HashSet<>();
+            while (fr.size() < 1500) {
+                int[] u = new int[88];
+                for (int k = 0; k < 88; k++) u[k] = r.nextInt(2);
+                byte[] f = p25monitor.edacs.ProVoice.toP25Frame(u);
+                if (seen.add(Arrays.toString(f))) fr.add(f);
+            }
+            return fr;
+        }
+        IqFileSource src = new IqFileSource(sample, 0, 0);
         P25Framer f = new P25Framer(new P25Framer.Listener() { public void ldu(int nac, int d, byte[][] x, P25Framer.LinkControl lc, P25Framer.EncryptionSync e) { fr.addAll(Arrays.asList(x)); } });
         C4fmDemod dm = new C4fmDemod(f); Channelizer ch = new Channelizer(src.sampleRate(), 0); float[] oi = new float[100000], oq = new float[100000];
         src.readAll((i, q, n) -> { int m = ch.process(i, q, n, oi, oq); dm.process(oi, oq, m); });

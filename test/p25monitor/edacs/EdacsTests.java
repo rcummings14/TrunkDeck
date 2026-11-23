@@ -88,6 +88,37 @@ public final class EdacsTests {
         match = got.size() == 5;
         for (int k = 0; k < got.size() && match; k++) match = got.get(k)[0] == sent[k + 1][0] && got.get(k)[1] == sent[k + 1][1];
         check(match, "damaged copies are outvoted (" + got.size() + " of 5)");
+        // the same bit wrong in all three copies: the check would "correct" it, but a word must pass as it is
+        got.clear();
+        dm.reset();
+        bits.clear();
+        for (int k = 0; k < 4; k++) {
+            boolean[] f = EdacsDemod.encode(sent[k][0], sent[k][1]);
+            if (k == 3) for (int c = 0; c < 3; c++) f[48 + 40 * c + 7] ^= true;
+            add(bits, f);
+        }
+        for (boolean b : bits) dm.bit(b);
+        check(got.size() == 3 && got.get(2)[0] == -1 && got.get(2)[1] == sent[3][1], "a message wrong after the vote is dropped, not corrected");
+        // the bit clock gains or loses a bit: the receiver finds the next sync and reads on, and reads nothing wrong
+        got.clear();
+        dm.reset();
+        bits.clear();
+        for (int k = 0; k < 10; k++) {
+            boolean[] f = EdacsDemod.encode(sent[k][0], sent[k][1]);
+            for (int j = 0; j < f.length; j++) {
+                if (k == 4 && j == 100) continue;                                   // a lost bit
+                bits.add(f[j]);
+                if (k == 7 && j == 200) bits.add(r.nextBoolean());                  // an extra one
+            }
+        }
+        for (boolean b : bits) dm.bit(b);
+        int slipRight = 0, wrong = 0;
+        for (int[] g : got) {
+            boolean known = false;
+            for (int[] s : sent) if ((g[0] == s[0] || g[0] == -1) && (g[1] == s[1] || g[1] == -1)) known = true;
+            if (known) slipRight++; else wrong++;
+        }
+        check(slipRight >= 7 && wrong == 0, "bit slips: the next sync is found (" + slipRight + " of 9 frames, " + wrong + " wrong)");
 
         // ---------------- 9600 bit/s FSK receiver
         for (boolean inv : new boolean[]{false, true}) {
@@ -100,6 +131,24 @@ public final class EdacsTests {
             int ok = 0;
             for (int[] g : got) for (int[] s : sent) if (g[0] == s[0] && g[1] == s[1]) { ok++; break; }
             check(got.size() >= 37 && ok == got.size(), "FSK receiver" + (inv ? " (inverted)" : "") + ", 900 Hz off, noisy: " + ok + " of 40 frames");
+        }
+        // a channel filter starting up (tiny samples, the phase spinning) and a click later on: discriminator spikes of
+        // many kHz once left the slicer's levels stuck so every bit came out the same (seen on a real EA recording)
+        {
+            got.clear();
+            EdacsDemod d3 = new EdacsDemod((m1, m2) -> got.add(new int[]{m1, m2}));
+            bits.clear();
+            for (int k = 0; k < 40; k++) bits.add(r.nextBoolean());
+            for (int k = 0; k < 60; k++) add(bits, EdacsDemod.encode(sent[k % 10][0], sent[k % 10][1]));
+            float[][] s = fsk(bits, 2100, 700, 0.02, false, 4);
+            Random rs = new Random(11);
+            for (int k = 0; k < 40; k++) { double a = 1e-9 * Math.pow(10, k / 5.0), p = rs.nextDouble() * 2 * Math.PI; s[0][k] = (float) (a * Math.cos(p)); s[1][k] = (float) (a * Math.sin(p)); }
+            int click = 48000 / 9600 * 288 * 30;
+            for (int k = click; k < click + 6; k++) { double p = rs.nextDouble() * 2 * Math.PI; s[0][k] = (float) (0.01 * Math.cos(p)); s[1][k] = (float) (0.01 * Math.sin(p)); }
+            feed(s, (i, q) -> d3.baseband(i, q, i.length));
+            int ok = 0;
+            for (int[] g : got) for (int[] x : sent) if (g[0] == x[0] && g[1] == x[1]) { ok++; break; }
+            check(ok >= 55 && ok == got.size(), "FSK receiver after a filter start-up and a click: " + ok + " of 60 frames");
         }
 
         // ---------------- messages

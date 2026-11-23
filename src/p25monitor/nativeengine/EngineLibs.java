@@ -50,6 +50,16 @@ public final class EngineLibs {
     /** jmbe-x.y.z.jar is the codec; jmbe-api-*.jar (an interface-only jar some programs ship) is not. */
     public static boolean isCodecJar(Path p) { String n = p.getFileName().toString(); return n.startsWith("jmbe-") && n.endsWith(".jar") && !n.startsWith("jmbe-api"); }
 
+    /**
+     * True if the codec jar carries JMBE's interfaces itself (as one built by the Engine page does). SDRTrunk's copy does
+     * not: SDRTrunk ships them in a separate jmbe-api jar, so on its own that jar fails to load (NoClassDefFoundError
+     * jmbe/iface/IAudioCodecLibrary) and every call stays silent.
+     */
+    public static boolean standalone(Path jar) {
+        try (java.util.zip.ZipFile z = new java.util.zip.ZipFile(jar.toFile())) { return z.getEntry("jmbe/iface/IAudioCodecLibrary.class") != null; }
+        catch (Exception e) { return false; }
+    }
+
     public static synchronized boolean loadJmbe(Path jar) {
         if (jar == null) { jmbeError = "JMBE codec library not installed"; return false; }
         if (jar.equals(jmbeJar) && jmbeLibrary != null) return true;

@@ -50,7 +50,12 @@ public final class Fsk2Slicer {
         for (int k = 0, at = hPos; k < lpf.length; k++) { y += lpf[k] * hist[at]; if (--at < 0) at = hist.length - 1; }
         if (++hPos == hist.length) hPos = 0;
         float mid = (hi + lo) / 2;
-        if (y > mid) hi += 0.01f * (y - hi); else lo += 0.01f * (y - lo);
+        // a click or the filter starting up gives the discriminator spikes of many kHz: one sample moves a level by at
+        // most 30 Hz, and both levels creep towards each other so one left beyond the signal (every sample then on the
+        // other side of the middle, the slicer stuck on one bit value) comes back within a fraction of a second
+        if (y > mid) hi += 0.01f * Math.max(-3000f, Math.min(3000f, y - hi)); else lo += 0.01f * Math.max(-3000f, Math.min(3000f, y - lo));
+        float creep = 0.0005f * (hi - lo);
+        hi -= creep; lo += creep;
         if (hi - lo < 600) { hi = mid + 300; lo = mid - 300; }
         mid = (hi + lo) / 2;
         if ((prevY - mid) * (y - mid) < 0) {          // a transition: half way between two bit centres

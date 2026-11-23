@@ -5,9 +5,10 @@ package p25monitor.edacs;
  *
  * <p>The outbound control channel is 9600 bit/s two-level FSK. Each frame is a 48-bit sync followed by 240 bits: two
  * 40-bit messages, each sent three times in a row with the middle copy inverted. The three copies are majority-voted
- * and the result checked (and corrected, up to two bits) with {@link EdacsBch}. The sync is found in either slicer
+ * and the result checked with {@link EdacsBch} (not corrected: the vote has already fixed what it can). The sync is found in either slicer
  * polarity; whether the data bits then need inverting is settled by which reading passes the check. After two good
- * frames 288 bits apart the receiver stays locked, decoding every 288th bit, until four frames in a row fail.
+ * frames 288 bits apart the receiver stays locked, looking for each next sync within {@link #SLIP} bits of 288 bits on
+ * (the bit clock can gain or lose a bit), until four frames in a row fail.
  *
  * <p>Framing facts from DSD-FME's EDACS decoder (see NOTICE.txt); the code is TrunkDeck's own.
  */
@@ -23,6 +24,10 @@ public final class EdacsDemod {
     static final String SYNC_TEXT = "313131313131313131313111333133133131313131313131";
     public static final long SYNC = syncBits(SYNC_TEXT);
     public static final int SYNC_BITS = 48, BODY_BITS = 240, FRAME_BITS = SYNC_BITS + BODY_BITS;
+    /** While locked, how far (bits) a sync may be from where it is expected; more than this is a lost lock. */
+    static final int SLIP = 3;
+    /** Most sync bits wrong for a frame to be read (a sync 1 to 4 bits out of place has at least 6 wrong). */
+    static final int SYNC_ERRORS = 4;
 
     private final Listener out;
     private final Fsk2Slicer slicer;
@@ -54,15 +59,25 @@ public final class EdacsDemod {
         long s = n - BODY_BITS;        // last sync bit of a frame whose body just completed
         if (s < SYNC_BITS - 1) return;
         if (locked) {
-            if (s != lastSync + FRAME_BITS) return;
-            lastSync = s;
-            int[] m = decodeAt(s, dataInv);
+            // the sync where it is expected is read at once (one a bit or more out of place is never that close);
+            // otherwise, once every place it may have slipped to has its body in, the best sync in reach, else a miss
+            long expected = lastSync + FRAME_BITS;
+            if (s != expected && s != expected + SLIP) return;
+            long at = expected;
+            int best = syncErrors(expected);
+            if (s == expected && best > SYNC_ERRORS) return;
+            for (int d = 1; d <= SLIP && s != expected; d++)
+                for (int sign = -1; sign <= 1; sign += 2) {
+                    int e = syncErrors(expected + sign * d);
+                    if (e < best) { best = e; at = expected + sign * d; }
+                }
+            int[] m = best <= SYNC_ERRORS ? decodeAt(at, dataInv) : null;
+            lastSync = at;
             if (m != null) { misses = 0; good++; out.frame(m[0], m[1]); }
             else { badCount++; out.bad(); if (++misses >= 4) locked = false; }
             return;
         }
-        long sync = syncAt(s);
-        if (Long.bitCount(sync ^ SYNC) > 4 && Long.bitCount(sync ^ ~SYNC & 0xFFFFFFFFFFFFL) > 4) return;
+        if (syncErrors(s) > SYNC_ERRORS) return;
         for (int inv = 0; inv < 2; inv++) {
             int[] m = decodeAt(s, inv == 1);
             if (m == null) continue;
@@ -77,6 +92,12 @@ public final class EdacsDemod {
     }
 
     private boolean at(long idx) { return bits[(int) Math.floorMod(idx, (long) RING)]; }
+
+    /** Wrong bits in the sync ending at bit {@code s}, in whichever polarity is closer. */
+    private int syncErrors(long s) {
+        long sync = syncAt(s);
+        return Math.min(Long.bitCount(sync ^ SYNC), Long.bitCount(sync ^ ~SYNC & 0xFFFFFFFFFFFFL));
+    }
 
     private long syncAt(long s) {
         long v = 0;
@@ -95,6 +116,9 @@ public final class EdacsDemod {
             long a = word(base, inv), b = ~word(base + 40, inv) & 0xFFFFFFFFFFL, c = word(base + 80, inv);
             long voted = (a & b) | (a & c) | (b & c);
             int d = EdacsBch.decode(voted, fixed);
+            // after the vote the word must pass the check as it is: correcting even one bit let wrong grants through on
+            // a real EA control channel (a word with three bits wrong taken for its neighbour), and almost none need it
+            if (d >= 0 && fixed[0] > 0) d = -1;
             m[k] = d;
             if (d >= 0) { ok++; correctedBits += fixed[0] + Long.bitCount((a ^ voted) | (b ^ voted) | (c ^ voted)); }
         }
