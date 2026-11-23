@@ -39,6 +39,7 @@ if [ "${1:-}" = "test" ]; then
   "$JAVA" ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.DmrFllTests   # a DMR channel holds its frequency between transmissions; the measured offset is the decoder's
   "$JAVA" -Djava.awt.headless=true -Dtrunkdeck.lib=lib ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.XptEngineTests   # Hytera XPT: a roaming tuner moves over the free repeater and hears the call that starts there
   "$JAVA" ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.sdr.IqFileTests   # I/Q recordings: WAV and RF64 (SDR#, SDR++ long recordings)
+  "$JAVA" -Djava.awt.headless=true -Dtrunkdeck.lib=lib ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.FilePlaybackTests   # an I/Q recording centred on its channel plays (no DC guard for files)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.DmrEngineTests   # DMR calls per slot, emergency, encryption, private grants (1.7.6)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nxdn.NxdnTests   # NXDN test transmitter: coding, frames, layer 3 messages
   "$JAVA" ${TEST_OPTS:-} -cp build/classes${CPS}build/test p25monitor.nxdn.NxdnDecoderTests   # NXDN decoder: NXDN48/96 calls, voice, deviation, noise, control channel

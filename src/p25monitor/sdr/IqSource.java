@@ -26,7 +26,7 @@ public interface IqSource extends AutoCloseable {
     default boolean running() { return false; }
     /** Error that stopped the stream, if any. */
     default String error() { return null; }
-    /** Hz around the centre kept free of channels (DC spike); -1 = the tuner's default for its sample rate. */
+    /** Hz around the centre kept free of channels (DC spike); -1 = the tuner's default for its sample rate, 0 = none. */
     default long dcGuardHz() { return -1; }
     /** Airspy receivers (and their simulation): the USB sample stream with its drop counters; null for others. */
     default AirspyStream usbStream() { return null; }

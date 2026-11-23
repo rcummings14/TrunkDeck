@@ -92,6 +92,11 @@ public final class IqFileSource implements IqSource {
 
     public Format format() { return format; }
     @Override public double sampleRate() { return rate; }
+    /**
+     * No DC guard: a recording cannot be retuned, and they are often made centred on the channel (SDR#, SDR++). A live
+     * dongle keeps channels off its centre spike; here the channel at the centre is decoded rather than skipped.
+     */
+    @Override public long dcGuardHz() { return 0; }
     @Override public long centerHz() { return center; }
     public double seconds() { return dataLength / (double) frameBytes() / rate; }
     public double progress() { return progress; }

@@ -234,9 +234,13 @@ public final class DmrDecoder {
         if (m instanceof PiHeader) { encrypted(slot, cc); return; }
         if (m instanceof VoiceHeader header) { onLc(header.getLCMessage(), slot, cc, true); return; }
         if (m instanceof Terminator t) {
-            LCMessage lc = t.getLCMessage();
-            if (lc != null && lc.isValid()) onLc(lc, slot, cc, false);
-            if (slot == 1 || slot == 2) end(slot);
+            // A repeater repeats the terminator through its hang time (about 50 over 3 s). Only the first one ends the
+            // call; the rest must not start a new one each (they did: one transmission became dozens of tiny calls).
+            if ((slot == 1 || slot == 2) && slots[slot].active) {
+                LCMessage lc = t.getLCMessage();
+                if (lc != null && lc.isValid()) onLc(lc, slot, cc, false);
+                end(slot);
+            }
             return;
         }
         if (m instanceof LCMessage lc) onLc(lc, slot, cc, false);

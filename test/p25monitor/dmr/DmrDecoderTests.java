@@ -29,6 +29,7 @@ public final class DmrDecoderTests {
         radioSide("radio side, heavy noise", 0.35);
         xptFreeRepeater();
         noiseNotSynced();
+        hangTime();
         colourCodeFilter();
         grantTier3();
         ambe();
@@ -212,6 +213,31 @@ public final class DmrDecoderTests {
         int at = 0;
         for (float[] p : parts) { System.arraycopy(p, 0, out, at, p.length); at += p.length; }
         return out;
+    }
+
+    /** A repeater's hang time: the terminator repeated ~50 times after a call. One call, one end (found on 146.700 recordings). */
+    static void hangTime() {
+        System.out.println("stream: hang time (repeated terminators)");
+        List<boolean[]> s1 = new ArrayList<>(DmrSignal.call(3123, 3123446, 4, null));
+        for (int k = 0; k < 50; k++) s1.add(DmrSignal.term(3123, 3123446));
+        List<Integer> dib = new ArrayList<>();
+        Random r = new Random(9);
+        for (int k = 0; k < 300; k++) dib.add(r.nextInt(4));
+        int units = s1.size() * 2 + 6;
+        for (int u = 0, p = 0; u < units; u++) {
+            int slot = u % 2 == 0 ? 1 : 2;
+            boolean[] burst = slot == 1 && p < s1.size() ? s1.get(p++) : DmrSignal.idle();
+            for (int d : DmrSignal.dibitsOf(cach(slot, u))) dib.add(d);
+            for (int d : DmrSignal.dibitsOf(burst)) dib.add(d);
+        }
+        int[] starts = new int[1], stops = new int[1];
+        DmrSignal.Rec rec = new DmrSignal.Rec() {
+            @Override public void group(long h, int s, int c, int tg, int src, byte[][] ambe) { if (ambe.length == 0) starts[0]++; }
+            @Override public void end(long h, int s) { stops[0]++; }
+        };
+        DmrDecoder rx = new DmrDecoder(0, DmrSignal.CC, 0, null, 0, null, rec, 48000);
+        feed(rx, modulate(dib.stream().mapToInt(Integer::intValue).toArray(), true, 0, 0.05));
+        check("one call through the hang time: " + starts[0] + " start(s), " + stops[0] + " end(s)", starts[0] == 1 && stops[0] == 1);
     }
 
     /** No DMR on the channel: noise, then an analog FM carrier. With the colour code set to any, it must not look synced. */
