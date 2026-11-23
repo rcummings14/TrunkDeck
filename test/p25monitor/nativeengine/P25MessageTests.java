@@ -28,6 +28,7 @@ public final class P25MessageTests {
             linkControl();
             tsbkText();
             engine();
+            siteStatus();
         } catch (Throwable t) { t.printStackTrace(); fail++; }
         System.out.println("P25MessageTests: " + pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);
@@ -213,5 +214,47 @@ public final class P25MessageTests {
         ne.recentlyEnded.clear();
         cc.voiceChannelUpdate(new P25Framer.LinkControl(P25Framer.hexbits(upd, 12)));
         check(ne.callMap.get("G4500") == null, "not on a conventional system");
+    }
+
+    static byte[] hex(String h) { byte[] b = new byte[h.length() / 2]; for (int i = 0; i < b.length; i++) b[i] = (byte) Integer.parseInt(h.substring(2 * i, 2 * i + 2), 16); return b; }
+
+    /**
+     * A site that sends its network / RFSS / adjacent status only as AMBTC (a Phase 2 ASTRO 25 site in Hawaii, from a
+     * tester's control-channel recording: these blocks are copied from it). Without the WACN the Phase 2 voice could not
+     * be descrambled: the calls showed "phase 2 sync but no voice frames".
+     */
+    static void siteStatus() throws Exception {
+        var home = Files.createTempDirectory("td-p25sts");
+        System.setProperty("trunkdeck.profile", home.resolve("p").toString());
+        NativeEngine ne = new NativeEngine(new App(home), new NativeEngine.Listener() {
+            public void callStarted(p25monitor.CallEvent ev) {}
+            public void callUpdated(p25monitor.CallEvent ev) {}
+            public void messages(int count, String last) {}
+        });
+        ne.sys = new RadioSystem();
+        ControlChannel cc = ne.cc;
+        int nac = 0x854;
+        check(ne.tdma.scrambler() == null, "no Phase 2 descrambler before the network status");
+        String[][] blocks = {
+                {"37FD00000855813B0000A13B", "BEE0004A0356EE70BADDA8DF"},   // network status
+                {"37FD00003855813A0000B987", "01044A0356EE70004562310A"},   // RFSS status
+                {"37FD00003855813C010748F1", "4A094E1A70BEE000F2F2505D"}};  // adjacent site
+        List<String> text = new ArrayList<>();
+        for (String[] b : blocks) {
+            Got got = new Got();
+            feed(new P25Framer(got), P25Framer.buildPdu(nac, hex(b[0]), hex(b[1])));
+            check(got.pdus.size() == 1, "status AMBTC decodes through the framer: " + b[0]);
+            if (got.pdus.isEmpty()) return;
+            cc.onPdu(got.pdus.get(0), 151_407_500L);
+            text.add(ne.lastMsg);
+        }
+        check(ne.wacn == 0xBEE00 && ne.sysId == 0x855, String.format("WACN %05X system %03X from the AMBTC", ne.wacn, ne.sysId));
+        check(ne.rfss == 1 && ne.site == 4, "RFSS " + ne.rfss + " site " + ne.site);
+        check(ne.adjacent.containsKey("001-007"), "adjacent site 1-7: " + ne.adjacent);
+        var sc = ne.tdma.scrambler();
+        check(sc != null && sc.same(0xBEE00, 0x855, nac), "the Phase 2 descrambler is seeded from them");
+        check(text.get(0).equals("AMBTC NETWORK STATUS BROADCAST WACN:BEE00 SYS:855"), "message text: " + text.get(0));
+        check(text.get(1).equals("AMBTC RFSS STATUS BROADCAST SYS:855 RFSS:1 SITE:4"), "message text: " + text.get(1));
+        check(text.get(2).startsWith("AMBTC ADJACENT SITE STATUS SYS:855 RFSS:1 SITE:7 CH:4-2569"), "message text: " + text.get(2));
     }
 }

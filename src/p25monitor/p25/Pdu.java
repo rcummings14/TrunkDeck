@@ -60,6 +60,24 @@ public final class Pdu {
     public int source() { return groupGrant() ? llid() : unitGrant() ? (int) bits(32, 24) : 0; }
     public int target() { return unitGrant() ? llid() : 0; }
 
+    /*
+     * Site status in AMBTC form (some sites, e.g. Motorola ASTRO 25 with Phase 2, send these and never the single-block
+     * TSBK). Header octets 4-5: system ID in the low 12 bits (after LRA in octet 3). Field layout as in SDRTrunk's
+     * AMBTCNetworkStatusBroadcast / AMBTCRFSSStatusBroadcast / AMBTCAdjacentStatusBroadcast (Dennis Sheirer, GPLv3).
+     */
+    boolean status(int op) { return ambtc() && standard() && opcode() == op && data.length >= 4; }
+    /** Network status broadcast (0x3B): block 0 bits 0-19 WACN. */
+    public boolean netStatus() { return status(Tsbk.NET_STS_BCST); }
+    /** RFSS status broadcast (0x3A): block 0 octet 0 RFSS, octet 1 site. */
+    public boolean rfssStatus() { return status(Tsbk.RFSS_STS_BCST); }
+    /** Adjacent site status broadcast (0x3C): header octet 8 RFSS, octet 9 site; block 0 octets 0-1 downlink channel. */
+    public boolean adjStatus() { return status(Tsbk.ADJ_STS_BCST); }
+    public int system() { return (h(4) & 0x0f) << 8 | h(5); }
+    public long wacn() { return bits(0, 20); }
+    public int rfss() { return adjStatus() ? h(8) : data[0] & 0xff; }
+    public int site() { return adjStatus() ? h(9) : data[1] & 0xff; }
+    public int adjChannel() { return d16(0); }
+
     public String describe(ChannelMap map) {
         if (!ambtc()) {
             String kind = switch (format()) {
@@ -76,6 +94,12 @@ public final class Pdu {
             s.append(Tsbk.so(serviceOptions()));
         } else if (unitGrant()) {
             s.append(" TO:").append(target()).append(" FROM:").append(source()).append(" CH:").append(Tsbk.ch(channelT(), map));
+        } else if (netStatus()) {
+            s.append(String.format(" WACN:%05X SYS:%03X", wacn(), system()));
+        } else if (rfssStatus()) {
+            s.append(String.format(" SYS:%03X RFSS:%d SITE:%d", system(), rfss(), site()));
+        } else if (adjStatus()) {
+            s.append(String.format(" SYS:%03X RFSS:%d SITE:%d CH:", system(), rfss(), site())).append(Tsbk.ch(adjChannel(), map));
         } else {
             s.append(" LLID:").append(llid()).append("  ");
             for (byte x : data) s.append(String.format("%02X", x & 0xff));

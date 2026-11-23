@@ -128,6 +128,10 @@ final class ControlChannel {
             ChannelMap map = e.map;
             if (p.groupGrant() && map.frequency(p.channelT()) > 0) grant(p.group(), p.source(), p.channelT(), p.serviceOptions(), false, false);
             else if (p.unitGrant() && map.frequency(p.channelT()) > 0) unitGrant(p.target(), p.source(), p.channelT(), p.opcode() == Tsbk.UU_V_CH_GRANT_UPDT);
+            // the WACN / system ID seed Phase 2 descrambling: a site that sends them only in this form had none before
+            else if (p.netStatus()) { e.wacn = p.wacn(); e.sysId = p.system(); }
+            else if (p.rfssStatus()) { e.sysId = p.system(); e.rfss = p.rfss(); e.site = p.site(); }
+            else if (p.adjStatus()) { long f = map.frequency(p.adjChannel()); e.adjacent.put(String.format("%03d-%03d", p.rfss(), p.site()), f > 0 ? NativeEngine.mhz(f) + " MHz" : "channel " + (p.adjChannel() >> 12) + "-" + (p.adjChannel() & 0xfff)); }
             String text = p.describe(map);
             e.msgs.add(new NativeEngine.Msg(now, fromHz / 1e6, text));
             while (e.msgs.size() > 3000) e.msgs.pollFirst();

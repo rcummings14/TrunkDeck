@@ -383,7 +383,8 @@ final class VoiceCallDecoder {
             }
             c.mismatchRun = 0;
         }
-        if (m.source > 0 && m.source != c.src) { c.src = m.source; c.ev.from = String.valueOf(c.src); c.ev.radioId = c.src; e.listener.callUpdated(c.ev); e.logTalker(c); }
+        // FFFFFF is "no unit" (MAC_END_PTT carries it), not a talker
+        if (m.source > 0 && m.source != 0xFFFFFF && m.source != c.src) { c.src = m.source; c.ev.from = String.valueOf(c.src); c.ev.radioId = c.src; e.listener.callUpdated(c.ev); e.logTalker(c); }
         if (m.encrypted()) {
             if (m.alg > 0) c.alg = m.alg;
             markEncrypted(c, m.alg > 0 && m.alg != 0x80 ? String.format("MAC algorithm %02X", m.alg) : "MAC service options");
