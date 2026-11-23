@@ -237,6 +237,37 @@ public final class NativeEngine {
     }
 
     public List<String> recentLog() { return new ArrayList<>(log); }
+
+    /**
+     * Saves the control channel being received (the locked one, else the first one tried) for {@code seconds} as a
+     * 48 kS/s I/Q .wav in the recordings folder's 'iq' sub-folder, the same format as the voice-channel recordings, so
+     * it can be played back here (Engine page, I/Q recording) or sent for troubleshooting. Returns the file, or null
+     * (with the reason in the log).
+     */
+    public Path recordControlIq(int seconds) {
+        Tuner t = ccTuner;
+        List<ChannelDecoder> cc = new ArrayList<>(ccDecoders);
+        if (!isRunning() || t == null || cc.isEmpty()) { log("Control-channel I/Q: no control channel is being received (start a trunked system first)"); return null; }
+        long now = System.currentTimeMillis();
+        ChannelDecoder d = cc.get(0);
+        for (ChannelDecoder c : cc) if (c.locked(now)) { d = c; break; }
+        if (d.tapping()) { log("Control-channel I/Q: " + mhz(d.freqHz) + " MHz is already being recorded"); return null; }
+        Path f;
+        try {
+            synchronized (fileTs) { f = App.recordingDir().resolve("iq").resolve(fileTs.format(new Date(now)) + "_TrunkDeck_IQ_CC_" + d.freqHz + "Hz_48000sps.wav"); }
+            d.startTap(f, t.decoderRate(), seconds);
+        } catch (Exception ex) { log("Control-channel I/Q recording failed: " + ex.getMessage()); return null; }
+        log("Recording control-channel I/Q on " + mhz(d.freqHz) + " MHz" + (d.locked(now) ? "" : " (not locked)") + " for " + seconds + " s to " + f.getFileName());
+        final ChannelDecoder rec = d;
+        Thread stop = new Thread(() -> {
+            try { Thread.sleep(seconds * 1000L + 1000); } catch (InterruptedException ignored) {}
+            Path p = rec.stopTap();
+            if (p != null) log("Saved control-channel I/Q: " + p);
+        }, "cc-iq-recording");
+        stop.setDaemon(true);
+        stop.start();
+        return f;
+    }
     public List<Msg> recentMessages() { return new ArrayList<>(msgs); }
     public boolean isRunning() { return running; }
     public String state() { return state; }

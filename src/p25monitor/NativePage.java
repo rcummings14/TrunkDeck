@@ -298,10 +298,19 @@ public class NativePage extends JPanel {
         copyDiag.addActionListener(e -> copyDiagnostics());
         JButton openIq = MainFrame.button("I/Q folder", Theme.Glyph.FOLDER, Theme.DIM);
         openIq.addActionListener(e -> { try { java.nio.file.Path d = App.recordingDir().resolve("iq"); java.nio.file.Files.createDirectories(d); Desktop.getDesktop().open(d.toFile()); } catch (Exception ex) { f.toast(String.valueOf(App.recordingDir().resolve("iq"))); } });
+        JButton recordCc = MainFrame.button("Record control channel (60 s)", null, Theme.DIM);
+        recordCc.setToolTipText("Saves the control channel being received for 60 s as a 48 kS/s I/Q .wav (about 22 MB) in the I/Q folder, so control-channel decoding can be checked or the file sent for troubleshooting. TrunkDeck keeps running normally while it records.");
+        recordCc.addActionListener(e -> {
+            java.nio.file.Path p = f.nativeEngine.recordControlIq(60);
+            if (p == null) {
+                java.util.List<String> l = f.nativeEngine.recentLog();
+                f.toast(l.isEmpty() ? "Nothing to record." : l.get(l.size() - 1).replaceFirst("^[0-9:]+ +", ""));
+            } else f.toast("Recording the control channel for 60 s: " + p.getFileName());
+        });
         JPanel hang = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0)); hang.setOpaque(false);
         hang.add(hl); hang.add(hangSp); hang.add(new JLabel("s"));
         JPanel vb = Layouts.wrapRow(FlowLayout.LEFT, 6, 2);
-        vb.add(copyDiag); vb.add(hang); vb.add(recordIq); vb.add(openIq);
+        vb.add(copyDiag); vb.add(hang); vb.add(recordIq); vb.add(recordCc); vb.add(openIq);
         vp.add(vb, BorderLayout.SOUTH);
         voice.add(vp, BorderLayout.CENTER);
 
