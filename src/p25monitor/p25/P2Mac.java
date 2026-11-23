@@ -25,10 +25,22 @@ public final class P2Mac {
     public int type = -1, alg = -1, keyId, source = -1, group = -1, serviceOptions = -1;
     /** Opcodes of the MAC structures in this PDU (IDLE/ACTIVE/HANGTIME/SIGNAL). */
     public final List<Integer> opcodes = new ArrayList<>();
+    /** Bit offset of each of those structures (its opcode octet), in the same order. */
+    public final List<Integer> offsets = new ArrayList<>();
+    /** Payload length in bits (CRC excluded). */
+    public int payloadBits() { return facch ? 144 : 168; }
 
     P2Mac(byte[] bits, boolean facch, boolean crcOk, int rsFixed) {
         this.bits = bits; this.facch = facch; this.crcOk = crcOk; this.rsFixed = rsFixed;
         if (crcOk) parse();
+    }
+
+    /** A MAC PDU from its decoded bits (payload then CRC-12, one bit per byte), the CRC checked here. */
+    public static P2Mac of(byte[] bits, boolean facch) {
+        int pl = facch ? 144 : 168;
+        int crc = 0;
+        for (int i = 0; i < 12; i++) crc = (crc << 1) | bits[pl + i];
+        return new P2Mac(bits, facch, crc12(bits, pl) == crc, 0);
     }
 
     public int get(int off, int len) { int v = 0; for (int i = 0; i < len; i++) v = (v << 1) | bits[off + i]; return v; }
@@ -52,11 +64,14 @@ public final class P2Mac {
                     int op = get(at, 8);
                     if (op == OP_NULL) break;
                     opcodes.add(op);
+                    offsets.add(at);
                     if ((op == OP_GVCU_ABBR || op == OP_GVCU_EXT) && at + 56 <= payload && group < 0) {
                         serviceOptions = get(at + 8, 8); group = get(at + 16, 16); source = get(at + 32, 24);
                     }
                     int len = length(op);
-                    if (len <= 0) break;
+                    // manufacturer-specific (opcode 10xxxxxx): MFID in octet 2, length in octet 3
+                    if (len <= 0 && (op & 0xC0) == 0x80 && at + 24 <= payload) len = get(at + 16, 8);
+                    if (len < 3) break;
                     at += 8 * len;
                 }
             }

@@ -29,6 +29,7 @@ public final class P25MessageTests {
             tsbkText();
             engine();
             siteStatus();
+            phase2Alias();
         } catch (Throwable t) { t.printStackTrace(); fail++; }
         System.out.println("P25MessageTests: " + pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);
@@ -256,5 +257,37 @@ public final class P25MessageTests {
         check(text.get(0).equals("AMBTC NETWORK STATUS BROADCAST WACN:BEE00 SYS:855"), "message text: " + text.get(0));
         check(text.get(1).equals("AMBTC RFSS STATUS BROADCAST SYS:855 RFSS:1 SITE:4"), "message text: " + text.get(1));
         check(text.get(2).startsWith("AMBTC ADJACENT SITE STATUS SYS:855 RFSS:1 SITE:7 CH:4-2569"), "message text: " + text.get(2));
+    }
+
+    /** A Motorola talker alias on a Phase 2 call (MAC 0x91 / 0x95) is learned for the radio and shown on the call. */
+    static void phase2Alias() throws Exception {
+        var home = Files.createTempDirectory("td-p2alias");
+        System.setProperty("trunkdeck.profile", home.resolve("p").toString());
+        List<String> updated = new ArrayList<>();
+        NativeEngine ne = new NativeEngine(new App(home), new NativeEngine.Listener() {
+            public void callStarted(p25monitor.CallEvent ev) {}
+            public void callUpdated(p25monitor.CallEvent ev) { updated.add(ev.from); }
+            public void messages(int count, String last) {}
+        });
+        ne.sys = new RadioSystem();
+        ActiveCall c = new ActiveCall();
+        c.tg = 6502; c.freq = 151_062_500L; c.slot = 1; c.phase2 = true; c.ev = new p25monitor.CallEvent();
+        byte[] p = p25monitor.p25.P2AliasTests.payload();
+        var t = new Object() {
+            P2Mac h = p25monitor.p25.P2AliasTests.mac(true, p25monitor.p25.P2AliasTests.header(6502, 2, 3, p25monitor.p25.P2AliasTests.part(p, 0, 64)));
+            P2Mac b1 = p25monitor.p25.P2AliasTests.mac(false, p25monitor.p25.P2AliasTests.block(1, 3, p25monitor.p25.P2AliasTests.part(p, 64, 100)));
+            P2Mac b2 = p25monitor.p25.P2AliasTests.mac(true, p25monitor.p25.P2AliasTests.block(2, 3, p25monitor.p25.P2AliasTests.part(p, 164, 100)));
+        };
+        ActiveCall other = new ActiveCall();
+        other.tg = 6105; other.freq = c.freq; other.slot = 0; other.phase2 = true; other.ev = new p25monitor.CallEvent();
+        ne.voice.onP2Mac(c, t.h);
+        ne.voice.onP2Mac(other, t.b1);   // the other time slot's train is separate
+        ne.voice.onP2Mac(c, t.b2);
+        check(ne.sys.radios.alias(319439).isEmpty(), "blocks from the other time slot are not mixed in");
+        ne.voice.onP2Mac(c, t.b1);
+        ne.voice.onP2Mac(c, t.b2);
+        check("SPPD-706813".equals(ne.sys.radios.alias(319439)), "the radio's name is learned: " + ne.sys.radios.alias(319439));
+        check(c.src == 319439 && updated.contains("319439"), "the call shows the talker");
+        check(ne.log.stream().anyMatch(l -> l.contains("Learned P25 over-the-air radio alias SPPD-706813 for radio 319439")), "and the engine log says so");
     }
 }

@@ -23,7 +23,7 @@ final class VoiceCallDecoder {
     static final int AMBE_NOISE = 5;
 
     final NativeEngine e;
-    /** One Motorola alias train per frequency. A conventional terminator ends the call before the next block arrives. */
+    /** One Motorola alias train per frequency (Phase 2: per frequency and slot, a negative key). A conventional terminator ends the call before the next block arrives. */
     final Map<Long, MotorolaAlias> motorola = new HashMap<>();
     VoiceCallDecoder(NativeEngine e) { this.e = e; }
 
@@ -362,7 +362,11 @@ final class VoiceCallDecoder {
 
     /** A MAC PDU (FACCH or SACCH) on this call's slot that passed its CRC. */
     void onP2Mac(ActiveCall c, P2Mac m) {
-        if (c.ended || !m.crcOk) return;
+        if (!m.crcOk) return;
+        // Motorola talker alias: one train per frequency and time slot (the radio ID is in the payload)
+        MotorolaAlias.Decoded mot = motorola(-(c.freq * 2 + Math.max(0, Math.min(1, c.slot)) + 1)).feed(m);
+        if (mot != null) publishOta(c, mot);
+        if (c.ended) return;
         long now = System.currentTimeMillis();
         if (m.group > 0 && !c.unitToUnit) {
             c.lastLcTg = m.group;

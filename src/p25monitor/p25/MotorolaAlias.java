@@ -4,7 +4,8 @@ package p25monitor.p25;
  * Reassembles a Motorola (MFID 0x90) talker alias from link-control opcode 0x15 (header) and 0x17 (data).
  * The radio ID is inside the payload, so the name can be stored after the call has already ended.
  * A name is returned only when CRC-16/GSM passes. The substitution table and cipher are the published
- * constants from trunk-recorder {@code unit_tags_ota.cc} (Ilya Smirnov, 2024).
+ * constants from trunk-recorder {@code unit_tags_ota.cc} (Ilya Smirnov, 2024). Phase 2 sends the same payload in MAC
+ * structures 0x91 / 0x95 ({@link #feed(P2Mac)}).
  */
 public final class MotorolaAlias {
     public record Decoded(int wacn, int systemId, int radioId, String alias) {}
@@ -85,6 +86,12 @@ public final class MotorolaAlias {
         }
         byte[] raw = new byte[nNibs / 2];
         for (int i = 0; i < raw.length; i++) raw[i] = (byte) ((nibs[i * 2] << 4) | nibs[i * 2 + 1]);
+        return decode(raw);
+    }
+
+    /** The reassembled payload (same in Phase 1 and Phase 2): WACN(20) system(12) radio(24), length octet, alias, CRC. */
+    static Decoded decode(byte[] raw) {
+        if (raw.length < 8) return null;
         int chars = LENGTH[raw[7] & 0xff];
         int body = 7 + chars * 2;
         if (chars == 0 || raw.length < body + 2) return null;
@@ -97,6 +104,58 @@ public final class MotorolaAlias {
         if (alias.isEmpty() || radio <= 0 || radio > 0xFFFFFF) return null;
         return new Decoded(wacn, system, radio, alias);
     }
+
+    // ------------------------------------------------------------------ Phase 2
+    /*
+     * Phase 2 carries the same payload in Motorola MAC structures (MFID 0x90, 17 octets each): 0x91 header - talkgroup
+     * (octets 4-5), blocks to follow (octet 6), sequence (high nibble of octet 9), first 64 payload bits from octet 10;
+     * 0x95 data block - block number (octet 4), sequence (high nibble of octet 5), the next 100 payload bits after it.
+     * Layout from SDRTrunk's MotorolaTalkerAliasHeader / DataBlock / Assembler (phase2 mac structure, GPLv3).
+     */
+    public static final int P2_HEADER = 0x91, P2_DATA = 0x95;
+    byte[] p2Header;
+    final byte[][] p2Blocks = new byte[16][];
+    int p2Seq = -1, p2Count;
+
+    /** Feed one CRC-checked Phase 2 MAC PDU (one time slot). Returns a decoded alias only when a whole train checks out. */
+    public synchronized Decoded feed(P2Mac m) {
+        if (m == null || !m.crcOk) return null;
+        Decoded got = null;
+        for (int k = 0; k < m.offsets.size(); k++) {
+            Decoded d = feedP2(m, m.offsets.get(k));
+            if (d != null) got = d;
+        }
+        return got;
+    }
+
+    private Decoded feedP2(P2Mac m, int at) {
+        int op = m.get(at, 8);
+        if ((op != P2_HEADER && op != P2_DATA) || at + 136 > m.payloadBits() || m.get(at + 8, 8) != 0x90) return null;
+        if (op == P2_HEADER) {
+            int seq = m.get(at + 64, 4);
+            if (seq != p2Seq) { clearP2(); p2Seq = seq; }
+            p2Count = m.get(at + 40, 8);
+            p2Header = slice(m, at + 72, 64);
+        } else {
+            int seq = m.get(at + 32, 4);
+            if (seq != p2Seq) { clearP2(); p2Seq = seq; }
+            int n = m.get(at + 24, 8);
+            if (n >= 1 && n < p2Blocks.length) p2Blocks[n] = slice(m, at + 36, 100);
+        }
+        if (p2Header == null || p2Count < 1 || p2Count >= p2Blocks.length) return null;
+        for (int i = 1; i <= p2Count; i++) if (p2Blocks[i] == null) return null;
+        byte[] bits = new byte[64 + 100 * p2Count];
+        System.arraycopy(p2Header, 0, bits, 0, 64);
+        for (int i = 1; i <= p2Count; i++) System.arraycopy(p2Blocks[i], 0, bits, 64 + 100 * (i - 1), 100);
+        byte[] raw = new byte[bits.length / 8];
+        for (int i = 0; i < raw.length * 8; i++) raw[i >> 3] |= (byte) (bits[i] << (7 - (i & 7)));
+        Decoded d = decode(raw);
+        if (d != null) { clearP2(); p2Seq = -1; }
+        return d;
+    }
+
+    private void clearP2() { p2Header = null; p2Count = 0; java.util.Arrays.fill(p2Blocks, null); }
+    private static byte[] slice(P2Mac m, int from, int len) { return java.util.Arrays.copyOfRange(m.bits, from, from + len); }
 
     /** CRC-16/GSM over {@code raw[0, len)}: poly 0x1021, init 0, no reflection, final complement. */
     static int crc16gsm(byte[] raw, int len) {
