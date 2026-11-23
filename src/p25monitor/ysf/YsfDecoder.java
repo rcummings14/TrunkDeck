@@ -1,0 +1,192 @@
+package p25monitor.ysf;
+
+import p25monitor.dsp.C4fmDemod;
+
+/**
+ * Yaesu System Fusion receiver for a 48 kHz complex channel: C4FM at 4800 baud (FM discriminator, root raised cosine
+ * matched filter, YSF frame sync, symbol timing) into {@link YsfFrame}. Every frame carries a CRC-checked FICH, so
+ * voice is passed on only from frames whose FICH passes.
+ *
+ * <p>A transmission starts with a header (or, joined late, with its first voice frame) and ends with a terminator or
+ * when no good frame has been heard for a second. The caller's and destination callsigns come from the header and from
+ * the voice frames' data channel; the DG-ID from the FICH. Voice: DN (V/D mode 2) and V/D mode 1 are AMBE+2, handed
+ * on as 9-byte DMR-layout frames; VW (voice FR mode) is IMBE, handed on as 18-byte P25-layout frames. Data-only
+ * transmissions (pictures, messages) start no call. Untested on air.
+ */
+public final class YsfDecoder implements C4fmDemod.Sink {
+    /** What the decoder reports. */
+    public interface Listener {
+        /** A transmission started, or its callsigns or mode became known. */
+        void call(Call c);
+        /** Voice frames in order: AMBE+2 (9 bytes each) or, when {@code imbe}, IMBE (18 bytes each). */
+        void voice(byte[][] frames, boolean imbe);
+        /** The transmission ended (terminator, or no good frame for a second). */
+        void end();
+        /** A line for the message log. */
+        default void message(String text) {}
+    }
+
+    /** One transmission. */
+    public static final class Call {
+        public String source = "", dest = "", uplink = "", downlink = "";
+        public int dgid;
+        /** "DN", "VW", "V/D mode 1" or "data". */
+        public String mode = "";
+        public boolean voice() { return !"data".equals(mode); }
+        @Override public String toString() {
+            return "Fusion " + mode + " " + (source.isEmpty() ? "?" : source) + " -> " + (dest.isEmpty() ? "?" : dest) + " DG-ID " + dgid;
+        }
+    }
+
+    public static final int FS = C4fmDemod.FS;
+    /** No good frame for this long ends a transmission (input samples). */
+    private static final long HOLD = FS;
+
+    private final Listener out;
+    private final C4fmDemod demod;
+    private final byte[] frame = new byte[YsfFrame.BITS];
+    private int fill = -1;
+    private long samples, lastGood = -10 * FS;
+    private Call call;
+    private boolean announced;
+    private long frames, bad, voiceFrames;
+
+    public YsfDecoder(Listener out) {
+        this.out = out;
+        demod = C4fmDemod.custom(this, YsfFrame.SYNC_DIBITS, true);
+    }
+
+    /** True while frames with a good FICH are being received. */
+    public synchronized boolean synced() { return samples - lastGood < HOLD; }
+
+    /** The carrier's offset from the channel centre (Hz, positive = above) while synced, else NaN. */
+    public synchronized double carrierErrorHz() { return synced() ? demod.freqErrorHz : Double.NaN; }
+
+    /** The current transmission's mode ("DN", "VW", …) while synced, else null. */
+    public synchronized String mode() { return synced() && call != null && !call.mode.isEmpty() ? call.mode : null; }
+
+    public synchronized String status() {
+        return "fusion " + (synced() ? "synced" : "searching") + " frames=" + frames + " bad FICH=" + bad + " voice frames=" + voiceFrames;
+    }
+
+    public synchronized void baseband(float[] i, float[] q, int n) {
+        if (n <= 0) return;
+        demod.process(i, q, n);
+        samples += n;
+        if (call != null && samples - lastGood >= HOLD) finish();
+    }
+
+    // ------------------------------------------------------------------ symbols -> frames
+
+    @Override public void sync(float quality) { fill = 0; }
+
+    @Override public void symbol(int dibit, float level) {
+        if (fill < 0) return;
+        int at = YsfFrame.SYNC_BITS + 2 * fill;
+        frame[at] = (byte) ((dibit >> 1) & 1);
+        frame[at + 1] = (byte) (dibit & 1);
+        if (++fill * 2 + YsfFrame.SYNC_BITS == YsfFrame.BITS) { fill = -1; onFrame(); }
+    }
+
+    private void onFrame() {
+        YsfFrame.Fich h = YsfFrame.fich(frame);
+        if (h == null) { bad++; return; }
+        frames++;
+        lastGood = samples;
+        switch (h.fi()) {
+            case YsfFrame.FI_HEADER -> header(h);
+            case YsfFrame.FI_COMMS -> comms(h);
+            case YsfFrame.FI_TERMINATOR -> { if (call != null) { csd(YsfFrame.dch20(frame, true)); finish(); } }
+            default -> {}
+        }
+    }
+
+    private void header(YsfFrame.Fich h) {
+        if (call != null && announced) finish();
+        Call c = begin(h);
+        csd(YsfFrame.dch20(frame, true));
+        announce(c);
+    }
+
+    private void comms(YsfFrame.Fich h) {
+        Call c = call == null ? begin(h) : call;
+        c.dgid = h.dgid();
+        String mode = h.mode();
+        boolean changed = !mode.equals(c.mode);
+        c.mode = mode;
+        switch (h.dt()) {
+            case YsfFrame.DT_VD2 -> {
+                byte[] d = YsfFrame.dch10(frame);
+                if (d != null) changed |= switch (h.fn()) {
+                    case 0 -> set(c, 0, YsfFrame.callsign(d, 0));
+                    case 1 -> set(c, 1, YsfFrame.callsign(d, 0));
+                    case 2 -> set(c, 3, YsfFrame.callsign(d, 0));
+                    case 3 -> set(c, 2, YsfFrame.callsign(d, 0));
+                    default -> false;
+                };
+                if (!announce(c) && changed && announced) out.call(c);
+                emit(YsfFrame.vd2Voice(frame), false);
+            }
+            case YsfFrame.DT_VD1 -> {
+                if (h.fn() == 0) changed |= csd(YsfFrame.dch20(frame, true));
+                if (!announce(c) && changed && announced) out.call(c);
+                emit(YsfFrame.vd1Voice(frame), false);
+            }
+            case YsfFrame.DT_VOICE_FR -> {
+                if (!announce(c) && changed && announced) out.call(c);
+                emit(YsfFrame.vwVoice(frame, h.fn()), true);
+            }
+            default -> {
+                if (changed) out.message("Fusion data transmission" + (c.source.isEmpty() ? "" : " from " + c.source) + " DG-ID " + c.dgid);
+            }
+        }
+    }
+
+    private Call begin(YsfFrame.Fich h) {
+        call = new Call();
+        call.dgid = h.dgid();
+        call.mode = h.mode();
+        announced = false;
+        return call;
+    }
+
+    /** Reports the call the first time (returns true then); data-only transmissions are not calls. */
+    private boolean announce(Call c) {
+        if (announced || !c.voice()) return false;
+        announced = true;
+        out.message(c.toString());
+        out.call(c);
+        return true;
+    }
+
+    /** Header / V/D mode 1 data: destination then source. Returns true when something new was learned. */
+    private boolean csd(byte[] d) {
+        if (d == null || call == null) return false;
+        boolean a = set(call, 0, YsfFrame.callsign(d, 0));
+        boolean b = set(call, 1, YsfFrame.callsign(d, 10));
+        return a | b;
+    }
+
+    /** Field 0 dest, 1 source, 2 uplink, 3 downlink. */
+    private static boolean set(Call c, int field, String v) {
+        if (v.isEmpty()) return false;
+        String old = switch (field) { case 0 -> c.dest; case 1 -> c.source; case 2 -> c.uplink; default -> c.downlink; };
+        if (v.equals(old)) return false;
+        switch (field) { case 0 -> c.dest = v; case 1 -> c.source = v; case 2 -> c.uplink = v; default -> c.downlink = v; }
+        return true;
+    }
+
+    private void emit(byte[][] f, boolean imbe) {
+        if (f.length == 0 || call == null || !call.voice()) return;
+        voiceFrames += f.length;
+        out.voice(f, imbe);
+    }
+
+    private void finish() {
+        Call c = call;
+        call = null;
+        boolean was = announced;
+        announced = false;
+        if (c != null && was) out.end();
+    }
+}

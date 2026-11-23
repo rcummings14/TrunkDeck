@@ -3,7 +3,7 @@
 **A scanner-style trunking monitor for Windows and Linux.** TrunkDeck follows a P25 trunked radio system's control
 channel, decodes the voice calls (Phase 1 and Phase 2) with its own built-in engine, plays them, records them, and can
 stream them to Broadcastify, OpenMHz or your own Rdio Scanner server - all from one window, no other radio software needed.
-New and **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), EDACS / ProVoice and analog FM systems.
+New and **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), EDACS / ProVoice, Yaesu System Fusion and analog FM systems.
 
 ![TrunkDeck main window](docs/screenshots/monitor.png)
 
@@ -28,7 +28,12 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
     plus a squelch setting from 1 to 10.
   * **Motorola Type II**, described below.
   * **EDACS / ProVoice**, described below.
-  * DMR and NXDN voice use the AMBE+2 codec, so they need JMBE 2.x, the same as P25 Phase 2.
+  * **Yaesu System Fusion (conventional):** repeater or simplex frequencies with optional names (`147.1650 WV8HC`).
+    DN and VW voice are detected automatically. Each call shows the caller's callsign, the destination and the
+    DG-ID (used as the talkgroup, so DG-IDs can be named and muted on the Talkgroups page). Analog FM users on a
+    mixed-mode repeater are not played. Tested only against simulated signals and frames built with MMDVMHost's
+    encoder.
+  * DMR, NXDN and Fusion DN voice use the AMBE+2 codec, so they need JMBE 2.x, the same as P25 Phase 2.
   * **Set up from RadioReference** now imports these system types too, instead of refusing them.
 * **Motorola Type II SmartNet / SmartZone** (new, **untested**): a new system kind on the Systems page. TrunkDeck
   decodes the 3600 bit/s Type II control channel (with error correction; damaged messages are thrown away rather than
@@ -98,8 +103,8 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   New in 1.7.0 and **untested**: **SDRplay**, **HackRF One**, **LimeSDR** and **Ettus USRP** through SoapySDR - see
   [Supported receivers](#supported-receivers).
 * **Other radio systems** (new in 1.7.5, **untested**): DMR (conventional, Tier III, Capacity Plus, Connect Plus, XPT),
-  NXDN (conventional and Type-C trunking), Motorola Type II SmartNet / SmartZone (analog or P25 voice), and analog FM
-  channels with CTCSS, including Hold / Scan / Up / Down on the Monitor page. See [What's new](#whats-new-in-175-beta).
+  NXDN (conventional and Type-C trunking), Motorola Type II SmartNet / SmartZone (analog or P25 voice), Yaesu System
+  Fusion, and analog FM channels with CTCSS, including Hold / Scan / Up / Down on the Monitor page. See [What's new](#whats-new-in-175-beta).
 * **Big scanner display** with colour themes (Full color, SDS-style, amber, ... or your own colours, including the bars
   and the display border), glow, scan lines, backlight on calls, SCANNING ticker.
 * **Control-channel signal meter** (1.7.2): the scanner display shows a signal meter on the control-channel row so you
@@ -191,7 +196,7 @@ SoapySDR in short (details: *Supported receivers* in [stage/README.md](stage/REA
 
 1. **Systems** page: **Set up from RadioReference** (needs a RadioReference Premium account and a build with an app key),
    or add your system by hand - its control channel(s) in MHz (RadioReference lists them; use the ones marked
-   *c*). Pick the **Kind** first: P25 trunked (the default), P25 conventional, DMR, NXDN, Motorola Type II or analog FM. The preloaded *Example County* presets are **fictional** placeholders; delete them if you like.
+   *c*). Pick the **Kind** first: P25 trunked (the default), P25 conventional, DMR, NXDN, Motorola Type II, EDACS, Yaesu System Fusion or analog FM. The preloaded *Example County* presets are **fictional** placeholders; delete them if you like.
 2. **Talkgroups** page: import your talkgroup CSV (RadioReference export works as-is; `talkgroups_template.csv` is a template).
 3. **Engine** page → *Voice codec*: click **Build from source…** once to build the JMBE voice codec on your PC (see the
    legal note below). Without it, calls are followed but silent.

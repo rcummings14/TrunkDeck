@@ -22,6 +22,8 @@ public class RadioSystem {
     public static final String TYPE2 = "type2";
     /** EDACS trunking (GE / Ericsson / Harris): 9600 bit/s control channel, analog FM or ProVoice voice. Untested on air. */
     public static final String EDACS = "edacs";
+    /** Yaesu System Fusion (C4FM), conventional channels. Untested on a real radio. */
+    public static final String FUSION = "fusion";
 
     /** One fixed channel on a conventional system. A blank NAC uses the system's NAC; a blank name is just the frequency. */
     public static final class Channel {
@@ -113,7 +115,7 @@ public class RadioSystem {
     /** Either DMR mode. Both are untested on a real radio. */
     public boolean dmr() { return dmrConventional() || dmrTrunk(); }
     /** Fixed channels with no control channel: P25 conventional or DMR conventional. */
-    public boolean fixedChannels() { return conventional() || dmrConventional() || nxdnConventional() || analog(); }
+    public boolean fixedChannels() { return conventional() || dmrConventional() || nxdnConventional() || analog() || fusion(); }
     public boolean analog() { return ANALOG.equalsIgnoreCase(kind); }
 
     /**
@@ -135,6 +137,8 @@ public class RadioSystem {
     public boolean type2() { return TYPE2.equalsIgnoreCase(kind); }
     /** EDACS with analog FM or ProVoice voice (untested). */
     public boolean edacs() { return EDACS.equalsIgnoreCase(kind); }
+    /** Yaesu System Fusion conventional channels (untested). */
+    public boolean fusion() { return FUSION.equalsIgnoreCase(kind); }
     /** Trunked kinds whose voice channels are numbered (number=MHz in the frequency box): NXDN Type-C and EDACS. */
     public boolean channelNumbers() { return nxdnTrunk() || edacs(); }
 
@@ -221,6 +225,7 @@ public class RadioSystem {
         if (edacs()) return freqText().isBlank() ? "" : "EDACS CC " + freqText();
         if (analog()) return channels.isEmpty() ? "" : channels.size() == 1 ? channelCaption(Math.round(channels.get(0).mhz * 1e6)) : channels.size() + " analog channels";
         if (nxdnConventional()) return channels.isEmpty() ? "" : channels.size() == 1 ? channelCaption(Math.round(channels.get(0).mhz * 1e6)) : channels.size() + " NXDN channels";
+        if (fusion()) return channels.isEmpty() ? "" : channels.size() == 1 ? channelCaption(Math.round(channels.get(0).mhz * 1e6)) : channels.size() + " Fusion channels";
         if (dmrConventional()) {
             if (channels.isEmpty()) return "";
             if (channels.size() == 1) return channelCaption(Math.round(channels.get(0).mhz * 1e6)) + colorNote();
@@ -276,6 +281,7 @@ public class RadioSystem {
         if (dmrConventional()) return "DMR conventional (untested)";
         if (dmrTrunk()) return "DMR trunked (untested)";
         if (nxdnConventional()) return "NXDN conventional (untested)";
+        if (fusion()) return "Yaesu System Fusion (untested)";
         if (analog()) return "Analog FM (untested)";
         if (nxdnTrunk()) return "NXDN trunked (untested)";
         if (type2()) return "Motorola Type II (untested)";
@@ -527,6 +533,7 @@ public class RadioSystem {
         if (ANALOG.equalsIgnoreCase(k)) return ANALOG;
         if (TYPE2.equalsIgnoreCase(k)) return TYPE2;
         if (EDACS.equalsIgnoreCase(k)) return EDACS;
+        if (FUSION.equalsIgnoreCase(k)) return FUSION;
         if (CONVENTIONAL.equalsIgnoreCase(k)) return CONVENTIONAL;
         return TRUNKED;
     }

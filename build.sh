@@ -40,6 +40,8 @@ if [ "${1:-}" = "test" ]; then
   "$JAVA" -Djava.awt.headless=true -Dtrunkdeck.lib=lib ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.XptEngineTests   # Hytera XPT: a roaming tuner moves over the free repeater and hears the call that starts there
   "$JAVA" ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.sdr.IqFileTests   # I/Q recordings: WAV and RF64 (SDR#, SDR++ long recordings)
   "$JAVA" -Djava.awt.headless=true -Dtrunkdeck.lib=lib ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.FilePlaybackTests   # an I/Q recording centred on its channel plays (no DC guard for files)
+  "$JAVA" ${TEST_OPTS:-} -cp build/classes${CPS}build/test p25monitor.ysf.YsfDecoderTests   # Yaesu System Fusion: FICH, data channel, DN / VW / V/D mode 1 voice, callsigns, noise
+  "$JAVA" -Djava.awt.headless=true -Dtrunkdeck.lib=lib ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.FusionEngineTests   # a Fusion recording: DN and VW calls with callsign, DG-ID and voice
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nativeengine.DmrEngineTests   # DMR calls per slot, emergency, encryption, private grants (1.7.6)
   "$JAVA" -Djava.awt.headless=true ${TEST_OPTS:-} -cp build/classes${CPS}build/test${CPS}lib/flatlaf-3.5.4.jar p25monitor.nxdn.NxdnTests   # NXDN test transmitter: coding, frames, layer 3 messages
   "$JAVA" ${TEST_OPTS:-} -cp build/classes${CPS}build/test p25monitor.nxdn.NxdnDecoderTests   # NXDN decoder: NXDN48/96 calls, voice, deviation, noise, control channel

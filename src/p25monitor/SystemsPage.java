@@ -10,7 +10,7 @@ public class SystemsPage extends JPanel {
     final MainFrame f;
     final DefaultListModel<RadioSystem> listModel = new DefaultListModel<>();
     final JList<RadioSystem> list = new JList<>(listModel);
-    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)", "DMR (conventional, untested)", "DMR trunked (untested)", "NXDN (conventional, untested)", "NXDN trunked (untested)", "Analog FM (conventional, untested)", "Motorola Type II SmartNet / SmartZone (untested)", "EDACS / ProVoice (untested)"});
+    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)", "DMR (conventional, untested)", "DMR trunked (untested)", "NXDN (conventional, untested)", "NXDN trunked (untested)", "Analog FM (conventional, untested)", "Motorola Type II SmartNet / SmartZone (untested)", "EDACS / ProVoice (untested)", "Yaesu System Fusion (conventional, untested)"});
     /** EDACS addressing, in {@link p25monitor.edacs.EdacsSite.Mode} order. */
     final JComboBox<p25monitor.edacs.EdacsSite.Mode> edacsMode = new JComboBox<>(p25monitor.edacs.EdacsSite.Mode.values());
     /** Motorola Type II band plan; the last entry uses {@link #obtPlan}. Order matches {@link #TYPE2_PLANS}. */
@@ -323,21 +323,24 @@ public class SystemsPage extends JPanel {
 
     void showKind(int kind) {
         shownKind = kind;
-        boolean fixed = kind == 1 || kind == 2 || kind == 4 || kind == 6;
+        boolean fixed = kind == 1 || kind == 2 || kind == 4 || kind == 6 || kind == 9;
         boolean analog = kind == 6;
         boolean dmr = kind == 2 || kind == 3;
         boolean nxdn = kind == 4 || kind == 5;
         boolean type2 = kind == 7;
         boolean edacs = kind == 8;
+        boolean fusion = kind == 9;
         boolean obt = type2 && type2Plan.getSelectedIndex() == 5;
         freqLabel.setText(fixed ? "Channels MHz" : "Control channel(s) MHz");
         Jargon.explain(freqLabel, fixed ? "Channels MHz" : "Control channel(s) MHz");
         cc.setToolTipText(freqLabel.getToolTipText());
-        cc.putClientProperty("JTextField.placeholderText", kind == 2 ? "e.g. 450.0000:1/1 Sample" : kind == 4 ? "e.g. 451.0125, 451.0250" : analog ? "e.g. 155.2500, 155.3700:100.0 Fire" : kind == 5 ? "e.g. 451.0000, 37=451.0125" : edacs ? "e.g. 851.0125, 1=851.0125, 2=851.2625" : fixed ? "e.g. 155.2500, 155.3700:2D5" : "e.g. 851.0125, 851.5125");
+        cc.putClientProperty("JTextField.placeholderText", kind == 2 ? "e.g. 450.0000:1/1 Sample" : kind == 4 ? "e.g. 451.0125, 451.0250" : fusion ? "e.g. 147.1650 WV8HC, 444.1750" : analog ? "e.g. 155.2500, 155.3700:100.0 Fire" : kind == 5 ? "e.g. 451.0000, 37=451.0125" : edacs ? "e.g. 851.0125, 1=851.0125, 2=851.2625" : fixed ? "e.g. 155.2500, 155.3700:2D5" : "e.g. 851.0125, 851.5125");
         freqHelp.setText(helpHtml((analog
                 ? "Analog FM channels, separated by commas, each with an optional name. Add a CTCSS (PL) tone after a colon when one channel uses its own, for example 155.3700:100.0. (untested)"
                 : kind == 4
                 ? "NXDN channels, separated by commas. NXDN48 and NXDN96 are detected automatically. (untested)"
+                : fusion
+                ? "Fusion repeater or simplex output frequencies, separated by commas, each with an optional name. DN and VW voice are detected automatically; analog FM users on a mixed-mode repeater are not played. (untested)"
                 : edacs
                 ? "Control channel(s) first, then every channel of the site as LCN=MHz in the site's order, for example 1=851.0125, 2=851.2625 (RadioReference lists the LCN next to each frequency). Grants name the LCN; voice is analog FM or ProVoice, as each grant says. (untested)"
                 : type2
@@ -351,9 +354,9 @@ public class SystemsPage extends JPanel {
                 : "Primary first; add alternate control channels separated by commas. TrunkDeck rotates through them until one locks.")
                 + (pasteMode(kind) != null ? " You can also paste a frequency table copied from a RadioReference page, a spreadsheet or a CHIRP CSV (Ctrl+V, or right-click → Paste)." : "")));
         boolean tier3 = kind == 3 && dmrFlavor.getSelectedIndex() == 0;
-        demodLabel.setVisible(!dmr && !nxdn && !analog && !edacs);
-        nativeMod.setVisible(!dmr && !nxdn && !analog && !edacs);
-        demodHelp.setVisible(!dmr && !nxdn && !analog && !edacs);
+        demodLabel.setVisible(!dmr && !nxdn && !analog && !edacs && !fusion);
+        nativeMod.setVisible(!dmr && !nxdn && !analog && !edacs && !fusion);
+        demodHelp.setVisible(!dmr && !nxdn && !analog && !edacs && !fusion);
         demodHelp.setText(helpHtml("Auto runs both demodulators (C4FM and LSM/CQPSK for simulcast) on every channel and uses the one with fewer bit errors (shown on the Engine page)."));
         idsLabel.setText(dmr ? "Colour code" : analog ? "Tone squelch" : "IDs (optional)");
         nacLabel.setText(dmr ? "CC" : analog ? "CTCSS" : "NAC");
@@ -365,8 +368,8 @@ public class SystemsPage extends JPanel {
         trunkIds.setVisible(kind == 0 || tier3);
         idsHelp.setText(helpHtml(analog
                 ? "CTCSS (PL) tone in Hz, for example 100.0: only transmissions with that tone are played. Leave blank to hear everything that opens the squelch; the tone heard is then shown on the call."
-                : nxdn || type2 || edacs
-                ? "Not used for " + (type2 ? "Motorola Type II" : edacs ? "EDACS" : "NXDN") + ": leave blank."
+                : nxdn || type2 || edacs || fusion
+                ? "Not used for " + (type2 ? "Motorola Type II" : edacs ? "EDACS" : fusion ? "Fusion (each call shows its DG-ID; name DG-IDs on the Talkgroups page)" : "NXDN") + ": leave blank."
                 : kind == 2
                 ? "Colour code 0-15. Bursts with a different colour code are ignored. A channel can set its own after the frequency, for example 450.0000:3/1."
                 : tier3
@@ -405,6 +408,7 @@ public class SystemsPage extends JPanel {
                 : kind == 3 ? "DMR trunking (Tier III, Capacity Plus, Connect Plus and XPT) has not been tested on a real radio system yet."
                 : analog ? "Analog FM with CTCSS has not been tested on a real radio system yet."
                 : kind == 4 ? "NXDN conventional has not been tested on a real radio system yet."
+                : fusion ? "Yaesu System Fusion has not been tested on a real radio yet."
                 : kind == 5 ? "NXDN Type-C trunking has not been tested on a real radio system yet."
                 : type2 ? "Motorola Type II (SmartNet / SmartZone) has not been tested on a real radio system yet."
                 : edacs ? "EDACS and ProVoice have not been tested on a real radio system yet. ProVoice needs the same IMBE voice codec as P25."
@@ -426,7 +430,7 @@ public class SystemsPage extends JPanel {
     void edit(RadioSystem s) {
         editing = s;
         name.setText(s.name); site.setText(s.site);
-        int kind = s.edacs() ? 8 : s.type2() ? 7 : s.analog() ? 6 : s.nxdnTrunk() ? 5 : s.nxdnConventional() ? 4 : s.dmrTrunk() ? 3 : s.dmrConventional() ? 2 : s.conventional() ? 1 : 0;
+        int kind = s.fusion() ? 9 : s.edacs() ? 8 : s.type2() ? 7 : s.analog() ? 6 : s.nxdnTrunk() ? 5 : s.nxdnConventional() ? 4 : s.dmrTrunk() ? 3 : s.dmrConventional() ? 2 : s.conventional() ? 1 : 0;
         kindBox.setSelectedIndex(kind);
         showKind(kind);
         cc.setText(s.fixedChannels() ? s.channelText() : s.freqText() + nxdnTableText(s));
@@ -502,7 +506,7 @@ public class SystemsPage extends JPanel {
 
     boolean readForm(RadioSystem s) {
         int kind = kindBox.getSelectedIndex();
-        boolean fixed = kind == 1 || kind == 2 || kind == 4 || kind == 6;
+        boolean fixed = kind == 1 || kind == 2 || kind == 4 || kind == 6 || kind == 9;
         if (kind == 6 && p25monitor.analog.FmReceiver.parseTone(nac.getText()) < 0) {
             JOptionPane.showMessageDialog(f, "CTCSS: " + nac.getText().trim() + " is not a standard tone.\nExample: 100.0", "Check the tone", JOptionPane.WARNING_MESSAGE);
             return false;
@@ -536,7 +540,7 @@ public class SystemsPage extends JPanel {
             return false;
         }
         if (name.getText().isBlank()) { JOptionPane.showMessageDialog(f, "Give the system a name."); return false; }
-        s.kind = switch (kind) { case 1 -> RadioSystem.CONVENTIONAL; case 2 -> RadioSystem.DMR; case 3 -> RadioSystem.DMR_TRUNK; case 4 -> RadioSystem.NXDN; case 5 -> RadioSystem.NXDN_TRUNK; case 6 -> RadioSystem.ANALOG; case 7 -> RadioSystem.TYPE2; case 8 -> RadioSystem.EDACS; default -> RadioSystem.TRUNKED; };
+        s.kind = switch (kind) { case 1 -> RadioSystem.CONVENTIONAL; case 2 -> RadioSystem.DMR; case 3 -> RadioSystem.DMR_TRUNK; case 4 -> RadioSystem.NXDN; case 5 -> RadioSystem.NXDN_TRUNK; case 6 -> RadioSystem.ANALOG; case 7 -> RadioSystem.TYPE2; case 8 -> RadioSystem.EDACS; case 9 -> RadioSystem.FUSION; default -> RadioSystem.TRUNKED; };
         s.edacsMode = ((p25monitor.edacs.EdacsSite.Mode) edacsMode.getSelectedItem()).key;
         s.type2Plan = TYPE2_PLANS[Math.max(0, type2Plan.getSelectedIndex())];
         if (obt != null) { s.obtBaseMHz = obt[0]; s.obtSpacingKHz = obt[1]; s.obtOffset = (int) obt[2]; }

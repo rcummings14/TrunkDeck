@@ -604,6 +604,73 @@ final class VoiceCallDecoder {
         synchronized (e) { ActiveCall c = e.callMap.get("N" + f); if (c != null && !c.ended) e.calls.endCall(c, "end of transmission"); }
     }
 
+    // ------------------------------------------------------------------ Yaesu System Fusion (untested on air)
+    /**
+     * A Fusion transmission started on {@code f}, or its callsigns or mode became known. The talkgroup is the DG-ID
+     * (0 on most repeaters), so it can be named, muted or listed like a talkgroup; the caller is the callsign.
+     */
+    void onYsfCall(long f, p25monitor.ysf.YsfDecoder.Call y) {
+        if (e.lockedOut(f)) return;
+        synchronized (e) {
+            ActiveCall c = e.callMap.get("Y" + f);
+            if (c == null || c.ended) { newYsfCall(f, y); return; }
+            boolean imbe = "VW".equals(y.mode);
+            if (imbe != !c.phase2) { c.phase2 = !imbe; c.imbe = imbe ? EngineLibs.newImbe() : EngineLibs.newAmbe(); }
+            fillYsf(c, y);
+            e.listener.callUpdated(c.ev);
+        }
+    }
+
+    private ActiveCall newYsfCall(long f, p25monitor.ysf.YsfDecoder.Call y) {
+        boolean imbe = "VW".equals(y.mode);
+        ActiveCall c = new ActiveCall();
+        c.conventional = true; c.phase2 = !imbe; c.freq = f; c.slot = -1;
+        c.start = System.currentTimeMillis(); c.lastSeen = c.start; c.followStart = c.start; c.lastVoice = c.start;
+        c.followed = true; c.eligible = true; c.tuner = e.tunerFor(f);
+        c.imbe = imbe ? EngineLibs.newImbe() : EngineLibs.newAmbe();
+        if (c.imbe == null && e.ambeMissingLogged.compareAndSet(false, true))
+            e.log("Fusion call: the " + (imbe ? "IMBE" : "AMBE+2") + " voice codec is not available (it needs JMBE 2.x) - the call is followed but silent.");
+        CallEvent ev = new CallEvent();
+        ev.timestamp = e.ts.format(new Date()); ev.protocol = "Fusion"; ev.event = "Group Call";
+        ev.radioId = -1; ev.frequencyMHz = f / 1e6;
+        c.ev = ev;
+        fillYsf(c, y);
+        e.callMap.put("Y" + f, c);
+        e.listener.callStarted(ev);
+        return c;
+    }
+
+    /** Callsigns, DG-ID and mode onto the call's display fields. */
+    private void fillYsf(ActiveCall c, p25monitor.ysf.YsfDecoder.Call y) {
+        c.tg = y.dgid; c.lastLcTg = y.dgid; c.src = -1; c.t = e.tg(y.dgid);
+        if (c.t != null) c.priority = c.t.priority;
+        CallEvent ev = c.ev;
+        ev.talkgroup = y.dgid;
+        ev.to = !y.dest.isEmpty() && !y.dest.startsWith("*") ? y.dest : "ALL";
+        ev.from = y.source;
+        ev.details = "FUSION " + y.mode + "  DG-ID " + y.dgid + (y.uplink.isEmpty() ? "" : "  VIA " + y.uplink) + " (untested)";
+    }
+
+    /** Fusion voice: AMBE+2 frames in the DMR layout (DN, V/D mode 1) or IMBE frames in the P25 layout (VW). */
+    void onYsfVoice(long f, byte[][] frames, boolean imbe) {
+        if (e.lockedOut(f) || frames == null || frames.length == 0) return;
+        ActiveCall c;
+        synchronized (e) { c = e.callMap.get("Y" + f); }
+        if (c == null || c.ended) return;
+        long now = System.currentTimeMillis();
+        if (c.hang) { c.hang = false; c.ptts++; }
+        c.lastVoice = now; c.lastSeen = Math.max(c.lastSeen, now);
+        c.voiceFrames++; c.ldus++;
+        c.voiceMs += frames.length * 20L;
+        if (c.imbe == null || imbe == c.phase2) return;   // no codec, or frames of the other kind
+        playFrames(c, imbe ? frames : codecFrames(frames));
+    }
+
+    /** A Fusion terminator, or a second without frames. */
+    void onYsfEnd(long f) {
+        synchronized (e) { ActiveCall c = e.callMap.get("Y" + f); if (c != null && !c.ended) e.calls.endCall(c, "end of transmission"); }
+    }
+
     // ------------------------------------------------------------------ analog FM (untested on air)
     /** An analog transmission opened the squelch (and matched the channel's CTCSS tone, when it has one). */
     void onAnalogStart(long f, double tone) {

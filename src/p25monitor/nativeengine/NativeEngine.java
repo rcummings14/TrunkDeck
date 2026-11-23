@@ -275,6 +275,7 @@ public final class NativeEngine {
         if (s.type2()) log("Motorola Type II (untested): band plan " + s.type2BandPlan() + "; voice is analog FM or P25 as each grant says. If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         if (s.analog()) log("Analog FM conventional (untested): noise squelch level " + s.squelch + (s.channels.stream().anyMatch(c -> s.toneFor(Math.round(c.mhz * 1e6)) > 0) ? " and CTCSS tone squelch" : "") + ". If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         if (s.nxdn()) log("NXDN " + (s.nxdnTrunk() ? "Type-C trunked" : "conventional") + " (untested; NXDN48 and NXDN96 are detected automatically). If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
+        if (s.fusion()) log("Yaesu System Fusion (untested): DN and VW voice; the caller's callsign is shown on each call. If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         if (s.dmr() || s.nxdn()) io.github.dsheirer.compat.Logger.sink = (who, text) -> log(who + ": " + text);
         if (s.dmr()) log("DMR " + (s.dmrTrunk() ? "trunked (" + s.dmrFlavor + ")" : "conventional") + " (untested). If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         SpeakerMode sm;
@@ -811,6 +812,7 @@ public final class NativeEngine {
     ChannelDecoder voiceDecoder(Tuner t, long f) {
         if (sys != null && sys.dmr()) return dmrDecoder(t, f);
         if (sys != null && sys.nxdn()) return nxdnDecoder(t, f);
+        if (sys != null && sys.fusion()) return ysfDecoder(t, f);
         if (sys != null && sys.analog()) return analogDecoder(t, f);
         int nac = sys == null ? -1 : sys.nacFor(f);
         ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {
@@ -954,6 +956,20 @@ public final class NativeEngine {
                 if (nxdnSite != null) nxdnSite.onMessage(m);
                 onDmrControl(freq, d, text);
             }
+        });
+        d.anchor = () -> tunerAnchor(t, d, freq);
+        return d;
+    }
+
+    /** A channel decoder whose P25 framer is idle and whose samples feed the Yaesu System Fusion receiver. */
+    ChannelDecoder ysfDecoder(Tuner t, long f) {
+        ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {}, 0);
+        final long freq = f;
+        d.ysf = new p25monitor.ysf.YsfDecoder(new p25monitor.ysf.YsfDecoder.Listener() {
+            public void call(p25monitor.ysf.YsfDecoder.Call c) { d.lastFrameAt = System.currentTimeMillis(); voice.onYsfCall(freq, c); }
+            public void voice(byte[][] frames, boolean imbe) { d.lastFrameAt = System.currentTimeMillis(); voice.onYsfVoice(freq, frames, imbe); }
+            public void end() { voice.onYsfEnd(freq); }
+            public void message(String text) { log(text + " on " + mhz(freq) + " MHz"); }
         });
         d.anchor = () -> tunerAnchor(t, d, freq);
         return d;
@@ -1639,7 +1655,7 @@ public final class NativeEngine {
     public List<String> bandPlan() {
         List<String> out = new ArrayList<>();
         RadioSystem s = sys;
-        if (s != null && (s.nxdn() || s.dmr() || s.analog() || s.type2() || s.edacs())) return out;   // P25 channel identifiers: left over from an earlier P25 system
+        if (s != null && (s.nxdn() || s.dmr() || s.analog() || s.type2() || s.edacs() || s.fusion())) return out;   // P25 channel identifiers: left over from an earlier P25 system
         List<ChannelMap.Band> b = new ArrayList<>(map.bands());
         b.sort(Comparator.comparingInt(x -> x.id));
         for (ChannelMap.Band x : b) out.add(String.format(Locale.ROOT, "Band %2d: base %s MHz, spacing %.2f kHz, %s", x.id, mhz(x.baseHz), x.spacingHz / 1000.0,

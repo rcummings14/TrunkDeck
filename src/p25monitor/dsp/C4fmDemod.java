@@ -7,10 +7,14 @@ package p25monitor.dsp;
  * deviation and polarity) -> fractional symbol clock with Gardner timing tracking -> 4-level slicer.
  * A discriminator also decodes CQPSK/LSM to a degree (it sees the same phase change per symbol), but simulcast
  * multipath and amplitude dips hurt it badly; {@link CqpskDemod} is the coherent receiver for those.
+ *
+ * <p>{@link #custom} builds the same receiver for another 4800 baud C4FM mode (Yaesu System Fusion): its own sync
+ * word, and optionally a root raised cosine matched filter in place of the boxcar for a mode whose transmitter uses a
+ * root raised cosine pulse.
  */
 public final class C4fmDemod extends SymbolDemod {
     public interface Sink {
-        /** Frame sync found; the 24 sync symbols are already consumed. */
+        /** Frame sync found; the sync symbols are already consumed. */
         void sync(float quality);
         /** One data symbol: dibit (01=+3, 00=+1, 10=-1, 11=-3) and its normalised level. */
         void symbol(int dibit, float level);
@@ -64,7 +68,56 @@ public final class C4fmDemod extends SymbolDemod {
 
     public long samplesSeen() { return n; }
 
-    public C4fmDemod(Sink sink) { super(sink); }
+    /** Sync pattern (levels +/-1, +/-3), its length, mean and variance. */
+    final int[] syncLevels;
+    final int syncLen;
+    final double syncMean, syncVar;
+    /** Root raised cosine matched filter (unity DC gain), or null for the 1-symbol boxcar. */
+    final float[] rrc;
+    final float[] rrcHist;
+    int rrcPos;
+
+    public C4fmDemod(Sink sink) { this(sink, SYNC_LEVELS, false); }
+
+    private C4fmDemod(Sink sink, int[] levels, boolean rrcFilter) {
+        super(sink);
+        syncLevels = levels.clone();
+        syncLen = levels.length;
+        double sum = 0, sq = 0;
+        for (int l : levels) { sum += l; sq += l * l; }
+        syncMean = sum / syncLen;
+        syncVar = sq / syncLen - syncMean * syncMean;
+        rrc = rrcFilter ? rootRaisedCosine(0.2, 8) : null;
+        rrcHist = rrcFilter ? new float[rrc.length] : null;
+    }
+
+    /**
+     * A C4FM receiver for another mode. {@code syncDibits}: its frame sync as dibits (01=+3, 00=+1, 10=-1, 11=-3).
+     * {@code rrcFilter}: match a root raised cosine (alpha 0.2) transmitter instead of P25's raised cosine.
+     */
+    public static C4fmDemod custom(Sink sink, int[] syncDibits, boolean rrcFilter) {
+        int[] levels = new int[syncDibits.length];
+        for (int i = 0; i < levels.length; i++) levels[i] = switch (syncDibits[i] & 3) { case 1 -> 3; case 0 -> 1; case 2 -> -1; default -> -3; };
+        return new C4fmDemod(sink, levels, rrcFilter);
+    }
+
+    /** Root raised cosine taps at {@link #SPS} samples per symbol over {@code spanSymbols}, scaled to unity DC gain. */
+    static float[] rootRaisedCosine(double alpha, int spanSymbols) {
+        int n = spanSymbols * SPS + 1, mid = n / 2;
+        float[] h = new float[n];
+        double sum = 0;
+        for (int k = 0; k < n; k++) {
+            double t = (k - mid) / (double) SPS, v;
+            if (t == 0) v = 1 - alpha + 4 * alpha / Math.PI;
+            else if (Math.abs(Math.abs(4 * alpha * t) - 1) < 1e-9)
+                v = alpha / Math.sqrt(2) * ((1 + 2 / Math.PI) * Math.sin(Math.PI / (4 * alpha)) + (1 - 2 / Math.PI) * Math.cos(Math.PI / (4 * alpha)));
+            else v = (Math.sin(Math.PI * t * (1 - alpha)) + 4 * alpha * t * Math.cos(Math.PI * t * (1 + alpha))) / (Math.PI * t * (1 - 16 * alpha * alpha * t * t));
+            h[k] = (float) v;
+            sum += v;
+        }
+        for (int k = 0; k < n; k++) h[k] /= (float) sum;
+        return h;
+    }
 
     @Override public String name() { return "C4FM"; }
     @Override public void unlock() { locked = false; cand = false; }
@@ -83,26 +136,36 @@ public final class C4fmDemod extends SymbolDemod {
         float re = i * pi + q * pq, im = q * pi - i * pq;
         pi = i; pq = q;
         float f = (float) (Math.atan2(im, re) * (FS / (2 * Math.PI)));
-        boxSum += f - box[boxPos];
-        box[boxPos] = f;
-        if (++boxPos == SPS) boxPos = 0;
-        float v = boxSum / SPS;
+        float v;
+        if (rrc == null) {
+            boxSum += f - box[boxPos];
+            box[boxPos] = f;
+            if (++boxPos == SPS) boxPos = 0;
+            v = boxSum / SPS;
+        } else {
+            rrcHist[rrcPos] = f;
+            float acc = 0;
+            for (int j = 0, p = rrcPos; j < rrc.length; j++) { acc += rrc[j] * rrcHist[p]; if (--p < 0) p = rrc.length - 1; }
+            if (++rrcPos == rrc.length) rrcPos = 0;
+            v = acc;
+        }
         long t = n++;
         y[(int) (t & MASK)] = v;
         discSum += v; discSq += (double) v * v; discN++;
 
         // ---- frame sync correlator (normalised correlation coefficient with the +/-3 sync pattern)
         float r = 0;
-        if (t >= 23 * SPS) {
+        int L = syncLen;
+        if (t >= (L - 1) * SPS) {
             double sy = 0, syy = 0, ssy = 0;
-            for (int s = 0; s < 24; s++) {
-                float yy = y[(int) ((t - (23 - s) * SPS) & MASK)];
-                sy += yy; syy += yy * yy; ssy += SYNC_LEVELS[s] * yy;
+            for (int s = 0; s < L; s++) {
+                float yy = y[(int) ((t - (L - 1 - s) * SPS) & MASK)];
+                sy += yy; syy += yy * yy; ssy += syncLevels[s] * yy;
             }
-            // pattern stats: 11 x (+3), 13 x (-3): sum = -6, sumsq = 216
-            double ms = -6.0 / 24, vs = 216.0 / 24 - ms * ms;
-            double my = sy / 24, vy = syy / 24 - my * my;
-            double cov = ssy / 24 - ms * my;
+            // pattern stats (P25: 11 x (+3), 13 x (-3): mean -0.25, variance 8.9375)
+            double ms = syncMean, vs = syncVar;
+            double my = sy / L, vy = syy / L - my * my;
+            double cov = ssy / L - ms * my;
             if (vy > 1e-6) r = (float) (cov / Math.sqrt(vs * vy));
         }
         rr[(int) (t & MASK)] = r;
@@ -132,14 +195,15 @@ public final class C4fmDemod extends SymbolDemod {
         double frac = den < 0 ? 0.5 * (rm - rp) / den : 0;
         if (frac > 0.5) frac = 0.5; else if (frac < -0.5) frac = -0.5;
         double tp = peak + frac;
-        // least-squares fit y = a*level + b over the 24 sync symbols
+        // least-squares fit y = a*level + b over the sync symbols
+        int L = syncLen;
         double sy = 0, ssy = 0;
-        for (int s = 0; s < 24; s++) {
-            float yy = at(tp - (23 - s) * SPS);
-            sy += yy; ssy += SYNC_LEVELS[s] * yy;
+        for (int s = 0; s < L; s++) {
+            float yy = at(tp - (L - 1 - s) * SPS);
+            sy += yy; ssy += syncLevels[s] * yy;
         }
-        double ms = -6.0 / 24, my = sy / 24;
-        double a = (ssy / 24 - ms * my) / (216.0 / 24 - ms * ms);
+        double ms = syncMean, my = sy / L;
+        double a = (ssy / L - ms * my) / syncVar;
         double b = my - a * ms;
         if (Math.abs(a) < 50) return; // no real deviation: noise
         boolean wasLocked = locked && Math.abs(tp - lastSyncAt) < 40000;
@@ -149,7 +213,7 @@ public final class C4fmDemod extends SymbolDemod {
         locked = true;
         lastSyncAt = tp;
         nextT = tp + SPS;
-        prevLevel = -3;
+        prevLevel = syncLevels[L - 1];
         lastQuality = r0;
         syncs++;
         sink.sync(r0);

@@ -1,7 +1,7 @@
 # TrunkDeck 1.7.5 — P25 Phase 1 and Phase 2 trunking monitor (Windows & Linux)
 
 TrunkDeck is a scanner-style dashboard for **P25 trunked radio systems** (Phase 1 control channel; Phase 1 and Phase 2 voice).
-New in 1.7.5 and **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), EDACS / ProVoice and analog FM systems (see below). Type in a control channel, load your
+New in 1.7.5 and **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), EDACS / ProVoice, Yaesu System Fusion and analog FM systems (see below). Type in a control channel, load your
 talkgroups from a CSV file, plug in an Airspy R2, an Airspy Mini or one or two RTL-SDR dongles (or, new and untested, an SDRplay, HackRF One, LimeSDR or Ettus USRP), press **START MONITORING**, and watch (and hear) the system
 live: talkgroup, name, frequency, radio ID, call timer, encryption and emergency flags, a control-channel decode meter, an
 activity graph, and a table of **every call that is on the air right now**.
@@ -10,7 +10,7 @@ TrunkDeck decodes everything itself with the **TrunkDeck engine**, its own P25 d
 It talks to your Airspy R2, Airspy Mini and RTL-SDR dongles directly. No other radio program is needed. SDRplay, HackRF, LimeSDR and USRP
 receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *Supported receivers*.
 
-**New in 1.7.5 – DMR, NXDN, Motorola Type II, EDACS / ProVoice and analog FM (UNTESTED)**
+**New in 1.7.5 – DMR, NXDN, Motorola Type II, EDACS / ProVoice, Yaesu System Fusion and analog FM (UNTESTED)**
 * **UNTESTED:** these system types are new and **have not been tested on real radio systems**. They were tested with
   simulated signals only. If something doesn't work, please report it on **GitHub Issues**
   (<https://github.com/rcummings14/TrunkDeck/issues>) and attach *Copy diagnostics* from the Engine page. P25 is unchanged.
@@ -30,7 +30,11 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
     how long scanning waits on a channel after a transmission ends, so you hear the reply.
   * **Motorola Type II SmartNet / SmartZone:** see *Motorola Type II* under *Using TrunkDeck*.
   * **EDACS / ProVoice:** see *EDACS and ProVoice* under *Using TrunkDeck*.
-* DMR and NXDN voice use the AMBE+2 codec: they need JMBE 2.x, the same as P25 Phase 2.
+  * **Yaesu System Fusion (conventional):** repeater or simplex frequencies with optional names (`147.1650 WV8HC`).
+    DN and VW voice are detected automatically. Each call shows the caller's callsign, the destination and the DG-ID
+    (used as the talkgroup, so DG-IDs can be named and muted on the Talkgroups page). Analog FM users on a mixed-mode
+    repeater are not played.
+* DMR, NXDN and Fusion DN voice use the AMBE+2 codec: they need JMBE 2.x, the same as P25 Phase 2.
 * **Set up from RadioReference** imports these system types now. DMR, NXDN and SmartNet / SmartZone systems become the
   matching kind. EDACS systems import as EDACS (see *EDACS and ProVoice*). Other analog trunked systems (LTR, MPT,
   Passport) become analog FM channels, listened to directly.

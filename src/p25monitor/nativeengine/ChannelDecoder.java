@@ -259,6 +259,8 @@ final class ChannelDecoder {
     p25monitor.dmr.DmrDecoder dmr;
     /** NXDN demod (both rates) on this same 48 kHz channel. Null unless the system is NXDN. */
     p25monitor.nxdn.NxdnDecoder nxdn;
+    /** Yaesu System Fusion receiver on this same 48 kHz channel. Null unless the system is Fusion. */
+    p25monitor.ysf.YsfDecoder ysf;
     /** Analog FM receiver (squelch, CTCSS) on this same 48 kHz channel. Null unless the system is analog. */
     p25monitor.analog.FmReceiver analog;
     /** Motorola Type II control channel receiver on this same 48 kHz channel. Null unless this is a Type II control channel. */
@@ -318,10 +320,11 @@ final class ChannelDecoder {
         for (Demod pa : paths) pa.demod.process(oi, oq, m);
         if (dmr != null && m > 0) dmr.baseband(oi, oq, m);
         if (nxdn != null && m > 0) nxdn.baseband(oi, oq, m);
-        // A synced DMR / NXDN decoder is frame lock, as decoded P25 frames are: the FLL leaves the filter alone and,
+        if (ysf != null && m > 0) ysf.baseband(oi, oq, m);
+        // A synced DMR / NXDN / Fusion decoder is frame lock, as decoded P25 frames are: the FLL leaves the filter alone and,
         // once locked, holds it (see fll()). Without this the FLL followed adjacent-channel signals between
         // transmissions and walked the filter a whole channel (12.5 kHz) away.
-        if ((dmr != null && dmr.synced()) || (nxdn != null && nxdn.synced())) { lastNidSampleAt = samples; digitalLocked = true; }
+        if ((dmr != null && dmr.synced()) || (nxdn != null && nxdn.synced()) || (ysf != null && ysf.synced())) { lastNidSampleAt = samples; digitalLocked = true; }
         if (analog != null && m > 0) analog.baseband(oi, oq, m);
         if (type2 != null && m > 0) type2.baseband(oi, oq, m);
         if (edacs != null && m > 0) edacs.baseband(oi, oq, m);
@@ -392,6 +395,7 @@ final class ChannelDecoder {
         if (provoice != null && analog == null) return "2FSK 9600 (ProVoice)";
         if (analog != null) return "FM (analog)" + (analog.tone() > 0 ? String.format(java.util.Locale.ROOT, " PL %.1f", analog.tone()) : "");
         if (nxdn != null) { String m = nxdn.mode(); return "4FSK (" + (m == null ? "NXDN" : m) + ")"; }
+        if (ysf != null) { String m = ysf.mode(); return "C4FM (Fusion" + (m == null ? "" : " " + m) + ")"; }
         return dmr != null ? "4FSK (DMR)" : active.demod.name();
     }
     P25Framer framer() { return active.framer; }
@@ -427,14 +431,14 @@ final class ChannelDecoder {
 
     /** Total measured carrier offset in Hz (AFC + residual). */
     double frequencyError() {
-        // On a DMR / NXDN channel the P25 demodulator's residual means nothing; their own symbol processor measures it.
-        if (dmr != null || nxdn != null) {
-            double r = dmr != null ? dmr.carrierErrorHz() : nxdn.carrierErrorHz();
+        // On a DMR / NXDN / Fusion channel the P25 demodulator's residual means nothing; their own symbol processor measures it.
+        if (dmr != null || nxdn != null || ysf != null) {
+            double r = dmr != null ? dmr.carrierErrorHz() : nxdn != null ? nxdn.carrierErrorHz() : ysf.carrierErrorHz();
             return afcHz + (Double.isNaN(r) ? 0 : r);
         }
         return afcHz + active.demod.freqErrorHz;
     }
-    boolean locked(long now) { return now - lastFrameAt < 2500 || (dmr != null && dmr.synced()) || (nxdn != null && nxdn.synced()) || (analog != null && analog.open()) || (type2 != null && type2.locked()) || (edacs != null && edacs.locked()) || (provoice != null && provoice.locked()); }
+    boolean locked(long now) { return now - lastFrameAt < 2500 || (dmr != null && dmr.synced()) || (nxdn != null && nxdn.synced()) || (ysf != null && ysf.synced()) || (analog != null && analog.open()) || (type2 != null && type2.locked()) || (edacs != null && edacs.locked()) || (provoice != null && provoice.locked()); }
 
     /** Resets since the last frame lock. Drives the trunked "give up after 8" rule, and goes back to 0 when sync returns. */
     int syncResets;
