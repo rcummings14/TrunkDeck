@@ -44,7 +44,7 @@ TrunkDeck's DMR and NXDN decoders are built on SDRTrunk's, by Dennis Sheirer (GP
 https://github.com/DSheirer/sdrtrunk), included as source code in source/src/io/github/dsheirer: the DMR and NXDN
 symbol processors, framers, message processors and message classes, and the DSP and error correction classes they
 use. Each file keeps its copyright and licence header; files changed for TrunkDeck say so in their header, and
-source/src/io/github/dsheirer/README-TRUNKDECK.txt lists the SDRTrunk version and every change. The adapters that
+source/src/io/github/dsheirer/README-TRUNKDECK.txt gives the SDRTrunk version and summarises the changes. The adapters that
 connect them to TrunkDeck (source/src/p25monitor/dmr/DmrDecoder.java, source/src/p25monitor/nxdn/NxdnDecoder.java)
 and the small stand-in classes in io/github/dsheirer/compat are TrunkDeck's own.
 
