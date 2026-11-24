@@ -184,6 +184,8 @@ public final class NativeEngine {
     List<List<Long>> ccGroups = new ArrayList<>();
     int ccGroup;
     long lastTsbkAt, startedAt, lastHuntAt, lastCcPlanAt, huntCount, usageDecayAt;
+    /** The control channel is decoded as Phase 2 TDMA (LCCH): set in Systems, or tried by Auto when Phase 1 finds nothing. */
+    volatile boolean ccTdma;
     volatile boolean lsmPreferred;
     volatile String ccDemodLogged = "";
     volatile long retunes, follows, phase2Calls;
@@ -295,7 +297,7 @@ public final class NativeEngine {
         starts++;
         if (running) stop(true);   // a restart: streams stay connected (1.4.4)
         undecodable.clear(); tdma.clear(); ambeMissingLogged.set(false); voiceOnCcLogged.clear(); retunes = 0; follows = 0; phase2Calls = 0; emptyGrants = 0; recentlyEndedChannel.clear(); dmrRestHz = 0; dmrRestAt = 0; dmrWanted.clear(); lastDiag = null; iqRecorded = 0;
-        lsmPreferred = "lsm".equalsIgnoreCase(s.nativeModulation); ccDemodLogged = "";
+        lsmPreferred = "lsm".equalsIgnoreCase(s.nativeModulation); ccDemodLogged = ""; ccTdma = "tdma".equalsIgnoreCase(s.nativeModulation);
         usage.clear(); missed.clear(); missedRecent.clear(); peakConcurrent = 0; tuners.clear(); huntCount = 0; fixedWideCenter = 0; widePlanned = false;
         conventional = s.fixedChannels(); parkedDecoders.clear(); scanTuner = null; scanGroups = List.of(); scanIndex = 0; lastScanAt = 0;
         speaker.holdFrequency(0); lastAnalogHeard = 0; lastAnalogAt = 0;
@@ -1127,7 +1129,7 @@ public final class NativeEngine {
         if (calls.callsOn(scanTuner) > 0) return true;
         if (analogDelay(now)) return true;
         for (ChannelDecoder d : decodersOn(scanTuner)) {
-            if (now - d.lastFrameAt < 1200) return true;
+            if (now - d.lastFrameAt < 1200 && !lockedOut(d.freqHz)) return true;   // a locked-out channel does not hold the scan
             p25monitor.analog.FmReceiver fm = d.analog;
             long cs = fm == null ? 0 : fm.carrierSince;
             if (cs > 0 && now - cs < TONE_CHECK_MS && !lockedOut(d.freqHz)) return true;   // a carrier, tone not checked yet
@@ -1370,11 +1372,11 @@ public final class NativeEngine {
             synchronized (this) { cc.plan(now); }
             boolean anyLock = false;
             for (ChannelDecoder d : ccDecoders) if (d.locked(now)) anyLock = true;
-            for (ChannelDecoder d : ccDecoders) if (d.locked(now) && d.decided()) {
-                String k = d.demod().name();
+            for (ChannelDecoder d : ccDecoders) if (d.locked(now) && (d.decided() || d.p2 != null && now - lastTsbkAt < 3000)) {
+                String k = d.p2 != null ? "TDMA" : d.demod().name();
                 if (!k.equals(ccDemodLogged)) {
-                    ccDemodLogged = k; lsmPreferred = d.lsmActive();
-                    log("Control channel " + mhz(d.freqHz) + ": " + d.demodSummary());
+                    ccDemodLogged = k; if (d.p2 == null) lsmPreferred = d.lsmActive();
+                    log("Control channel " + mhz(d.freqHz) + ": " + (d.p2 != null ? "H-DQPSK (Phase 2 TDMA control channel, LCCH)" : d.demodSummary()));
                     if (d.lsmActive() && sys != null && "c4fm".equalsIgnoreCase(sys.nativeModulation))
                         log("This site decodes better as LSM/CQPSK (simulcast). Consider Systems > Demodulator: Auto or LSM.");
                 }
@@ -1390,6 +1392,7 @@ public final class NativeEngine {
             else state = "LOOKING FOR CONTROL CHANNEL";
             // no control data for 6 s: the site may have moved to its alternate control channel
             if ((mode == Mode.RTL || huntable) && now - Math.max(lastTsbkAt, Math.max(startedAt, lastHuntAt)) > 6000) cc.hunt(now);
+            else if (mode == Mode.FILE && !ccTdma && msgTotal == 0 && now - Math.max(startedAt, lastHuntAt) > 6000) cc.fileTdma(now);
         } catch (Throwable t) { log("housekeeping: " + t); }
     }
 
@@ -1451,8 +1454,10 @@ public final class NativeEngine {
     volatile long lastAnalogHeard;
     /** When analog audio was last heard (for the scan delay). */
     volatile long lastAnalogAt;
-    /** True while an analog FM system is running: the Monitor page shows Hold / Scan only then. */
+    /** True while an analog FM system is running. */
     public boolean analogRunning() { RadioSystem s = sys; return running && s != null && s.analog(); }
+    /** True while an analog FM or P25 conventional system is running: the Monitor page shows Hold / Scan / Up / Down / Lockout only then. */
+    public boolean holdRunning() { RadioSystem s = sys; return running && s != null && (s.analog() || s.conventional()); }
     /** The analog channel held (Hz), or 0 while scanning. */
     public long holdFreq() { return speaker.holdFreq; }
     public static String mhzText(long hz) { return mhz(hz); }
@@ -1461,7 +1466,7 @@ public final class NativeEngine {
      * on the group with that channel. Channels the receivers already cover are still recorded. Returns why not, or null.
      */
     public String holdAnalog() {
-        if (!analogRunning()) return "Hold works on analog systems.";
+        if (!holdRunning()) return "Hold works on analog and P25 conventional systems.";
         long f = 0;
         ActiveCall s = speaker.speaker;
         if (s != null && !s.ended && s.conventional && s.freq > 0) f = s.freq;
@@ -1484,7 +1489,7 @@ public final class NativeEngine {
      * starts from the channel being heard (or the last one heard), else from the first / last channel.
      */
     public String stepAnalog(int dir) {
-        if (!analogRunning()) return "Up / Down work on analog systems.";
+        if (!holdRunning()) return "Up / Down work on analog and P25 conventional systems.";
         List<Long> fs = analogChannels();
         if (fs.isEmpty()) return "This system has no channels.";
         List<Long> all = fs;
@@ -1516,7 +1521,7 @@ public final class NativeEngine {
 
     /** What Lockout would lock out: the channel playing, else the one held, else the last one heard (0 = nothing yet). */
     public long lockoutTarget() {
-        if (!analogRunning()) return 0;
+        if (!holdRunning()) return 0;
         ActiveCall s = speaker.speaker;
         if (s != null && !s.ended && s.conventional && s.freq > 0) return s.freq;
         if (speaker.holdFreq > 0) return speaker.holdFreq;
@@ -1536,6 +1541,10 @@ public final class NativeEngine {
             ActiveCall c = callMap.get("A" + hz);
             if (c != null && !c.ended) calls.endCall(c, "locked out");
         }
+        synchronized (this) {
+            ActiveCall c = callMap.get("C" + hz);
+            if (c != null && !c.ended) calls.endCall(c, "locked out");
+        }
         if (lastAnalogHeard == hz) { lastAnalogHeard = 0; lastAnalogAt = 0; }
         String name = channelName(hz);
         log("Lockout: " + (name.isEmpty() ? "" : name + " ") + mhz(hz) + " MHz - skipped until it is unlocked (Monitor page, Locked out)");
@@ -1552,7 +1561,7 @@ public final class NativeEngine {
     /** The locked-out channels of the running analog system, in the system's order. */
     public List<Long> lockedOutChannels() {
         List<Long> l = new ArrayList<>();
-        if (!analogRunning()) return l;
+        if (!holdRunning()) return l;
         for (long f : analogChannels()) if (lockedOut(f)) l.add(f);
         return l;
     }

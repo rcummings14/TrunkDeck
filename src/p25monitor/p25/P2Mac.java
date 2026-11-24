@@ -12,6 +12,9 @@ import java.util.List;
  * <li>MAC_IDLE / MAC_ACTIVE / MAC_HANGTIME / MAC_SIGNAL: up to three MAC structures (opcode octet + fields), e.g.
  *     Group Voice Channel User (abbreviated 0x01: service options, group, source; extended 0x21).</li>
  * </ul>
+ * On a Phase 2 TDMA control channel the MAC PDUs come in LCCH bursts (DUID 13, coded like a SACCH, not scrambled):
+ * 152 bits of header and structures, the site's 12-bit NAC, then a CRC-16 (CCITT polynomial, preset 0, inverted) over
+ * the 164 bits before it. Layout checked against 1896 LCCH PDUs decoded by DSD-FME on a Harris site.
  */
 public final class P2Mac {
     public static final int SIGNAL = 0, PTT = 1, END_PTT = 2, IDLE = 3, ACTIVE = 4, HANGTIME = 6;
@@ -21,6 +24,8 @@ public final class P2Mac {
 
     public final byte[] bits;    // one bit per byte
     public final boolean facch, crcOk;
+    /** From an LCCH (TDMA control channel) burst. */
+    public final boolean lcch;
     public final int rsFixed;    // RS symbols corrected
     public int type = -1, alg = -1, keyId, source = -1, group = -1, serviceOptions = -1;
     /** Opcodes of the MAC structures in this PDU (IDLE/ACTIVE/HANGTIME/SIGNAL). */
@@ -28,11 +33,34 @@ public final class P2Mac {
     /** Bit offset of each of those structures (its opcode octet), in the same order. */
     public final List<Integer> offsets = new ArrayList<>();
     /** Payload length in bits (CRC excluded). */
-    public int payloadBits() { return facch ? 144 : 168; }
+    public int payloadBits() { return lcch ? 152 : facch ? 144 : 168; }
+    /** The NAC an LCCH PDU carries, else -1. */
+    public int nac() { return lcch && crcOk ? get(152, 12) : -1; }
 
-    P2Mac(byte[] bits, boolean facch, boolean crcOk, int rsFixed) {
-        this.bits = bits; this.facch = facch; this.crcOk = crcOk; this.rsFixed = rsFixed;
+    P2Mac(byte[] bits, boolean facch, boolean crcOk, int rsFixed) { this(bits, facch, false, crcOk, rsFixed); }
+
+    P2Mac(byte[] bits, boolean facch, boolean lcch, boolean crcOk, int rsFixed) {
+        this.bits = bits; this.facch = facch; this.lcch = lcch; this.crcOk = crcOk; this.rsFixed = rsFixed;
         if (crcOk) parse();
+    }
+
+    /** An LCCH MAC PDU from its 180 decoded bits (one bit per byte), the CRC-16 checked here. */
+    public static P2Mac lcch(byte[] bits) { return new P2Mac(bits, false, true, crc16(bits, 164) == get(bits, 164, 16), 0); }
+
+    static int get(byte[] b, int off, int len) { int v = 0; for (int i = 0; i < len; i++) v = (v << 1) | b[off + i]; return v; }
+
+    /** CRC-16 of the first n bits as an LCCH sends it: polynomial x^16 + x^12 + x^5 + 1, preset 0, inverted. */
+    public static int crc16(byte[] b, int n) {
+        int r = 0;
+        for (int i = 0; i < n; i++) { int fb = ((r >> 15) & 1) ^ b[i]; r = (r << 1) & 0xFFFF; if (fb != 0) r ^= 0x1021; }
+        return r ^ 0xFFFF;
+    }
+
+    /** Fills the LCCH NAC and CRC-16 (bits 152-179). Test-signal side. */
+    public static void lcchFill(byte[] b, int nac) {
+        for (int i = 0; i < 12; i++) b[152 + i] = (byte) ((nac >> (11 - i)) & 1);
+        int c = crc16(b, 164);
+        for (int i = 0; i < 16; i++) b[164 + i] = (byte) ((c >> (15 - i)) & 1);
     }
 
     /** A MAC PDU from its decoded bits (payload then CRC-12, one bit per byte), the CRC checked here. */
@@ -54,7 +82,7 @@ public final class P2Mac {
 
     void parse() {
         type = get(0, 3);
-        int payload = facch ? 144 : 168;
+        int payload = payloadBits();
         switch (type) {
             case PTT -> { alg = get(80, 8); keyId = get(88, 16); source = get(104, 24); group = get(128, 16); }
             case END_PTT -> { source = get(104, 24); group = get(128, 16); }
@@ -71,6 +99,8 @@ public final class P2Mac {
                     int len = length(op);
                     // manufacturer-specific (opcode 10xxxxxx): MFID in octet 2, length in octet 3
                     if (len <= 0 && (op & 0xC0) == 0x80 && at + 24 <= payload) len = get(at + 16, 8);
+                    // Null Avoid Zero Bias (0x08): filler, its length in octet 1
+                    if (op == 0x08 && at + 16 <= payload) len = get(at + 8, 8);
                     if (len < 3) break;
                     at += 8 * len;
                 }
@@ -108,8 +138,9 @@ public final class P2Mac {
     }
 
     @Override public String toString() {
-        if (!crcOk) return (facch ? "FACCH" : "SACCH") + " CRC error";
-        StringBuilder sb = new StringBuilder(facch ? "FACCH " : "SACCH ").append(typeName());
+        String kind = lcch ? "LCCH" : facch ? "FACCH" : "SACCH";
+        if (!crcOk) return kind + " CRC error";
+        StringBuilder sb = new StringBuilder(kind).append(' ').append(typeName());
         if (group >= 0) sb.append(" TG ").append(group);
         if (source > 0) sb.append(" SRC ").append(source);
         if (type == PTT) sb.append(String.format(" ALG %02X KEY %04X", alg, keyId));

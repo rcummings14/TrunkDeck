@@ -49,6 +49,16 @@ public final class P2Builder {
         return burst;
     }
 
+    /** LCCH burst (TDMA control channel): 180 bits whose NAC and CRC-16 are already filled ({@link P2Mac#lcchFill}), SACCH coding. */
+    public static byte[] lcch(byte[] bits) {
+        int[] c = new int[63];
+        for (int s = 0; s < 30; s++) { int v = 0; for (int i = 0; i < 6; i++) v = (v << 1) | bits[6 * s + i]; c[57 - s] = v; }
+        P2Framer.RS.encode(c);
+        byte[] burst = new byte[320];
+        for (int s = 0; s < 52; s++) for (int i = 0; i < 6; i++) burst[P2Framer.SACCH_POS[6 * s + i]] = (byte) (c[57 - s] >> (5 - i) & 1);
+        setDuid(burst, P2Framer.DUID_LCCH_U);
+        return burst;
+    }
     static void frame(byte[] burst, int off, byte[] f) { for (int i = 0; i < 72; i++) burst[off + i] = (byte) (f[i >> 3] >> (7 - (i & 7)) & 1); }
 
     /** 4V burst: four 72-bit AMBE+2 frames (9 bytes each) and 24 ESS-B bits. */

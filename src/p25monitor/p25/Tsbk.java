@@ -123,7 +123,7 @@ public final class Tsbk {
         return s.toString();
     }
 
-    static String so(int so) {
+    public static String so(int so) {
         StringBuilder s = new StringBuilder();
         if (emergency(so)) s.append(" EMERGENCY");
         if (encrypted(so)) s.append(" ENCRYPTED");
@@ -131,7 +131,7 @@ public final class Tsbk {
         return s.toString();
     }
 
-    static String ch(int ch, ChannelMap map) {
+    public static String ch(int ch, ChannelMap map) {
         String base = (ch >> 12) + "-" + (ch & 0xfff);
         if (map == null) return base;
         long f = map.frequency(ch);

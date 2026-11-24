@@ -59,7 +59,7 @@ public class MonitorPage extends JPanel {
     final JCheckBox backlight = new JCheckBox("Backlight on calls");
     final JButton customize = new JButton("Colors\u2026");
     final JCheckBox tintApp = new JCheckBox("Tint the whole app in these colours");
-    /** Analog systems only (shown while one is running): Hold the channel being heard, Scan to go back to all. */
+    /** Analog and P25 conventional systems only (shown while one is running): Hold the channel being heard, Scan to go back to all. */
     final JButton holdBtn = MainFrame.button("Hold", null, Theme.CYAN), scanBtn = MainFrame.button("Scan", null, Theme.CYAN),
             downBtn = MainFrame.button("Down", null, Theme.CYAN), upBtn = MainFrame.button("Up", null, Theme.CYAN),
             lockBtn = MainFrame.button("Lockout", null, Theme.CYAN), lockedBtn = MainFrame.button("Locked out", null, Theme.AMBER);
@@ -108,7 +108,7 @@ public class MonitorPage extends JPanel {
         upBtn.addActionListener(e -> { String why = f.nativeEngine.stepAnalog(1); if (why != null) f.toast(why); refreshHold(); });
         holdLbl.setForeground(Theme.AMBER);
         holdLbl.setFont(Theme.ui(Font.BOLD, 13f));
-        holdBtn.setToolTipText("Stay on the analog channel you are hearing (or the last one heard): only it plays until you press Scan. Other channels are still recorded.");
+        holdBtn.setToolTipText("Stay on the channel you are hearing (or the last one heard): only it plays until you press Scan. Other channels are still recorded.");
         scanBtn.setToolTipText("Go back to scanning every channel");
         holdBtn.addActionListener(e -> { String why = f.nativeEngine.holdAnalog(); if (why != null) f.toast(why); refreshHold(); });
         scanBtn.addActionListener(e -> { f.nativeEngine.scanAnalog(); refreshHold(); });
@@ -711,9 +711,9 @@ public class MonitorPage extends JPanel {
         try { f.app.save(s); } catch (Exception ex) { f.toast("Could not save the lockout: " + ex.getMessage()); }
     }
 
-    /** Analog systems only: Hold / Scan under the display, and which channel is held. */
+    /** Analog and P25 conventional systems only: Hold / Scan under the display, and which channel is held. */
     void refreshHold() {
-        boolean on = f.nativeEngine.analogRunning();
+        boolean on = f.nativeEngine.holdRunning();
         long hf = on ? f.nativeEngine.holdFreq() : 0;
         if (holdBar.isVisible() != on) { holdBar.setVisible(on); holdBar.revalidate(); }
         holdBtn.setEnabled(on && hf == 0);

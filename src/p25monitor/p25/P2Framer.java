@@ -173,6 +173,11 @@ public final class P2Framer {
                 if (m.crcOk) { macOk++; if (scrambled) scrambledMacOk++; } else { macBad++; if (scrambled) scrambledMacBad++; }
                 out.mac(ch, m);
             }
+            case DUID_LCCH_U -> {
+                P2Mac m = lcch(burst);
+                if (m.crcOk) macOk++; else macBad++;
+                out.mac(ch, m);
+            }
             default -> {}
         }
     }
@@ -203,6 +208,16 @@ public final class P2Framer {
         int pl = facch ? 144 : 168;
         boolean ok = fixed >= 0 && P2Mac.crc12(bits, pl) == get(bits, pl, 12);
         return new P2Mac(bits, facch, ok, fixed);
+    }
+
+    /** An LCCH burst (TDMA control channel): coded like a SACCH, checked with a CRC-16 instead of the CRC-12. */
+    static P2Mac lcch(byte[] burst) {
+        int[] c = new int[63];
+        for (int s = 0; s < 52; s++) { int v = 0; for (int i = 0; i < 6; i++) v = (v << 1) | burst[SACCH_POS[6 * s + i]]; c[57 - s] = v; }
+        int fixed = RS.decode(c, SACCH_ERAS, 57);
+        byte[] bits = new byte[180];
+        for (int s = 0; s < 30; s++) for (int i = 0; i < 6; i++) bits[6 * s + i] = (byte) (c[57 - s] >> (5 - i) & 1);
+        return fixed >= 0 ? P2Mac.lcch(bits) : new P2Mac(bits, false, true, false, fixed);
     }
 
     static int get(byte[] b, int off, int len) { int v = 0; for (int i = 0; i < len; i++) v = (v << 1) | b[off + i]; return v; }

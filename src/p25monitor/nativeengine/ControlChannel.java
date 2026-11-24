@@ -2,6 +2,7 @@ package p25monitor.nativeengine;
 
 import p25monitor.p25.*;
 import java.util.*;
+import p25monitor.RadioSystem;
 
 /**
  * The control-channel side: decoders for every listed control channel inside the control tuner's window (the active
@@ -45,6 +46,18 @@ final class ControlChannel {
         if (e.sys != null && e.sys.nxdnTrunk()) {
             e.ccDecoders.clear();
             for (long f : fs) e.ccDecoders.add(e.nxdnDecoder(e.ccTuner, f));
+            return;
+        }
+        if (e.ccTdma) {
+            for (long f : fs) {
+                ChannelDecoder d = new ChannelDecoder(e.ccTuner.decoderRate(), e.ccTuner.decoderCenter(f), f, new P2Framer.Listener() {
+                    public void mac(int slot, P2Mac m) { if (m.lcch) onLcch(m, f); }
+                }, afc);
+                d.anchor = () -> anchor(d);
+                list.add(d);
+            }
+            e.ccDecoders.clear();
+            e.ccDecoders.addAll(list);
             return;
         }
         for (long f : fs) {
@@ -136,6 +149,50 @@ final class ControlChannel {
             e.msgs.add(new NativeEngine.Msg(now, fromHz / 1e6, text));
             while (e.msgs.size() > 3000) e.msgs.pollFirst();
             e.lastMsg = text;
+        }
+    }
+
+    /**
+     * A MAC PDU from a Phase 2 TDMA control channel (LCCH). The abbreviated messages (opcodes 0x40-0x7F) carry the same
+     * fields as the single-block TSBK with opcode - 0x40 (the TSBK's octets 2-9 follow the opcode octet), so they are
+     * handled as TSBKs. The explicit group grants (0xC0 grant, 0xC3 grant update) have their own layout. Manufacturer
+     * messages (Harris regroup / patch and others) are listed on the Engine page only.
+     */
+    void onLcch(P2Mac m, long fromHz) {
+        if (!m.crcOk) { synchronized (e) { e.tsbkBad++; } return; }
+        int nac = m.nac();
+        for (int k = 0; k < m.opcodes.size(); k++) {
+            int op = m.opcodes.get(k), at = m.offsets.get(k), end = m.payloadBits();
+            if (op == 0x08) continue;                                     // filler (null avoid zero bias)
+            if (op >= 0x40 && op <= 0x7F && at + 72 <= end) {
+                byte[] b = new byte[12];
+                b[0] = (byte) (0x80 | (op & 0x3F));
+                for (int i = 0; i < 8; i++) b[2 + i] = (byte) m.get(at + 8 + 8 * i, 8);
+                onTsbk(new Tsbk(b, nac), fromHz);
+                continue;
+            }
+            String text;
+            synchronized (e) {
+                ChannelMap map = e.map;
+                if (op == 0xC0 && at + 88 <= end) {                       // SO, Ch(T), Ch(R), group, source
+                    int so = m.get(at + 8, 8), ch = m.get(at + 16, 16), tg = m.get(at + 48, 16), src = m.get(at + 64, 24);
+                    if (map.frequency(ch) > 0) grant(tg, src, ch, so, false, false);
+                    text = "GROUP VOICE GRANT (EXPLICIT) TG:" + tg + " SRC:" + src + " CH:" + Tsbk.ch(ch, map) + Tsbk.so(so);
+                } else if (op == 0xC3 && at + 64 <= end) {                // SO, Ch(T), Ch(R), group
+                    int so = m.get(at + 8, 8), ch = m.get(at + 16, 16), tg = m.get(at + 48, 16);
+                    if (map.frequency(ch) > 0) grant(tg, -1, ch, so, true, false);
+                    text = "GROUP VOICE GRANT UPDATE (EXPLICIT) TG:" + tg + " CH:" + Tsbk.ch(ch, map);
+                } else if ((op & 0xC0) == 0x80 && at + 16 <= end) {
+                    int mfid = m.get(at + 8, 8);
+                    text = (mfid == 0xA4 ? "HARRIS " : mfid == 0x90 ? "MOTOROLA " : String.format("MFID %02X ", mfid)) + String.format("MAC OPCODE %02X", op);
+                } else text = op == 0xD6 ? "SNDCP DATA CHANNEL ANNOUNCEMENT (EXPLICIT)" : String.format("MAC OPCODE %02X", op);
+                long now = System.currentTimeMillis();
+                e.lastTsbkAt = now; e.ccFreqHz = fromHz; if (nac >= 0) e.nac = nac;
+                e.msgTotal++; e.pendingMsgs++;
+                e.msgs.add(new NativeEngine.Msg(now, fromHz / 1e6, text));
+                while (e.msgs.size() > 3000) e.msgs.pollFirst();
+                e.lastMsg = text;
+            }
         }
     }
 
@@ -267,6 +324,24 @@ final class ControlChannel {
     }
 
     // ------------------------------------------------------------------ hunting and placement
+    /** Systems > Demodulator is Auto on a P25 trunked system: a TDMA control channel is tried when Phase 1 finds nothing. */
+    boolean autoTdma() {
+        RadioSystem s = e.sys;
+        return e.modulation() == ChannelDecoder.Modulation.AUTO && (s == null || !"tdma".equalsIgnoreCase(s.nativeModulation)
+                && !(s.dmrTrunk() || s.type2() || s.edacs() || s.nxdnTrunk() || s.fixedChannels()));
+    }
+
+    void tryTdma() {
+        e.ccTdma = true;
+        e.log("No Phase 1 control data for 6 s: trying the control channel as Phase 2 TDMA");
+        buildDecoders(NativeEngine.parseNac(e.sys == null ? "" : e.sys.nac));
+    }
+
+    /** Playing an I/Q file (no hunting): Auto switches to a TDMA control channel once, if Phase 1 found nothing. */
+    void fileTdma(long now) {
+        synchronized (e) { e.lastHuntAt = now; if (!e.ccTdma && autoTdma()) tryTdma(); }
+    }
+
     /**
      * No control data for 6 s: the site uses one control channel at a time (main or alternate). If a listed control
      * channel has no decoder (it is outside the window), retune so it is covered; otherwise cycle through the groups.
@@ -274,6 +349,12 @@ final class ControlChannel {
     void hunt(long now) {
         synchronized (e) {
             e.lastHuntAt = now;
+            // Auto: a site may send its control channel as Phase 2 TDMA; try that before moving on, then go back to Phase 1
+            if (autoTdma()) {
+                e.ccTdma = !e.ccTdma;
+                if (e.ccTdma) { tryTdma(); return; }
+                buildDecoders(NativeEngine.parseNac(e.sys == null ? "" : e.sys.nac));
+            }
             List<Long> missing = new ArrayList<>();
             for (long f : e.ccFreqs) { boolean has = false; for (ChannelDecoder d : e.ccDecoders) if (d.freqHz == f) has = true; if (!has) missing.add(f); }
             if (missing.isEmpty() && e.ccGroups.size() <= 1) return;   // every control channel already has a decoder

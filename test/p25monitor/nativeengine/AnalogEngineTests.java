@@ -162,5 +162,30 @@ public final class AnalogEngineTests {
         check(!ne.lockedOut(other) && ne.lockedOutChannels().isEmpty(), "Unlock brings the channel back");
         s.save(dir);
         check(RadioSystem.load(dir).lockout.isEmpty(), "an unlocked channel stays unlocked after a restart");
+
+        // P25 conventional: the same Hold / Scan / Up / Down / Lockout
+        s.kind = RadioSystem.CONVENTIONAL;
+        s.lockout.clear();
+        ne.scanAnalog();
+        ne.conventional = true; ne.running = true; ne.lastAnalogHeard = 0;
+        check(ne.holdRunning() && !ne.analogRunning(), "Hold / Lockout are offered on a P25 conventional system");
+        long p1 = 155_250_000L, p2 = 155_400_000L;
+        v.onConventional(p1, 0x2D5, new byte[0][], null, null);
+        check(ne.lockoutTarget() == p1, "the P25 channel being heard is what Hold / Lockout take (" + ne.lockoutTarget() + ")");
+        check(ne.holdAnalog() == null && ne.holdFreq() == p1, "Hold stays on the P25 channel heard");
+        ne.stepAnalog(1);
+        check(ne.holdFreq() == 155_370_000L, "Up steps to the next channel in the list (" + ne.holdFreq() + ")");
+        ne.scanAnalog();
+        check(ne.holdFreq() == 0, "Scan goes back to every channel");
+        v.onConventionalEnd(p1);
+        ne.lockout(p2);
+        v.onConventional(p2, 0x2D5, new byte[0][], null, null);
+        ActiveCall locked = ne.callMap.get("C" + p2);
+        check(locked == null, "a locked-out P25 channel is not followed");
+        check(ne.lockedOutChannels().equals(List.of(p2)), "it is listed under Locked out (" + ne.lockedOutChannels() + ")");
+        ne.unlock(p2);
+        v.onConventional(p2, 0x2D5, new byte[0][], null, null);
+        check(ne.callMap.get("C" + p2) != null, "after Unlock it is followed again");
+        ne.running = false;
     }
 }

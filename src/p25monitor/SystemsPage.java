@@ -59,7 +59,7 @@ public class SystemsPage extends JPanel {
     final JPanel rfssBox = new JPanel(new BorderLayout(4, 0));
     final JPanel siteBox = new JPanel(new BorderLayout(4, 0));
     final JComboBox<String> modulation = new JComboBox<>(new String[]{"C4FM (normal)", "CQPSK / LSM (simulcast)"});
-    final JComboBox<String> nativeMod = new JComboBox<>(new String[]{"Auto - try C4FM and LSM, use the better one", "C4FM only", "LSM / CQPSK only (simulcast)"});
+    final JComboBox<String> nativeMod = new JComboBox<>(new String[]{"Auto - try C4FM and LSM, use the better one", "C4FM only", "LSM / CQPSK only (simulcast)", "Phase 2 TDMA control channel"});
     final JSpinner traffic = new JSpinner(new SpinnerNumberModel(20, 1, 32, 1));
     final JCheckBox ignoreData = new JCheckBox("Ignore data calls (recommended)"), recordAll = new JCheckBox("Record every call (MP3)"),
             meter = new JCheckBox("Control-channel decode meter (writes a message log)"),
@@ -357,7 +357,7 @@ public class SystemsPage extends JPanel {
         demodLabel.setVisible(!dmr && !nxdn && !analog && !edacs && !fusion);
         nativeMod.setVisible(!dmr && !nxdn && !analog && !edacs && !fusion);
         demodHelp.setVisible(!dmr && !nxdn && !analog && !edacs && !fusion);
-        demodHelp.setText(helpHtml("Auto runs both demodulators (C4FM and LSM/CQPSK for simulcast) on every channel and uses the one with fewer bit errors (shown on the Engine page)."));
+        demodHelp.setText(helpHtml("Auto runs both demodulators (C4FM and LSM/CQPSK for simulcast) on every channel and uses the one with fewer bit errors (shown on the Engine page). If no Phase 1 control data is found, Auto also tries a Phase 2 TDMA control channel (some Harris sites send their control channel that way); pick it here to start with it."));
         idsLabel.setText(dmr ? "Colour code" : analog ? "Tone squelch" : "IDs (optional)");
         nacLabel.setText(dmr ? "CC" : analog ? "CTCSS" : "NAC");
         wacnLabel.setText(tier3 ? "Network" : "WACN");
@@ -448,7 +448,7 @@ public class SystemsPage extends JPanel {
         nac.setText(s.dmr() && s.colorCode >= 0 ? String.valueOf(s.colorCode) : s.nac);
         wacn.setText(s.wacn); sysId.setText(s.sysId); rfss.setText(s.rfss); siteNo.setText(s.siteNumber);
         modulation.setSelectedIndex("CQPSK".equals(s.modulation) ? 1 : 0);
-        nativeMod.setSelectedIndex(s.nativeModulation.startsWith("c4") ? 1 : s.nativeModulation.startsWith("lsm") ? 2 : 0);
+        nativeMod.setSelectedIndex(s.nativeModulation.startsWith("c4") ? 1 : s.nativeModulation.startsWith("lsm") ? 2 : s.nativeModulation.startsWith("tdma") ? 3 : 0);
         traffic.setValue(Math.max(1, Math.min(32, s.trafficChannels)));
         tuner.setText(s.preferredTuner);
         ignoreData.setSelected(s.ignoreDataCalls); recordAll.setSelected(s.recordAll); meter.setSelected(s.decodeMeter);
@@ -556,7 +556,7 @@ public class SystemsPage extends JPanel {
         if (s.dmr()) try { if (!s.nac.isBlank()) s.colorCode = Integer.parseInt(s.nac.trim()); } catch (NumberFormatException ignored) {}
         s.wacn = wacn.getText().trim(); s.sysId = sysId.getText().trim(); s.rfss = rfss.getText().trim(); s.siteNumber = siteNo.getText().trim();
         s.modulation = modulation.getSelectedIndex() == 1 ? "CQPSK" : "C4FM";
-        s.nativeModulation = switch (nativeMod.getSelectedIndex()) { case 1 -> "c4fm"; case 2 -> "lsm"; default -> "auto"; };
+        s.nativeModulation = switch (nativeMod.getSelectedIndex()) { case 1 -> "c4fm"; case 2 -> "lsm"; case 3 -> "tdma"; default -> "auto"; };
         s.trafficChannels = (Integer) traffic.getValue();
         s.preferredTuner = tuner.getText().trim();
         s.ignoreDataCalls = ignoreData.isSelected(); s.recordAll = recordAll.isSelected(); s.decodeMeter = meter.isSelected();

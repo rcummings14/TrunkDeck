@@ -431,6 +431,7 @@ final class VoiceCallDecoder {
 
     /** Conventional / single-channel voice heard on a control-channel decoder (recordings of a repeater, simplex). */
     void onConventional(long f, int nac, byte[][] imbe, P25Framer.LinkControl lc, P25Framer.EncryptionSync ess) {
+        if (e.lockedOut(f)) return;   // Monitor page, Lockout
         ActiveCall c;
         synchronized (e) {
             if (!conventionalAllowed()) {
@@ -456,6 +457,7 @@ final class VoiceCallDecoder {
                 e.listener.callStarted(ev);
             }
         }
+        if (e.conventional) { e.lastAnalogHeard = f; e.lastAnalogAt = System.currentTimeMillis(); }   // what Hold / Lockout take
         onVoice(c, imbe, lc, ess);
     }
 

@@ -57,8 +57,9 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   imported as P25). Type I still imports as P25. **Note:** some RadioReference listings still say "Type II SmartZone"
   for systems that have since moved to a P25 control channel. If the Engine page shows P25 (NAC, WACN, system ID) on
   your control channel but no calls, change the system's Kind to *Trunked (control channel)*.
-* **Analog Hold / Scan / Down / Up / Lockout** (Monitor page): while an analog system is running, these buttons appear
-  under the scanner display. They only show for analog systems.
+* **Hold / Scan / Down / Up / Lockout for analog and P25 conventional** (Monitor page): while an analog FM or P25
+  conventional system is running, these buttons appear under the scanner display. They only show for those systems
+  (P25 conventional is new in 1.7.6).
   * **Hold** stays on the channel you are hearing (or the last one heard): only that channel plays, and a receiver that
     steps through channel groups stops stepping.
   * **Down** / **Up** step through the channels in the order you entered them, wrapping around, and hold each one.
@@ -91,7 +92,8 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
 ## Features
 
 * **Native P25 engine** (written in Java from the TIA-102 standards): Phase 1 control channel (C4FM, and LSM/CQPSK for
-  simulcast with automatic selection), Phase 1 (IMBE) and Phase 2 TDMA (AMBE+2, both slots) voice, encryption and
+  simulcast with automatic selection), Phase 2 TDMA control channels (as some Harris sites use), Phase 1 (IMBE) and
+  Phase 2 TDMA (AMBE+2, both slots) voice, encryption and
   emergency flags, priority, talkgroup mute / lockout, radio-ID names (DSD+ `.radios` or CSV import).
 * **P25 conventional** (untested): save a system of fixed channels (from RadioReference when it lists them, or by typing the
   name and the frequencies yourself, with an optional NAC). Press Start the same way as a trunked system. TrunkDeck

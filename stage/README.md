@@ -1,6 +1,6 @@
 # TrunkDeck 1.7.5 — P25 Phase 1 and Phase 2 trunking monitor (Windows & Linux)
 
-TrunkDeck is a scanner-style dashboard for **P25 trunked radio systems** (Phase 1 control channel; Phase 1 and Phase 2 voice).
+TrunkDeck is a scanner-style dashboard for **P25 trunked radio systems** (Phase 1 or Phase 2 TDMA control channel; Phase 1 and Phase 2 voice).
 New in 1.7.5: EDACS (tested on a real system), and, **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), ProVoice, Yaesu System Fusion and analog FM systems (see below). Type in a control channel, load your
 talkgroups from a CSV file, plug in an Airspy R2, an Airspy Mini or one or two RTL-SDR dongles (or, new and untested, an SDRplay, HackRF One, LimeSDR or Ettus USRP), press **START MONITORING**, and watch (and hear) the system
 live: talkgroup, name, frequency, radio ID, call timer, encryption and emergency flags, a control-channel decode meter, an
@@ -38,7 +38,7 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
 * **Set up from RadioReference** imports these system types now. DMR, NXDN and SmartNet / SmartZone systems become the
   matching kind. EDACS systems import as EDACS (see *EDACS and ProVoice*). Other analog trunked systems (LTR, MPT,
   Passport) become analog FM channels, listened to directly.
-* **Analog Hold / Scan / Down / Up / Lockout** on the Monitor page, for analog FM systems: see *Listening*.
+* **Hold / Scan / Down / Up / Lockout** on the Monitor page, for analog FM and P25 conventional systems: see *Listening*.
 * **Level** in the live call log: each call's average signal level while it was on the air (dB, like the Active calls
   list). The log's **Secs** is now the real length on analog, Type II, DMR and NXDN calls too (it was several times too
   long).
@@ -139,8 +139,8 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
   keep going), **Mute talkgroup** (the talkgroup on the display, or the latest call if the display is idle; muted
   everywhere, and only those show in **Muted list** — tap one to unmute), and **Hold** (stay on the talkgroup that
   is on the air until you tap again; forgotten when TrunkDeck closes). These buttons are only on Display only.
-  The home-network page and the main Monitor window do not show them. (For analog FM systems the main Monitor window
-  has its own Hold / Scan / Down / Up, new in 1.7.5: see *Listening*.)
+  The home-network page and the main Monitor window do not show them. (For analog FM and P25 conventional systems the main
+  Monitor window has its own Hold / Scan / Down / Up: see *Listening*.)
 * Monitor page → Listening: **Close (X)** and **Minimize** each offer *Quit (normal)* / *Taskbar (normal)*,
   *System tray* and *Display only*. Defaults are as before (X → System tray, Minimize → Taskbar); settings from
   1.4.7–1.4.9 carry over (`ui.trayClose` / `ui.trayMinimize` are still written for older versions). The tray icon's
@@ -474,8 +474,10 @@ All current calls are decoded and recorded; the **Speaker** box on the Monitor p
   decides which calls get a tuner; it does not reorder the queue. Busy sites with many calls at once will skip a lot - the limit is
   what keeps the speaker close to live.
 
-**Analog FM: Hold / Scan / Down / Up** (1.7.5). While an analog FM system is running, four buttons appear under the
-scanner display on the Monitor page. They are not shown for other kinds of system.
+**Analog FM and P25 conventional: Hold / Scan / Down / Up** (1.7.5; P25 conventional in 1.7.6). While an analog FM or
+P25 conventional system is running, these buttons appear under the scanner display on the Monitor page. They are not
+shown for other kinds of system. On P25 conventional they work on channels (frequencies), not talkgroups: to stay on one
+talkgroup, use the speaker's *Hold one talkgroup*.
 * **Hold** stays on the channel you are hearing, or the last one heard: only that channel plays. When the channels don't
   all fit in one receiver's window, the receiver stops stepping through channel groups and stays on the held one.
 * **Down** / **Up** hold the previous / next channel, in the order the channels are typed on the Systems page, wrapping
@@ -742,8 +744,11 @@ own CSV (see *Talkgroup CSV files*).
 
 ## Limitations (please read)
 * **Phase 1 learns a radio name from the air.** A standard P25 user-alias link-control word, or a Motorola talker alias in a voice frame or a terminator, is saved and used. It replaces a name you typed or imported. Phase 2 talker aliases are not decoded. A DSD+ import uses only the heard-name column.
-* **Phase 2 has been confirmed on few live calls so far.** Phase 2 needs a Phase 1 control
-  channel (as on most Phase 2 systems); Phase 2 TDMA control channels, Phase 2 data and the encryption-sync field are not decoded.
+* **Phase 2 has been confirmed on few live calls so far.** Phase 2 data and the encryption-sync field are not decoded.
+* **Phase 2 TDMA control channels** (some Harris sites send the control channel itself as Phase 2) are decoded: the site,
+  band plan, adjacent sites and grants are read from it. With **Systems → Demodulator: Auto**, TrunkDeck tries this when
+  there is no Phase 1 control data for 6 seconds; pick *Phase 2 TDMA control channel* to start with it. Checked on a
+  recording of a Harris site; grants on it have not been seen on a live system yet.
 * Phase 2 audio needs JMBE 2.x (it contains the AMBE+2 codec). With an old JMBE 1.x jar Phase 2 calls are followed but silent.
 * **SDRplay, HackRF One, LimeSDR and Ettus USRP support (1.7.0) is UNTESTED with real hardware** - only with simulated receivers.
   It needs SoapySDR and the receiver's driver installed (see *Supported receivers*). Please report problems on GitHub Issues
