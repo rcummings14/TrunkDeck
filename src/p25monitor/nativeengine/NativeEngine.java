@@ -302,7 +302,7 @@ public final class NativeEngine {
         nxdnSite = s.nxdnTrunk() ? new p25monitor.nxdn.NxdnSite(s::nxdnChannelHz) : null;
         nxdnVoice.clear(); nxdnLogged.clear();
         type2Digital.clear(); type2Grants = 0;
-        if (s.edacs()) log("EDACS (untested): " + p25monitor.edacs.EdacsSite.Mode.of(s.edacsMode).label + " addressing, " + s.nxdnChannels.size() + " LCN" + (s.nxdnChannels.size() == 1 ? "" : "s") + " listed; voice is analog FM or ProVoice as each grant says." + (s.nxdnChannels.isEmpty() ? " No LCN=MHz entries on the Systems page: grants can't be followed until they are added." : "") + " If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
+        if (s.edacs()) log("EDACS: " + p25monitor.edacs.EdacsSite.Mode.of(s.edacsMode).label + " addressing, " + s.nxdnChannels.size() + " LCN" + (s.nxdnChannels.size() == 1 ? "" : "s") + " listed; voice is analog FM or ProVoice as each grant says." + (s.nxdnChannels.isEmpty() ? " No LCN=MHz entries on the Systems page: grants can't be followed until they are added." : "") + " If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         if (s.type2()) log("Motorola Type II (untested): band plan " + s.type2BandPlan() + "; voice is analog FM or P25 as each grant says. If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         if (s.analog()) log("Analog FM conventional (untested): noise squelch level " + s.squelch + (s.channels.stream().anyMatch(c -> s.toneFor(Math.round(c.mhz * 1e6)) > 0) ? " and CTCSS tone squelch" : "") + ". If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         if (s.nxdn()) log("NXDN " + (s.nxdnTrunk() ? "Type-C trunked" : "conventional") + " (untested; NXDN48 and NXDN96 are detected automatically). If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
@@ -939,7 +939,7 @@ public final class NativeEngine {
         return d;
     }
 
-    // ------------------------------------------------------------------ EDACS (untested on air)
+    // ------------------------------------------------------------------ EDACS
     /** The EDACS site state of the control channel being decoded (site ID, control channel LCN), for diagnostics. */
     volatile p25monitor.edacs.EdacsSite edacsSite;
     /** EDACS channel filter: 9600 bit/s FSK needs more than P25's 6.25 kHz. */

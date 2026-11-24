@@ -20,7 +20,7 @@ public class RadioSystem {
     public static final String ANALOG = "analog";
     /** Motorola Type II (SmartNet / SmartZone) trunking: 3600 bit/s control channel, analog FM or P25 voice. Untested on air. */
     public static final String TYPE2 = "type2";
-    /** EDACS trunking (GE / Ericsson / Harris): 9600 bit/s control channel, analog FM or ProVoice voice. Untested on air. */
+    /** EDACS trunking (GE / Ericsson / Harris): 9600 bit/s control channel, analog FM or ProVoice voice. Tested on a real system (ProVoice voice not yet confirmed on air). */
     public static final String EDACS = "edacs";
     /** Yaesu System Fusion (C4FM), conventional channels. Untested on a real radio. */
     public static final String FUSION = "fusion";
@@ -135,7 +135,7 @@ public class RadioSystem {
     public boolean nxdn() { return nxdnConventional() || nxdnTrunk(); }
     /** Motorola Type II SmartNet / SmartZone (untested). */
     public boolean type2() { return TYPE2.equalsIgnoreCase(kind); }
-    /** EDACS with analog FM or ProVoice voice (untested). */
+    /** EDACS with analog FM or ProVoice voice. */
     public boolean edacs() { return EDACS.equalsIgnoreCase(kind); }
     /** Yaesu System Fusion conventional channels (untested). */
     public boolean fusion() { return FUSION.equalsIgnoreCase(kind); }
@@ -285,7 +285,7 @@ public class RadioSystem {
         if (analog()) return "Analog FM (untested)";
         if (nxdnTrunk()) return "NXDN trunked (untested)";
         if (type2()) return "Motorola Type II (untested)";
-        if (edacs()) return "EDACS / ProVoice (untested)";
+        if (edacs()) return "EDACS / ProVoice";
         if (conventional()) return "Conventional (untested)";
         return "Trunked";
     }

@@ -1,7 +1,7 @@
 # TrunkDeck 1.7.5 — P25 Phase 1 and Phase 2 trunking monitor (Windows & Linux)
 
 TrunkDeck is a scanner-style dashboard for **P25 trunked radio systems** (Phase 1 control channel; Phase 1 and Phase 2 voice).
-New in 1.7.5 and **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), EDACS / ProVoice, Yaesu System Fusion and analog FM systems (see below). Type in a control channel, load your
+New in 1.7.5: EDACS (tested on a real system), and, **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), ProVoice, Yaesu System Fusion and analog FM systems (see below). Type in a control channel, load your
 talkgroups from a CSV file, plug in an Airspy R2, an Airspy Mini or one or two RTL-SDR dongles (or, new and untested, an SDRplay, HackRF One, LimeSDR or Ettus USRP), press **START MONITORING**, and watch (and hear) the system
 live: talkgroup, name, frequency, radio ID, call timer, encryption and emergency flags, a control-channel decode meter, an
 activity graph, and a table of **every call that is on the air right now**.
@@ -11,7 +11,7 @@ It talks to your Airspy R2, Airspy Mini and RTL-SDR dongles directly. No other r
 receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *Supported receivers*.
 
 **New in 1.7.5 – DMR, NXDN, Motorola Type II, EDACS / ProVoice, Yaesu System Fusion and analog FM (UNTESTED)**
-* **UNTESTED:** these system types are new and **have not been tested on real radio systems**. They were tested with
+* **UNTESTED:** apart from EDACS (tested on a real system), these system types are new and **have not been tested on real radio systems**. They were tested with
   simulated signals only. If something doesn't work, please report it on **GitHub Issues**
   (<https://github.com/rcummings14/TrunkDeck/issues>) and attach *Copy diagnostics* from the Engine page. P25 is unchanged.
 * Choose the type under **Systems → Kind**:
@@ -524,7 +524,7 @@ emergency and patch flags and the talking radio's ID are shown.
   TrunkDeck can test-decode it with *Engine → Test with an I/Q recording*) sent with an issue helps a lot.
 * Private (unit-to-unit) calls are logged, not followed.
 
-### EDACS and ProVoice (1.7.5, untested)
+### EDACS and ProVoice (1.7.5; EDACS tested on a real system)
 Set **Kind** to *EDACS / ProVoice* (Set up from RadioReference does this for you). TrunkDeck decodes the 9600 bit/s
 EDACS control channel (each message is sent three times and error-checked, so damaged ones are thrown away rather than
 misread) and follows each call. Each grant says whether the voice is analog FM or ProVoice digital, and the call is
@@ -540,8 +540,8 @@ decoded that way.
   stops repeating the assignment.
 * Talkgroups are shown as numbers (the standard 11-bit agency / fleet / subfleet number, or the 16-bit EA group). Names
   come from your talkgroup list, as for P25.
-* **Untested:** no EDACS system was in reach while this was written; it was tested against simulated signals only. An
-  I/Q recording of a control channel or a ProVoice call sent with an issue helps a lot.
+* **Tested:** EDACS has been tested on a real system. ProVoice voice has only been tested against simulated signals so
+  far. An I/Q recording of a control channel or a ProVoice call sent with an issue helps a lot.
 
 ### Streaming to Broadcastify, OpenMHz or Rdio Scanner (optional)
 On **Streams**:
@@ -753,7 +753,7 @@ own CSV (see *Talkgroup CSV files*).
 * **Mix all calls** plays everything, but the big display doesn't follow individual calls in that mode (the Active calls table does).
 * The LSM/CQPSK (simulcast) demodulator has been tested on public recordings and simulated simulcast, not on a live simulcast site.
 * Unit-to-unit (private) calls, data (PDU) and the HDU are logged but not followed. A terminator's link control is read for a radio name, and the transmission still ends.
-* **DMR, NXDN, Motorola Type II, EDACS / ProVoice and analog FM (1.7.5) are UNTESTED on real radio systems** - only with simulated signals.
+* **DMR, NXDN, Motorola Type II, ProVoice voice and analog FM (1.7.5) are UNTESTED on real radio systems** - only with simulated signals. EDACS has been tested on a real system.
   A VHF / UHF Type II system needs its band plan typed in (see *Motorola Type II*).
 * **Encrypted talkgroups can't be heard.** They're still listed, in purple, so you can see the activity.
 * Expect it to decode somewhat worse than mature decoders on weak or fringe signals.

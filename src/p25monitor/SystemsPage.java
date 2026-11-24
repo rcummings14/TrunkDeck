@@ -10,7 +10,7 @@ public class SystemsPage extends JPanel {
     final MainFrame f;
     final DefaultListModel<RadioSystem> listModel = new DefaultListModel<>();
     final JList<RadioSystem> list = new JList<>(listModel);
-    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)", "DMR (conventional, untested)", "DMR trunked (untested)", "NXDN (conventional, untested)", "NXDN trunked (untested)", "Analog FM (conventional, untested)", "Motorola Type II SmartNet / SmartZone (untested)", "EDACS / ProVoice (untested)", "Yaesu System Fusion (conventional, untested)"});
+    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)", "DMR (conventional, untested)", "DMR trunked (untested)", "NXDN (conventional, untested)", "NXDN trunked (untested)", "Analog FM (conventional, untested)", "Motorola Type II SmartNet / SmartZone (untested)", "EDACS / ProVoice", "Yaesu System Fusion (conventional, untested)"});
     /** EDACS addressing, in {@link p25monitor.edacs.EdacsSite.Mode} order. */
     final JComboBox<p25monitor.edacs.EdacsSite.Mode> edacsMode = new JComboBox<>(p25monitor.edacs.EdacsSite.Mode.values());
     /** Motorola Type II band plan; the last entry uses {@link #obtPlan}. Order matches {@link #TYPE2_PLANS}. */
@@ -394,7 +394,7 @@ public class SystemsPage extends JPanel {
         dwellBox.setVisible(analog);
         dwellHelp.setVisible(analog);
         dmrHelp.setText(helpHtml(edacs
-                ? "How the site numbers its talkgroups and radios. RadioReference says which: EDACS Standard and Networked are Standard; Extended Addressing is EA. Pick an ESK option only if the listing mentions ESK. If calls show talkgroups that make no sense, try another one. (untested)"
+                ? "How the site numbers its talkgroups and radios. RadioReference says which: EDACS Standard and Networked are Standard; Extended Addressing is EA. Pick an ESK option only if the listing mentions ESK. If calls show talkgroups that make no sense, try another one."
                 : type2
                 ? (obt ? "VHF/UHF systems use their own band plan: copy the base frequency, spacing and offset from the system's RadioReference page. (untested)"
                        : "Turns the channel numbers in grants into frequencies. Auto picks 800 or 900 MHz from the control channel and checks the 800 MHz variant against the channel number the site announces. (untested)")
@@ -411,7 +411,7 @@ public class SystemsPage extends JPanel {
                 : fusion ? "Yaesu System Fusion has not been tested on a real radio yet."
                 : kind == 5 ? "NXDN Type-C trunking has not been tested on a real radio system yet."
                 : type2 ? "Motorola Type II (SmartNet / SmartZone) has not been tested on a real radio system yet."
-                : edacs ? "EDACS and ProVoice have not been tested on a real radio system yet. ProVoice needs the same IMBE voice codec as P25."
+                : edacs ? "EDACS has been tested on a real radio system. ProVoice voice has not been confirmed on air yet; it needs the same IMBE voice codec as P25."
                 : "";
         untestedNote.setText(note.isEmpty() ? " " : helpHtml(note + " If something doesn't work, please report it on GitHub Issues ("
                 + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").", "#FFB300", 11));
