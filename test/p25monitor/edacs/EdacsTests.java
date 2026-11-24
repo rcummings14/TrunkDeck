@@ -10,7 +10,7 @@ public final class EdacsTests {
     static void check(boolean ok, String what) { if (ok) pass++; else fail++; System.out.println((ok ? "  ok    " : "  FAIL  ") + what); }
 
     public static void main(String[] a) {
-        try { run(); } catch (Throwable t) { t.printStackTrace(); fail++; }
+        try { run(); realProVoice(); } catch (Throwable t) { t.printStackTrace(); fail++; }
         System.out.println("EdacsTests: " + pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);
     }
@@ -281,6 +281,33 @@ public final class EdacsTests {
         check(voice.size() == 24 && right == 24, "ProVoice receiver: " + right + " of 24 voice frames right (inverted, 700 Hz off, noisy)");
         check(ends[0] == 1, "dotting ends the transmission");
 
+        // ---------------- encrypted ProVoice (an IV in the header) and EA set-up frames
+        int[] enc = {0}, gotE = {0};
+        ProVoiceReceiver pe = new ProVoiceReceiver(new ProVoiceReceiver.Listener() {
+            public void voice(byte[][] f, int e) { gotE[0] += f.length; }
+            public void encrypted() { enc[0]++; }
+        });
+        bits.clear();
+        for (int k = 0; k < 53; k++) bits.add(r.nextBoolean());
+        for (int k = 0; k < 4; k++) add(bits, ProVoice.encode(new int[][]{voiceParams(r), voiceParams(r), voiceParams(r), voiceParams(r)}, k % 2 == 1, r.nextLong()));
+        for (int k = 0; k < 40; k++) bits.add(r.nextBoolean());
+        for (boolean b : bits) pe.bit(b);
+        check(enc[0] == 1 && pe.encryptedFrames == 4, "frames with an IV: the call is reported encrypted once (" + pe.encryptedFrames + " encrypted frames)");
+        int[] enc2 = {0}, got2 = {0};
+        ProVoiceReceiver pc = new ProVoiceReceiver(new ProVoiceReceiver.Listener() {
+            public void voice(byte[][] f, int e) { got2[0] += f.length; }
+            public void encrypted() { enc2[0]++; }
+        });
+        bits.clear();
+        for (int k = 0; k < 53; k++) bits.add(r.nextBoolean());
+        boolean[] setup = ProVoice.encode(new int[][]{voiceParams(r), voiceParams(r), voiceParams(r), voiceParams(r)}, true);
+        for (int k = 0; k < 16; k++) setup[ProVoice.SYNC_BITS + 16 + k] = (0xAA55 >> (15 - k) & 1) != 0;   // an EA set-up frame
+        add(bits, setup);
+        for (int k = 0; k < 3; k++) add(bits, ProVoice.encode(new int[][]{voiceParams(r), voiceParams(r), voiceParams(r), voiceParams(r)}, true));
+        for (int k = 0; k < 40; k++) bits.add(r.nextBoolean());
+        for (boolean b : bits) pc.bit(b);
+        check(enc2[0] == 0 && got2[0] == 12 && pc.setupFrames == 1, "clear EA call: not encrypted, the set-up frame gives no voice (" + got2[0] + " voice frames)");
+
         // ---------------- JMBE reads the converted frames (when the codec is available)
         String jar = System.getProperty("trunkdeck.jmbe", "");
         if (!jar.isBlank() && Files.exists(Path.of(jar)) && p25monitor.nativeengine.EngineLibs.loadJmbe(Path.of(jar))) {
@@ -295,6 +322,39 @@ public final class EdacsTests {
             }
             check(clean == 200 && audio == 200, "JMBE decodes the P25 frames with no corrections (" + clean + " of 200 clean)");
         } else System.out.println("  skip  JMBE check (run with -Dtrunkdeck.jmbe=<jmbe jar>)");
+    }
+
+    /**
+     * Real ProVoice frames as DSD-FME (built by its author) printed them: the 736 bits after the sync, and the four
+     * voice frames' 88 parameter bits it decoded from them. Standard and EA, clear and encrypted.
+     */
+    static final String[][] REAL_PV = {
+            {"std clear", "69696969696969690000FF83DF1732094ED110420830C9A630C208EBA186D34FBE71C38C9248C31C737BFBED34BAE618596A28082E70217553C213311EB6018220EAD12DD04FB041C4B880D1F04518F4F82D33F84138188A0E030E48",
+                    "6C00000000000000000000 6C00000000000000000000 6C20120090000012000024 0C1F49190F004012058029"},
+            {"std DES", "4646F87CD5483C640000FF83DF1732094ED110420830C9A630C208EBA186D34FBE71C38C9248C31C737BFBED34BAE618596A28082E7021756B95573CEE622004EBB2E6CFF48BAA7020F811B5B60FAB50805C6EBD66BA4C9A40E4EBF0", null},
+            {"EA clear", "0EBF333369696B49696969699C00FF83DF1750F313CA971BD2F9B7DBD39709D51BE3A5987BD02642697D58B483289DB1791AB958C17421755844C7D1B726F93EE0CEC436012535E813BCFBF9C3B6F54D0D07AC241FB6448D8A01B805",
+                    "02394244440F8804000100 02063FBFBFCF7FFFFFBEF9 032A5E5065B0FE2E0C21C8 0DA03F9FEDF0186046EA06"},
+            {"EA encrypted", "0EBF3333521AB6EF22C3B4D19C00FF6B270010420830C9A630C208EBA186D34FBE71C38C9248C31C737BFBED34BAE618596A28082E7021757D1141043A6B64553AE7C11DF11CFD34F164879C27071BF6E5FFB89185A0283956EAE4F8",
+                    "6C00000000000000000000 6C00000000000000000000 6C9818DED9D02BC2EEDB1C 0C5864B54042C40E3ED381"}};
+
+    static void realProVoice() {
+        System.out.println("ProVoice frames from real systems (decoded by DSD-FME)");
+        for (String[] t : REAL_PV) {
+            boolean[] body = new boolean[ProVoice.BODY_BITS];
+            for (int k = 0; k < body.length; k++) body[k] = (Character.digit(t[1].charAt(k / 4), 16) >> (3 - k % 4) & 1) != 0;
+            boolean ea = t[0].startsWith("EA"), encrypted = !t[0].contains("clear");
+            check(ProVoice.encrypted(body, ea) == encrypted && (!ea || ProVoice.eaVoice(body)), t[0] + ": " + (encrypted ? "encrypted" : "clear") + (ea ? ", EA voice frame" : ""));
+            if (t[2] == null) continue;   // DSD-FME had the key: it printed the decrypted parameters
+            ProVoice.Frame[] f = ProVoice.decode(body);
+            String[] want = t[2].split(" ");
+            int same = 0;
+            for (int k = 0; k < 4; k++) {
+                int[] v = new int[88];
+                for (int i = 0; i < 88; i++) v[i] = Character.digit(want[k].charAt(i / 4), 16) >> (3 - i % 4) & 1;
+                if (f[k].ok() && Arrays.equals(f[k].p25(), ProVoice.toP25Frame(ProVoice.toP25Order(v)))) same++;
+            }
+            check(same == 4, t[0] + ": the four voice frames are the ones DSD-FME decoded (" + same + " of 4)");
+        }
     }
 
     /** 88 random IMBE parameter bits (P25 order) with a valid pitch code b0 (0-207). */

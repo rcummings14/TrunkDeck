@@ -411,7 +411,7 @@ public class SystemsPage extends JPanel {
                 : fusion ? "Yaesu System Fusion has not been tested on a real radio yet."
                 : kind == 5 ? "NXDN Type-C trunking has not been tested on a real radio system yet."
                 : type2 ? "Motorola Type II (SmartNet / SmartZone) has not been tested on a real radio system yet."
-                : edacs ? "EDACS has been tested on a real radio system. ProVoice voice has not been confirmed on air yet; it needs the same IMBE voice codec as P25."
+                : edacs ? "EDACS has been tested on a real radio system. ProVoice frames from real systems decode correctly, but a live ProVoice call has not been confirmed yet; it needs the same IMBE voice codec as P25. Encrypted ProVoice is muted."
                 : "";
         untestedNote.setText(note.isEmpty() ? " " : helpHtml(note + " If something doesn't work, please report it on GitHub Issues ("
                 + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").", "#FFB300", 11));

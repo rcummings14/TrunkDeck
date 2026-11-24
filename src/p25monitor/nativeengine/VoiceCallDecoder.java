@@ -60,6 +60,7 @@ final class VoiceCallDecoder {
             vd.provoice = new p25monitor.edacs.ProVoiceReceiver(new p25monitor.edacs.ProVoiceReceiver.Listener() {
                 public void voice(byte[][] frames, int errors) { if (!call.analogVoice) onProVoice(call, frames); }
                 public void end() { onEdacsEnd(call); }
+                public void encrypted() { onProVoiceEncrypted(call); }
             });
             vd.provoice.dottingAlwaysEnds = c.analogVoice;
         } else if (c.type2 && c.analogVoice) {
@@ -726,6 +727,16 @@ final class VoiceCallDecoder {
         if (c.emergencyPending && !c.emergency) e.calls.confirmEmergency(c);
         if (c.encrypted || c.imbe == null) return;
         playFrames(c, frames);
+    }
+
+    /** ProVoice frames carrying an IV: the call is encrypted, so its audio is muted like an encrypted P25 call. */
+    void onProVoiceEncrypted(ActiveCall c) {
+        synchronized (e) {
+            if (c.ended || c.encrypted) return;
+            markEncrypted(c, "ProVoice");
+            if (e.speaker.speaker == c) e.audio.clear();
+        }
+        e.log("TG " + c.tg + ": ProVoice is encrypted - audio muted");
     }
 
     /**

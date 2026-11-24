@@ -74,6 +74,23 @@ public final class ProVoice {
         return b;
     }
 
+    /**
+     * The 144 bits before the voice blocks. Standard: a 64-bit IV, 16 zero bits, then 64 bits of link information. EA:
+     * 16 bits, a 16-bit opcode (0x3333 on voice frames; 0xAA55 and 0x33CC on the set-up frames before them), the 64-bit
+     * IV, then 48 bits of link information. A clear frame fills the IV with 0x69 bytes; an encrypted one sends its IV
+     * there. Layout from ProVoice logs (standard and EA, clear and encrypted) sent by DSD-FME's author.
+     */
+    static final long CLEAR_IV = 0x6969696969696969L;
+    public static final int EA_VOICE = 0x3333;
+
+    static long field(boolean[] body, int at, int len) { long v = 0; for (int i = 0; i < len; i++) v = v << 1 | (body[at + i] ? 1 : 0); return v; }
+
+    /** True if this frame's IV field is not the clear filler (more than 12 of its 64 bits differ from it). */
+    public static boolean encrypted(boolean[] body, boolean ea) { return Long.bitCount(field(body, ea ? 32 : 0, 64) ^ CLEAR_IV) > 12; }
+
+    /** EA only: true if the opcode says voice (0x3333, up to 4 wrong bits), false on the set-up frames before it. */
+    public static boolean eaVoice(boolean[] body) { return Long.bitCount(field(body, 16, 16) ^ EA_VOICE) <= 4; }
+
     /** Offsets of the two voice blocks within the 736 bits after the sync. */
     static final int BLOCK_A = 144, BLOCK_B = 144 + 286 + 2 + 16;
 
@@ -284,10 +301,17 @@ public final class ProVoice {
     }
 
     /** The 768 bits (sync first) of a ProVoice frame carrying four voice frames (88 bits each, P25 order). */
-    public static boolean[] encode(int[][] u4, boolean ea) {
+    public static boolean[] encode(int[][] u4, boolean ea) { return encode(u4, ea, CLEAR_IV); }
+
+    /** The same with this IV in the header ({@link #CLEAR_IV} for a clear call). */
+    public static boolean[] encode(int[][] u4, boolean ea, long iv) {
         boolean[] f = new boolean[FRAME_BITS];
         int sync = ea ? SYNC_EA : SYNC;
         for (int k = 0; k < SYNC_BITS; k++) f[k] = (sync >>> (SYNC_BITS - 1 - k) & 1) != 0;
+        long[][] hdr = ea ? new long[][]{{0x0EBF, 16}, {EA_VOICE, 16}, {iv, 64}, {0x9C00FF83DF17L, 48}}
+                          : new long[][]{{iv, 64}, {0, 16}, {0xFF83DF1732094ED1L, 64}};
+        int at = SYNC_BITS;
+        for (long[] h : hdr) for (int k = (int) h[1] - 1; k >= 0; k--) f[at++] = (h[0] >>> k & 1) != 0;
         for (int blk = 0; blk < 2; blk++) {
             int[][][] cw = {encodeFrame(u4[blk * 2]), encodeFrame(u4[blk * 2 + 1])};
             int base = SYNC_BITS + (blk == 0 ? BLOCK_A : BLOCK_B);

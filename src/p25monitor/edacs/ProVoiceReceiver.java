@@ -14,6 +14,8 @@ public final class ProVoiceReceiver {
         void voice(byte[][] frames, int errors);
         /** The transmission ended (dotting, or sync lost). */
         default void end() {}
+        /** Two frames in a row carried an IV: the voice is encrypted. */
+        default void encrypted() {}
     }
 
     private final Listener out;
@@ -23,8 +25,8 @@ public final class ProVoiceReceiver {
     private long n = -1, sr;
     private boolean locked, dataInv, active;
     private long nextSync = Long.MIN_VALUE;
-    private int misses;
-    public long frames, badFrames, syncs;
+    private int misses, encRun;
+    public long frames, badFrames, syncs, encryptedFrames, setupFrames;
     /** Analog EDACS call: dotting ends it even though no ProVoice frame was heard. */
     public volatile boolean dottingAlwaysEnds;
 
@@ -53,8 +55,8 @@ public final class ProVoiceReceiver {
             boolean[] body = body(s, dataInv);
             ProVoice.Frame[] f = ProVoice.decode(body);
             nextSync = s + ProVoice.FRAME_BITS;
-            if (good(f)) { misses = 0; emit(f); }
-            else if (syncErrors(s) <= 6) { misses = 0; badFrames++; emit(f); }
+            if (good(f)) { misses = 0; emit(f, body, ea(s)); }
+            else if (syncErrors(s) <= 6) { misses = 0; badFrames++; emit(f, body, ea(s)); }
             else if (++misses >= 4) { locked = false; if (active) { active = false; out.end(); } }
             return;
         }
@@ -62,20 +64,25 @@ public final class ProVoiceReceiver {
         long s = n - ProVoice.BODY_BITS;
         if (s < ProVoice.SYNC_BITS - 1 || syncErrors(s) > 2) return;
         ProVoice.Frame[] best = null;
+        boolean[] bestBody = null;
         boolean bestInv = false;
         int bestErr = Integer.MAX_VALUE;
         for (int inv = 0; inv < 2; inv++) {
-            ProVoice.Frame[] f = ProVoice.decode(body(s, inv == 1));
+            boolean[] body = body(s, inv == 1);
+            ProVoice.Frame[] f = ProVoice.decode(body);
             if (!good(f)) continue;
             int e = 0; for (ProVoice.Frame x : f) e += x.errors();
-            if (e < bestErr) { bestErr = e; best = f; bestInv = inv == 1; }
+            if (e < bestErr) { bestErr = e; best = f; bestBody = body; bestInv = inv == 1; }
         }
         if (best == null) return;
         locked = true; dataInv = bestInv; misses = 0; nextSync = s + ProVoice.FRAME_BITS; syncs++;
-        emit(best);
+        emit(best, bestBody, ea(s));
     }
 
-    private void emit(ProVoice.Frame[] f) {
+    private void emit(ProVoice.Frame[] f, boolean[] body, boolean ea) {
+        if (ea && !ProVoice.eaVoice(body)) { active = true; setupFrames++; return; }   // EA set-up frame: no voice in it
+        if (ProVoice.encrypted(body, ea)) { encryptedFrames++; if (++encRun == 2) out.encrypted(); }
+        else encRun = 0;
         active = true; frames++;
         byte[][] b = new byte[4][];
         int e = 0;
@@ -91,6 +98,14 @@ public final class ProVoiceReceiver {
     }
 
     private boolean at(long idx) { return bits[(int) Math.floorMod(idx, (long) RING)]; }
+
+    /** True if the sync ending at {@code s} is closer to the EA pattern than to the standard one. */
+    private boolean ea(long s) {
+        int v = 0;
+        for (int k = 0; k < ProVoice.SYNC_BITS; k++) v = v << 1 | (at(s - ProVoice.SYNC_BITS + 1 + k) ? 1 : 0);
+        int a = Integer.bitCount(v ^ ProVoice.SYNC), b = Integer.bitCount(v ^ ProVoice.SYNC_EA);
+        return Math.min(b, 32 - b) < Math.min(a, 32 - a);
+    }
 
     /** Fewest wrong bits of the sync ending at {@code s} against either pattern, in either polarity. */
     private int syncErrors(long s) {

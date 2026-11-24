@@ -538,12 +538,15 @@ decoded that way.
   names the type. If calls show talkgroups that make no sense, try another one.
 * **ProVoice** is decoded with the same IMBE voice codec (JMBE) as P25, so nothing extra is needed. Analog calls use
   the analog FM receiver.
+* **Encrypted ProVoice** (an encryption IV in the voice frames, standard or EA) is shown as an encrypted call and muted,
+  the same as encrypted P25. It is not decrypted.
 * A call ends on the "dotting" EDACS sends on the voice channel when the radio unkeys, or when the control channel
   stops repeating the assignment.
 * Talkgroups are shown as numbers (the standard 11-bit agency / fleet / subfleet number, or the 16-bit EA group). Names
   come from your talkgroup list, as for P25.
-* **Tested:** EDACS has been tested on a real system. ProVoice voice has only been tested against simulated signals so
-  far. An I/Q recording of a control channel or a ProVoice call sent with an issue helps a lot.
+* **Tested:** EDACS has been tested on a real system. ProVoice voice frames from real systems (standard and EA, clear
+  and encrypted, logged by DSD-FME's author) decode to the same voice data DSD-FME gets, but TrunkDeck has not yet played
+  a live ProVoice call. An I/Q recording of a control channel or a ProVoice call sent with an issue helps a lot.
 
 ### Streaming to Broadcastify, OpenMHz or Rdio Scanner (optional)
 On **Streams**:
@@ -758,7 +761,7 @@ own CSV (see *Talkgroup CSV files*).
 * **Mix all calls** plays everything, but the big display doesn't follow individual calls in that mode (the Active calls table does).
 * The LSM/CQPSK (simulcast) demodulator has been tested on public recordings and simulated simulcast, not on a live simulcast site.
 * Unit-to-unit (private) calls, data (PDU) and the HDU are logged but not followed. A terminator's link control is read for a radio name, and the transmission still ends.
-* **DMR, NXDN, Motorola Type II, ProVoice voice and analog FM (1.7.5) are UNTESTED on real radio systems** - only with simulated signals. EDACS has been tested on a real system.
+* **DMR, NXDN, Motorola Type II, ProVoice voice and analog FM (1.7.5) are UNTESTED on real radio systems** - only with simulated signals. EDACS has been tested on a real system, and ProVoice frames logged on real systems decode correctly.
   A VHF / UHF Type II system needs its band plan typed in (see *Motorola Type II*).
 * **Encrypted talkgroups can't be heard.** They're still listed, in purple, so you can see the activity.
 * Expect it to decode somewhat worse than mature decoders on weak or fringe signals.
