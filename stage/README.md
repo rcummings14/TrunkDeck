@@ -822,7 +822,9 @@ Your systems, talkgroups, radio names, streams, recordings and voice codec are k
 * **NXDN** and **Motorola Type II** decoders (1.7.5): TrunkDeck's own code. Protocol facts were read from sdrtrunk (NXDN),
   gr-smartnet and trunk-recorder (Type II); no code was copied. See `NOTICE.txt`.
 * **EDACS and ProVoice** decoder (1.7.5): TrunkDeck's own code. Protocol facts were read from DSD-FME, DSD and mbelib;
-  no code was copied. ProVoice voice is played by JMBE. See `NOTICE.txt`.
+  no code was copied. ProVoice voice is played by JMBE. See `NOTICE.txt`. Thanks to lwvmobile (DSD-FME's author) and
+  to Ed for their help with EDACS: Ed tested it on a real system and sent recordings, and DSD-FME's author helped with
+  the EDACS messages and sent a recording of a Phase 2 TDMA control channel.
 * **JMBE** voice codec (GPLv3, <https://github.com/DSheirer/jmbe>): only built on your machine on request (see *Voice audio*). It's never included in this zip.
   The IMBE and AMBE+2 vocoders it implements are subject to patents held by Digital Voice Systems, Inc.
 * **Eclipse Temurin JDK 25** (GPLv2 with the Classpath Exception, <https://adoptium.net>): downloaded by the installer, not in this zip. Licence files: `runtime/legal`.

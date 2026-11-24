@@ -260,7 +260,10 @@ Tests that need them are skipped when they are missing.
 Built by Ray Cummings.  
 Thanks to @phillydjdan for the Display-Only button idea ([Discussion #15](https://github.com/rcummings14/TrunkDeck/discussions/15)) and DMR testing,  
 and @kd8bxp for SDRplay testing, the auto-start idea and the Linux line-ending catch.  
-Thanks to Tim (@Timjnev) for DMR testing and ideas, including the analog Hold / Scan buttons.
+Thanks to Tim (@Timjnev) for DMR testing and ideas, including the analog Hold / Scan buttons.  
+Thanks to lwvmobile, the author of [DSD-FME](https://github.com/lwvmobile/dsd-fme), and to Ed for their help with EDACS:
+Ed tested it on a real system and sent recordings, and DSD-FME's author helped with the EDACS messages and sent a
+recording of a Phase 2 TDMA control channel.
 
 ## License
 
