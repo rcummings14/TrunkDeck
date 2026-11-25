@@ -19,7 +19,7 @@ import p25monitor.p25.Fec;
  * <li>V/D mode 1: five 72-bit AMBE+2 frames laid out as DMR voice (Golay and PN included).</li>
  * <li>Voice FR mode ("VW", wide): 144-bit IMBE frames in the P25 Phase 1 layout.</li>
  * </ul>
- * CRC-16: CCITT polynomial, initial 0, inverted, high byte first. Untested on air.
+ * CRC-16: CCITT polynomial, initial 0, inverted, high byte first. Checked on a real repeater (DN).
  */
 public final class YsfFrame {
     private YsfFrame() {}

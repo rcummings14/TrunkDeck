@@ -9,9 +9,20 @@ public final class YsfDecoderTests {
     static void check(boolean ok, String what) { if (ok) pass++; else fail++; System.out.println((ok ? "  ok    " : "  FAIL  ") + what); }
 
     public static void main(String[] a) {
-        try { run(); } catch (Throwable t) { t.printStackTrace(); fail++; }
+        try { run(); destinations(); } catch (Throwable t) { t.printStackTrace(); fail++; }
         System.out.println("YsfDecoderTests: " + pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);
+    }
+
+    /** Destination fields as heard on a real repeater: everyone or a WIRES-X number, then the radio's ID. */
+    static void destinations() {
+        System.out.println("destination field (real calls)");
+        String[][] cases = {{"*****EApEj", "ALL", "EApEj"}, {"21080F5DIw", "WIRES-X 21080", "F5DIw"}, {"**********", "ALL", ""}, {"ALL", "ALL", ""}, {"W8XYZ", "W8XYZ", ""}};
+        for (String[] k : cases) {
+            YsfDecoder.Call c = new YsfDecoder.Call();
+            c.dest = k[0];
+            check(k[1].equals(c.to()) && k[2].equals(c.radioId()), k[0] + " -> to " + c.to() + ", radio ID '" + c.radioId() + "'");
+        }
     }
 
     /** What a decoder run reported. */

@@ -612,7 +612,7 @@ final class VoiceCallDecoder {
         synchronized (e) { ActiveCall c = e.callMap.get("N" + f); if (c != null && !c.ended) e.calls.endCall(c, "end of transmission"); }
     }
 
-    // ------------------------------------------------------------------ Yaesu System Fusion (untested on air)
+    // ------------------------------------------------------------------ Yaesu System Fusion (DN tested on air, VW untested)
     /**
      * A Fusion transmission started on {@code f}, or its callsigns or mode became known. The talkgroup is the DG-ID
      * (0 on most repeaters), so it can be named, muted or listed like a talkgroup; the caller is the callsign.
@@ -654,9 +654,10 @@ final class VoiceCallDecoder {
         if (c.t != null) c.priority = c.t.priority;
         CallEvent ev = c.ev;
         ev.talkgroup = y.dgid;
-        ev.to = !y.dest.isEmpty() && !y.dest.startsWith("*") ? y.dest : "ALL";
+        ev.to = y.to();
         ev.from = y.source;
-        ev.details = "FUSION " + y.mode + "  DG-ID " + y.dgid + (y.uplink.isEmpty() ? "" : "  VIA " + y.uplink) + " (untested)";
+        String id = y.radioId();
+        ev.details = "FUSION " + y.mode + "  DG-ID " + y.dgid + (id.isEmpty() ? "" : "  RADIO ID " + id) + (y.uplink.isEmpty() ? "" : "  VIA " + y.uplink) + ("VW".equals(y.mode) ? " (untested)" : "");
     }
 
     /** Fusion voice: AMBE+2 frames in the DMR layout (DN, V/D mode 1) or IMBE frames in the P25 layout (VW). */

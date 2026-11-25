@@ -10,7 +10,7 @@ public class SystemsPage extends JPanel {
     final MainFrame f;
     final DefaultListModel<RadioSystem> listModel = new DefaultListModel<>();
     final JList<RadioSystem> list = new JList<>(listModel);
-    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)", "DMR (conventional, untested)", "DMR trunked (untested)", "NXDN (conventional, untested)", "NXDN trunked (untested)", "Analog FM (conventional, untested)", "Motorola Type II SmartNet / SmartZone (untested)", "EDACS / ProVoice", "Yaesu System Fusion (conventional, untested)"});
+    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)", "DMR (conventional, untested)", "DMR trunked (untested)", "NXDN (conventional, untested)", "NXDN trunked (untested)", "Analog FM (conventional, untested)", "Motorola Type II SmartNet / SmartZone (untested)", "EDACS / ProVoice", "Yaesu System Fusion (conventional)"});
     /** EDACS addressing, in {@link p25monitor.edacs.EdacsSite.Mode} order. */
     final JComboBox<p25monitor.edacs.EdacsSite.Mode> edacsMode = new JComboBox<>(p25monitor.edacs.EdacsSite.Mode.values());
     /** Motorola Type II band plan; the last entry uses {@link #obtPlan}. Order matches {@link #TYPE2_PLANS}. */
@@ -340,7 +340,7 @@ public class SystemsPage extends JPanel {
                 : kind == 4
                 ? "NXDN channels, separated by commas. NXDN48 and NXDN96 are detected automatically. (untested)"
                 : fusion
-                ? "Fusion repeater or simplex output frequencies, separated by commas, each with an optional name. DN and VW voice are detected automatically; analog FM users on a mixed-mode repeater are not played. (untested)"
+                ? "Fusion repeater or simplex output frequencies, separated by commas, each with an optional name. DN and VW voice are detected automatically; analog FM users on a mixed-mode repeater are not played. DN voice tested on a real repeater; VW untested."
                 : edacs
                 ? "Control channel(s) first, then every channel of the site as LCN=MHz in the site's order, for example 1=851.0125, 2=851.2625 (RadioReference lists the LCN next to each frequency). Grants name the LCN; voice is analog FM or ProVoice, as each grant says. (untested)"
                 : type2
@@ -408,7 +408,7 @@ public class SystemsPage extends JPanel {
                 : kind == 3 ? "DMR trunking (Tier III, Capacity Plus, Connect Plus and XPT) has not been tested on a real radio system yet."
                 : analog ? "Analog FM with CTCSS has not been tested on a real radio system yet."
                 : kind == 4 ? "NXDN conventional has not been tested on a real radio system yet."
-                : fusion ? "Yaesu System Fusion has not been tested on a real radio yet."
+                : fusion ? "Yaesu System Fusion DN voice has been tested on a real repeater; VW (IMBE) voice has not been tested yet."
                 : kind == 5 ? "NXDN Type-C trunking has not been tested on a real radio system yet."
                 : type2 ? "Motorola Type II (SmartNet / SmartZone) has not been tested on a real radio system yet."
                 : edacs ? "EDACS has been tested on a real radio system. ProVoice frames from real systems decode correctly, but a live ProVoice call has not been confirmed yet; it needs the same IMBE voice codec as P25. Encrypted ProVoice is muted."

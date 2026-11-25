@@ -18,12 +18,14 @@ final class EngineDiagnostics {
         List<String[]> r = new ArrayList<>();
         String alias = c.alias().isEmpty() ? "" : "  " + c.alias();
         String proto = c.ev == null || c.ev.protocol == null ? "" : c.ev.protocol;
-        boolean nxdn = proto.equals("NXDN"), dmr = proto.equals("DMR"), analog = proto.equals("Analog FM");
-        boolean p25 = !nxdn && !dmr && !analog && !c.edacs;   // the frame, talkgroup-check and I/Q rows below are P25 only
+        boolean nxdn = proto.equals("NXDN"), dmr = proto.equals("DMR"), analog = proto.equals("Analog FM"), fusion = proto.equals("Fusion");
+        boolean p25 = !nxdn && !dmr && !analog && !fusion && !c.edacs;   // the frame, talkgroup-check and I/Q rows below are P25 only
         boolean edacsAnalog = c.edacs && c.analogVoice;
-        r.add(new String[]{"Talkgroup", (nxdn ? "NXDN " : dmr ? "DMR " : "") + (c.conventional ? "conventional " : "") + c.tg + alias + (c.priority < 100 ? "  (priority " + c.priority + ")" : "")});
+        r.add(new String[]{"Talkgroup", fusion ? "Fusion DG-ID " + c.tg + alias + (c.ev.from == null || c.ev.from.isEmpty() ? "" : "  from " + c.ev.from)
+                : (nxdn ? "NXDN " : dmr ? "DMR " : "") + (c.conventional ? "conventional " : "") + c.tg + alias + (c.priority < 100 ? "  (priority " + c.priority + ")" : "")});
         r.add(new String[]{"Status", status});
-        String mode = analog || (c.type2 || c.edacs) && c.analogVoice ? "analog FM" : c.edacs ? "ProVoice" : nxdn ? "NXDN" : dmr ? (c.slot >= 0 ? "DMR timeslot " + (c.slot + 1) : "DMR")
+        String mode = fusion ? "Fusion " + (c.phase2 ? "DN (AMBE+2)" : "VW (IMBE)")
+                : analog || (c.type2 || c.edacs) && c.analogVoice ? "analog FM" : c.edacs ? "ProVoice" : nxdn ? "NXDN" : dmr ? (c.slot >= 0 ? "DMR timeslot " + (c.slot + 1) : "DMR")
                 : c.phase2 ? "Phase 2 TDMA slot " + (c.slot + 1) : "Phase 1 FDMA";
         r.add(new String[]{"Channel", mhz(c.freq) + " MHz  " + mode + (c.conventional ? "" : c.type2 ? String.format("  Type II ch %03X", c.channel) : c.edacs ? "  EDACS LCN " + c.channel : "  ch " + (c.channel >> 12) + "-" + (c.channel & 0xfff)) + (c.tuner != null ? "  on tuner T" + c.tuner.id : "")});
         if (vd != null) {

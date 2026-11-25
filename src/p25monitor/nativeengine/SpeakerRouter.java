@@ -154,6 +154,10 @@ final class SpeakerRouter {
         if (b == null) {
             if (was) e.audio.endOfTransmission();
             forgetPlayed();
+            // a call that is over and fully heard is no longer on the speaker ('last' keeps it on the display), as in
+            // the other modes; before, the status kept showing VOICE for it until the next call
+            ActiveCall s = speaker;
+            if (s != null && s.ended && !queue.has(s.id) && !e.audio.audible(s.id)) synchronized (lock) { if (speaker == s) speaker = null; }
             return false;
         }
         long id = queue.lastId();

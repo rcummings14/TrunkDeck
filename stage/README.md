@@ -1,7 +1,7 @@
 # TrunkDeck 1.7.5 — P25 Phase 1 and Phase 2 trunking monitor (Windows & Linux)
 
 TrunkDeck is a scanner-style dashboard for **P25 trunked radio systems** (Phase 1 or Phase 2 TDMA control channel; Phase 1 and Phase 2 voice).
-New in 1.7.5: EDACS (tested on a real system), and, **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), ProVoice, Yaesu System Fusion and analog FM systems (see below). Type in a control channel, load your
+New in 1.7.5: EDACS and Yaesu System Fusion DN voice (tested on real systems), and, **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), ProVoice, Fusion VW voice and analog FM systems (see below). Type in a control channel, load your
 talkgroups from a CSV file, plug in an Airspy R2, an Airspy Mini or one or two RTL-SDR dongles (or, new and untested, an SDRplay, HackRF One, LimeSDR or Ettus USRP), press **START MONITORING**, and watch (and hear) the system
 live: talkgroup, name, frequency, radio ID, call timer, encryption and emergency flags, a control-channel decode meter, an
 activity graph, and a table of **every call that is on the air right now**.
@@ -31,6 +31,7 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
   * **Motorola Type II SmartNet / SmartZone:** see *Motorola Type II* under *Using TrunkDeck*.
   * **EDACS / ProVoice:** see *EDACS and ProVoice* under *Using TrunkDeck*.
   * **Yaesu System Fusion (conventional):** repeater or simplex frequencies with optional names (`147.1650 WV8HC`).
+    DN voice has been tested on a real repeater and decodes cleanly, with the caller's callsign; VW voice is untested.
     DN and VW voice are detected automatically. Each call shows the caller's callsign, the destination and the DG-ID
     (used as the talkgroup, so DG-IDs can be named and muted on the Talkgroups page). Analog FM users on a mixed-mode
     repeater are not played.

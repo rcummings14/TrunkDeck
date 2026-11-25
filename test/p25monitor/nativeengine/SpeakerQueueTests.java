@@ -153,6 +153,9 @@ public final class SpeakerQueueTests {
         check(maxDelay[0] > 1500 && maxDelay[0] < 3500, "delay reported for the queued calls (max " + maxDelay[0] + " ms; C started 0.6 s, heard after 3 s)");
         check(ne.speaker.queue.queuedSamples() == 0 && ne.speaker.queue.idle(), "all audio released after it played");
         check(ne.speaker.queued.isEmpty(), "no queued call kept after playing");
+        { long t = System.currentTimeMillis() + 2000; while (ne.speaker.speaker != null && System.currentTimeMillis() < t) Thread.sleep(20); }
+        check(ne.speaker.speaker == null && ne.speaker.last != null && ne.speaker.last.tg == 103,
+                "the last call lets go of the speaker once heard (status no longer VOICE), still shown as the last call");
 
         // 2. silence gaps are not queued
         System.out.println("2. gaps: A 0-2 s, D 0.1-2.4 s = 0.4 s voice, 1.5 s silence, 0.4 s voice");

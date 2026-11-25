@@ -11,7 +11,7 @@ import p25monitor.dsp.C4fmDemod;
  * when no good frame has been heard for a second. The caller's and destination callsigns come from the header and from
  * the voice frames' data channel; the DG-ID from the FICH. Voice: DN (V/D mode 2) and V/D mode 1 are AMBE+2, handed
  * on as 9-byte DMR-layout frames; VW (voice FR mode) is IMBE, handed on as 18-byte P25-layout frames. Data-only
- * transmissions (pictures, messages) start no call. Untested on air.
+ * transmissions (pictures, messages) start no call. DN voice tested on a real repeater (November 24); VW untested.
  */
 public final class YsfDecoder implements C4fmDemod.Sink {
     /** What the decoder reports. */
@@ -33,8 +33,30 @@ public final class YsfDecoder implements C4fmDemod.Sink {
         /** "DN", "VW", "V/D mode 1" or "data". */
         public String mode = "";
         public boolean voice() { return !"data".equals(mode); }
+        /**
+         * Yaesu radios split the 10-character destination: the first 5 are {@code *****} (everyone) or a 5-digit
+         * WIRES-X number, the last 5 the radio's own ID (also {@code *****} when it sends none). Seen on a real repeater:
+         * {@code *****EApEj}, {@code 21080F5DIw}, {@code **********}.
+         */
+        private boolean split() {
+            if (dest.length() != 10) return false;
+            String h = dest.substring(0, 5);
+            return h.equals("*****") || h.chars().allMatch(Character::isDigit);
+        }
+        /** Who the call is for: "ALL", "WIRES-X 21080", or the destination as sent. */
+        public String to() {
+            if (split()) { String h = dest.substring(0, 5); return h.startsWith("*") ? "ALL" : "WIRES-X " + h; }
+            return dest.isEmpty() || dest.startsWith("*") ? "ALL" : dest;
+        }
+        /** The calling radio's 5-character ID from the destination field, or "" when it sent none. */
+        public String radioId() {
+            if (!split()) return "";
+            String id = dest.substring(5).trim();
+            return id.isEmpty() || id.equals("*****") ? "" : id;
+        }
         @Override public String toString() {
-            return "Fusion " + mode + " " + (source.isEmpty() ? "?" : source) + " -> " + (dest.isEmpty() ? "?" : dest) + " DG-ID " + dgid;
+            String id = radioId();
+            return "Fusion " + mode + " " + (source.isEmpty() ? "?" : source) + " -> " + (dest.isEmpty() ? "?" : to()) + " DG-ID " + dgid + (id.isEmpty() ? "" : " radio ID " + id);
         }
     }
 

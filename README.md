@@ -3,7 +3,7 @@
 **A scanner-style trunking monitor for Windows and Linux.** TrunkDeck follows a P25 trunked radio system's control
 channel, decodes the voice calls (Phase 1 and Phase 2) with its own built-in engine, plays them, records them, and can
 stream them to Broadcastify, OpenMHz or your own Rdio Scanner server - all from one window, no other radio software needed.
-Also EDACS (tested on a real system), and, new and **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), ProVoice, Yaesu System Fusion and analog FM systems.
+Also EDACS and Yaesu System Fusion DN voice (tested on real systems), and, new and **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), ProVoice, Fusion VW voice and analog FM systems.
 
 ![TrunkDeck main window](docs/screenshots/monitor.png)
 
