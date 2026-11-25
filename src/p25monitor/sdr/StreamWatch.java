@@ -11,6 +11,8 @@ public final class StreamWatch {
     /** Every USB restart this session, including ones after samples came back. Not cleared when samples resume. */
     public int sessionRestarts;
     public long gaveUpAt;
+    /** A restart round gave up since the last sample. */
+    public boolean gaveUpSinceSample;
 
     public long quietLimitMs() { return Long.getLong("trunkdeck.usbQuietMs", 8_000L); }
 
@@ -19,6 +21,7 @@ public final class StreamWatch {
         lastSampleNanos = nowNanos;
         restartsWithoutSamples = 0;
         gaveUpAt = 0;
+        gaveUpSinceSample = false;
     }
 
     /** One USB restart that is actually being done. The returned number is what the log prints. */
@@ -43,8 +46,29 @@ public final class StreamWatch {
         if (gaveUpAt != 0 && nowNanos - gaveUpAt < 60_000_000_000L) return false;
         if (gaveUpAt != 0) { gaveUpAt = 0; restartsWithoutSamples = 0; }
         restartsWithoutSamples++;
-        if (restartsWithoutSamples > 5) { gaveUpAt = nowNanos; restartsWithoutSamples = 5; return false; }
+        if (restartsWithoutSamples > 5) { gaveUpAt = nowNanos; gaveUpSinceSample = true; restartsWithoutSamples = 5; return false; }
         return true;
+    }
+
+    /**
+     * True when the next restart should close and reopen the device instead of only restarting the read: the first
+     * restart in a stall is a plain one, every later one (and every one after a pause) reopens. A dongle once stayed
+     * silent for 9 hours through 1,600 plain restarts and came back on the first reopen.
+     */
+    public boolean wantsReopen() { return restartsWithoutSamples >= 2 || gaveUpSinceSample; }
+
+    /** When the last restart was done (System.nanoTime), 0 before the first. */
+    public volatile long lastRestartNanos;
+
+    public long reopenGapMs() { return Long.getLong("trunkdeck.usbReopenGapMs", 5_000L); }
+
+    /**
+     * True while a further try in the same stall should wait: tries after the first are spaced a few seconds apart, so
+     * a dongle that dropped off USB (or was unplugged and plugged back in) is found when it reappears instead of five
+     * tries being spent in the first second and the next one a minute later.
+     */
+    public boolean waitBeforeNextTry(long nowNanos) {
+        return restartsWithoutSamples >= 1 && lastRestartNanos != 0 && (nowNanos - lastRestartNanos) / 1_000_000L < reopenGapMs();
     }
 
     public boolean givenUp(long nowNanos) { return gaveUpAt != 0 && nowNanos - gaveUpAt < 60_000_000_000L; }

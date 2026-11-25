@@ -23,6 +23,7 @@ public final class UsbWatchTests {
         conventionalCarrier();
         trunkedControl();
         sessionCount();
+        silentTuner();
         System.out.println("UsbWatchTests: " + pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);
     }
@@ -101,6 +102,51 @@ public final class UsbWatchTests {
         check(w.noteRestart() == 2, "the next restart is #2");
     }
 
+    /**
+     * A dongle that sends nothing while its restarts are tried: its error is cleared at each try, so the problem must
+     * come from how long it has been silent (a real one showed "Problem: (none)" after 9 silent hours).
+     */
+    static void silentTuner() throws Exception {
+        System.out.println("4. a tuner silent for minutes is a problem even while its error is briefly clear");
+        NativeEngine e = engine();
+        RestartSrc t1 = new RestartSrc(), t2 = new RestartSrc();
+        e.tuners.add(new Tuner(1, "T1", t1, Tuner.Role.CONTROL));
+        e.tuners.add(new Tuner(2, "T2", t2, Tuner.Role.ROAMING));
+        t2.quiet = 30_000;
+        e.noteTunerProblems();
+        check(e.problem() == null, "30 s quiet, no error: no problem yet");
+        t2.quiet = 9 * 3600_000L + 1_400_000L;
+        e.noteTunerProblems();
+        check(e.problem() != null && e.problem().startsWith("USB STREAM STOPPED ON T2") && e.problem().contains("9.4 H"), "9.4 h quiet, no error: " + e.problem());
+        t2.err = "USB stream stopped and could not be restarted";
+        e.noteTunerProblems();
+        t2.err = null;
+        e.noteTunerProblems();
+        check(e.problem() != null && e.problem().contains("T2"), "the error flickering on and off does not clear it");
+        long lines = e.recentLog().stream().filter(x -> x.contains("Tuner T2 has sent no samples")).count();
+        check(lines == 1, "logged once, not on every pass (" + lines + ")");
+        e.running = true;
+        e.ccTuner = e.tuners.get(0);
+        List<String> issues = e.health().receiverIssues;
+        check(issues.size() == 1 && issues.get(0).startsWith("Tuner T2 (voice, test source): no signal data for 9.4 h"), "Monitor page warning: " + issues);
+        t2.quiet = 0;
+        t2.err = "USB streaming failed (-5) - dongle unplugged?";
+        issues = e.health().receiverIssues;
+        check(issues.size() == 1 && issues.get(0).endsWith("dongle unplugged?"), "an error with fresh samples is shown too: " + issues);
+        t2.err = null;
+        check(e.health().receiverIssues.isEmpty(), "all receivers fine: no warning");
+        t1.quiet = 12_000;
+        issues = e.health().receiverIssues;
+        check(issues.size() == 1 && issues.get(0).startsWith("Tuner T1 (control channel, test source): no signal data for 12 s"), "the control tuner, quiet 12 s: " + issues);
+        t1.quiet = 0;
+        e.running = false;
+        e.noteTunerProblems();
+        check(e.problem() == null, "samples again: the problem clears");
+        t2.quiet = 90_000;
+        e.noteTunerProblems();
+        check(e.problem() != null && e.problem().endsWith("90 S"), "short spells read in seconds: " + e.problem());
+    }
+
     static final class RestartSrc implements IqSource, IqSource.UsbRestartable {
         int asks, stalls;
         final List<String> why = new ArrayList<>();
@@ -112,5 +158,9 @@ public final class UsbWatchTests {
         public void stop() {}
         public boolean running() { return true; }
         public boolean watchdog(long stallMs) { stalls++; return false; }
+        long quiet = -1;
+        String err;
+        public long quietMs() { return quiet; }
+        public String error() { return err; }
     }
 }

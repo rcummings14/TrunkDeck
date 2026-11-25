@@ -132,8 +132,20 @@ public class StatusStrip extends JPanel {
         else if (runningSince == 0) runningSince = now;
         // ---------- receiver
         if (!h.running) receiver.set(Level.OFF, "off", "Monitoring is stopped. Press START MONITORING.");
-        else if (h.problem.contains("USB")) receiver.set(Level.BAD, "USB stopped", "The RTL-SDR stream stopped and could not be restarted. Unplug the dongle, plug it back in, and press START MONITORING again. The diagnostic log in the settings folder records the restarts.");
+        else if (h.problem.contains("USB")) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile(" ON (T\\d+) - NO SAMPLES FOR (.+)$").matcher(h.problem);
+            boolean silent = m.find();
+            receiver.set(Level.BAD, silent ? "USB stopped " + m.group(1) : "USB stopped",
+                    (silent ? "Tuner " + m.group(1) + " has sent no samples for " + m.group(2).toLowerCase(java.util.Locale.ROOT) + ". " : "The RTL-SDR stream stopped. ")
+                    + "TrunkDeck keeps closing and reopening the dongle by itself. If it stays silent, unplug it, plug it back in, and press START MONITORING again. The diagnostic log in the settings folder records the restarts.");
+        }
         else if ("NO SYNC".equals(h.problem)) receiver.set(Level.BAD, "no sync", "A signal is present but no P25 frames are decoding. TrunkDeck reset the demodulator and restarted the stream. If this stays, check the PPM and the NAC.");
+        else if (!h.receiverIssues.isEmpty()) {
+            String first = h.receiverIssues.get(0);
+            String id = first.replaceAll("^Tuner (T\\d+).*", "$1");
+            receiver.set(Level.BAD, (h.receiverIssues.size() > 1 ? h.receiverIssues.size() + " tuners" : id) + " not working",
+                    String.join(". ", h.receiverIssues) + ". TrunkDeck restarts it by itself; if this stays, unplug the dongle and plug it back in.");
+        }
         else if (h.processingStopped) receiver.set(Level.BAD, "not processing", "The tuner's samples are not being processed right now. TrunkDeck is restarting it by itself.");
         else if (h.tuners == 0) receiver.set(Level.BAD, "no tuner", "No tuner is running. Check that the dongle is plugged in.");
         else {

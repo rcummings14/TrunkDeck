@@ -108,16 +108,31 @@ public final class RtlHealTests {
             r.usbThread = live;
         };
         check(r.watchdog(5_000) && n[0] == 1 && r.error() == null, "no samples for 20 s: USB stream restarted");
+        check(!r.lastRestartReopened && r.reopens == 0, "the first restart only restarts the USB read");
         check(!r.watchdog(5_000) && n[0] == 1, "a stream that just restarted is left alone");
         r.usbRestartAction = () -> n[0]++;
         r.usbThread = dead;
-        r.watch.restartsWithoutSamples = 0;
+        r.watch.restartsWithoutSamples = 1;   // one try already made in this stall
         r.watch.gaveUpAt = 0;
         r.watch.lastSampleNanos = System.nanoTime() - 20_000_000_000L;
         int before = n[0];
+        check(!r.watchdog(5_000) && n[0] == before, "a second try right after the first waits a few seconds");
+        r.watch.lastRestartNanos = System.nanoTime() - 6_000_000_000L;
+        check(r.watchdog(5_000) && n[0] == before + 1 && r.lastRestartReopened, "5 s later the next try reopens the dongle");
+        r.watch.restartsWithoutSamples = 0;
+        r.watch.lastRestartNanos = 0;
+        r.reopens = 0;
+        System.setProperty("trunkdeck.usbReopenGapMs", "0");   // the rest of this test counts tries, not time
+        before = n[0];
         for (int i = 0; i < 6; i++) r.watchdog(5_000);
         check(n[0] == before + 5 && r.error() != null && r.error().contains("could not be restarted"), "after five restarts with no samples: " + r.error() + " (" + (n[0] - before) + " restarts)");
+        check(r.reopens == 4 && r.lastRestartReopened, "restarts 2 to 5 close and reopen the dongle (" + r.reopens + " reopens)");
         check(!r.watchdog(5_000) && n[0] == before + 5, "further restarts wait");
+        r.watch.gaveUpAt = System.nanoTime() - 61_000_000_000L;
+        check(r.watchdog(5_000) && n[0] == before + 6 && r.lastRestartReopened && r.reopens == 5, "after the pause the next try reopens at once");
+        r.watch.noteSample(System.nanoTime());
+        r.watch.lastSampleNanos = System.nanoTime() - 20_000_000_000L;
+        check(r.watchdog(5_000) && !r.lastRestartReopened, "after samples came back, a new stall starts with a plain restart again");
         shutdown(r);
     }
 

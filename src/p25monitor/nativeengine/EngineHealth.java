@@ -20,6 +20,13 @@ public final class EngineHealth {
     /** Conventional system: no control channel. {@code lastChannelAt} is the last P25 frame on a saved channel. */
     public boolean conventional;
     public long lastChannelAt;
+    /**
+     * One plain line per receiver that is not working right now (no samples, a stream error, or its sample processing
+     * stopped), for the warning on the Monitor page. Empty when every receiver is fine.
+     */
+    public final List<String> receiverIssues = new ArrayList<>();
+    /** A receiver this quiet counts as not working (the USB watchdog restarts after 8 s). */
+    static final long QUIET_MS = 10_000L;
 
     public enum Kind { FEED, CALLS, OPENMHZ, RDIO }
     public static final class Stream {
@@ -30,6 +37,23 @@ public final class EngineHealth {
         public long ok, duplicate, failed, dropped, lastOk; public String lastError = "";
     }
     public final List<Stream> streams = new ArrayList<>();
+
+    /** What is wrong with this tuner's receiver, in plain words, or null when it is working. */
+    static String receiverIssue(NativeEngine e, Tuner t) {
+        if (!e.running) return null;
+        long q = t.src.quietMs();
+        String err = t.src.error();
+        ProcessingGuard g = t.src.guard();
+        long stalled = g == null || !t.src.running() ? 0 : (System.nanoTime() - g.lastProgressNanos) / 1_000_000L;
+        String why;
+        if (q >= QUIET_MS) why = "no signal data for " + NativeEngine.quietFor(q).toLowerCase(Locale.ROOT);
+        else if (err != null && !err.isBlank()) why = err;
+        else if (stalled > 5_000) why = "its samples are not being processed (" + stalled / 1000 + " s)";
+        else return null;
+        String role = t == e.ccTuner ? (e.conventional ? "channels" : "control channel") : "voice";
+        String name = t.src.name().replaceAll("\\s+", " ").trim();
+        return "Tuner T" + t.id + " (" + role + ", " + name + "): " + why;
+    }
 
     static EngineHealth of(NativeEngine e) {
         EngineHealth h = new EngineHealth();
@@ -48,6 +72,8 @@ public final class EngineHealth {
         for (Tuner t : e.tuners) {
             h.tuners++;
             if (!seen.add(t.src)) continue;   // tuners of one wideband source share it
+            String issue = receiverIssue(e, t);
+            if (issue != null) h.receiverIssues.add(issue);
             ProcessingGuard g = t.src.guard();
             if (g != null) {
                 h.restarts += g.restarts; h.lastRestartAt = Math.max(h.lastRestartAt, g.lastRestartAt); h.droppedWhileStopped += g.droppedWhileStopped;

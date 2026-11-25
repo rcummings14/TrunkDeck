@@ -262,6 +262,9 @@ public final class RtlSdr implements IqSource, IqSource.UsbRestartable {
     volatile String usbRestartReason;
     /** Test stand-in for closing and reopening the native USB read. Null on a real dongle. */
     public volatile Runnable usbRestartAction;
+    /** Restarts that closed and reopened the whole device (not just the USB read), and whether the last one did. */
+    public volatile int reopens;
+    public volatile boolean lastRestartReopened;
     public final StreamWatch watch = new StreamWatch();
 
     @Override public ProcessingGuard guard() { return guard; }
@@ -316,6 +319,7 @@ public final class RtlSdr implements IqSource, IqSource.UsbRestartable {
             if (error == null) error = "USB stream stopped and could not be restarted";
             return false;
         }
+        if (watch.waitBeforeNextTry(now)) return false;
         if (!watch.allowRestart(now)) {
             error = "USB stream stopped and could not be restarted";
             String msg = "RTL-SDR #" + index + " " + error;
@@ -329,11 +333,15 @@ public final class RtlSdr implements IqSource, IqSource.UsbRestartable {
     }
 
     boolean restartUsb(String why) {
+        boolean reopen = watch.wantsReopen();
         int n = watch.noteRestart();
-        String msg = "RTL-SDR #" + index + " USB stream restart (" + why + ") #" + n;
+        watch.lastRestartNanos = System.nanoTime();
+        String msg = "RTL-SDR #" + index + " USB stream restart (" + why + ")" + (reopen ? ", closing and reopening the dongle" : "") + " #" + n;
         p25monitor.DiagLog.event("sdr", msg);
         guard.events.add(msg);
         gap = true;
+        lastRestartReopened = reopen;
+        if (reopen) reopens++;
         if (usbRestartAction != null) {
             try { usbRestartAction.run(); }
             catch (Throwable t) { error = "USB stream restart failed: " + t; p25monitor.DiagLog.event("sdr", "RTL-SDR #" + index + " " + error); return true; }
@@ -357,13 +365,43 @@ public final class RtlSdr implements IqSource, IqSource.UsbRestartable {
                 return true;
             }
         }
-        try { if (dev.address() != 0) call(l.reset, dev); }
-        catch (Throwable t) { error = "USB stream restart failed: " + t; p25monitor.DiagLog.event("sdr", "RTL-SDR #" + index + " " + error); return true; }
+        try {
+            if (reopen) reopenDevice();
+            else if (dev.address() != 0) call(l.reset, dev);
+        } catch (Throwable t) {
+            error = "USB stream restart failed: " + (t.getMessage() != null ? t.getMessage() : t.toString());
+            p25monitor.DiagLog.event("sdr", "RTL-SDR #" + index + " " + error);
+            return true;
+        }
         error = null;
         watch.lastSampleNanos = System.nanoTime();
         launchUsb(gen);
         return true;
     }
+
+    /**
+     * Closes the dongle and opens it again with the same rate, gain, PPM, bias tee and frequency: what stopping and
+     * starting monitoring does, for a dongle whose stream stalled in a way a plain restart of the read does not clear.
+     * The USB thread has already ended. Found again by serial number when it is unique, in case Windows renumbered it.
+     */
+    synchronized void reopenDevice() throws Exception {
+        if (dev.address() != 0) { try { call(l.close, dev); } catch (Throwable ignored) {} dev = MemorySegment.NULL; }
+        int at = index;
+        if (!info.key().startsWith("idx"))
+            for (Info d : list()) if (d.key().equals(info.key())) { at = d.index; break; }
+        MemorySegment pp = arena.allocate(ValueLayout.ADDRESS);
+        int r = call(l.open, pp, at);
+        if (r < 0) throw new IllegalStateException("could not reopen the dongle (error " + r + ")");
+        dev = pp.get(ValueLayout.ADDRESS, 0);
+        call(l.setRate, dev, (int) rate);
+        configure(ppm, gainTenths, bias);
+        if (center > 0) call(l.setFreq, dev, (int) center);
+        flush = 2;
+        p25monitor.DiagLog.event("sdr", "RTL-SDR #" + index + " closed and reopened" + (at != index ? " (now #" + at + ")" : ""));
+    }
+
+    /** Milliseconds since the dongle last delivered samples while streaming is wanted; -1 when it is not streaming. */
+    @Override public long quietMs() { return usbWanted ? Math.max(0, (System.nanoTime() - lastBufferNanos) / 1_000_000L) : -1; }
 
     /** One line for Copy diagnostics: stream, USB thread, last real sample, and watchdog counts. */
     public String watchReport() {

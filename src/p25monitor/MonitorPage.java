@@ -74,6 +74,10 @@ public class MonitorPage extends JPanel {
     final JComboBox<String> speakerBox = new JComboBox<>(new String[]{"One call at a time (priority)", "Mix all calls", "Hold one talkgroup", "Queue all calls (one after another)"});
     /** Countdown shown when a system will auto-start after TrunkDeck opens. Hidden otherwise. */
     final JPanel autoStartBar = new JPanel(new BorderLayout(12, 0));
+    /** Red warning above the display while a dongle or receiver is not working (both views). */
+    final JPanel receiverBar = new JPanel(new BorderLayout(12, 0));
+    final JLabel receiverLbl = new JLabel(), receiverHint = new JLabel();
+    String receiverShown = "";
     final JLabel autoStartLbl = new JLabel();
     final JButton autoStartCancel = MainFrame.button("Cancel", Theme.Glyph.STOP, Theme.AMBER);
 
@@ -91,9 +95,26 @@ public class MonitorPage extends JPanel {
         autoStartBar.add(autoStartLbl, BorderLayout.CENTER);
         autoStartBar.add(autoStartCancel, BorderLayout.EAST);
         autoStartBar.setVisible(false);
+        receiverBar.setBackground(new Color(0x3A1A1A));
+        receiverBar.setBorder(new CompoundBorder(new LineBorder(Theme.RED, 1, true), new EmptyBorder(8, 12, 8, 12)));
+        receiverLbl.setFont(Theme.ui(Font.BOLD, 15f));
+        receiverLbl.setForeground(Theme.RED);
+        receiverHint.setFont(Theme.ui(Font.PLAIN, 12f));
+        receiverHint.setForeground(Theme.TEXT);
+        receiverHint.setText("TrunkDeck keeps restarting it by itself. If this stays, unplug the dongle, plug it back in, and check its USB port and cable. Click for details.");
+        receiverBar.add(receiverLbl, BorderLayout.CENTER);
+        receiverBar.add(receiverHint, BorderLayout.SOUTH);
+        receiverBar.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        receiverBar.addMouseListener(new java.awt.event.MouseAdapter() { public void mouseClicked(java.awt.event.MouseEvent ev) { f.openAdvanced("Engine", null); } });
+        receiverBar.setVisible(false);
+        new javax.swing.Timer(1000, ev -> refreshReceivers()).start();
+        JPanel bars = new JPanel(new BorderLayout(0, 8));
+        bars.setOpaque(false);
+        bars.add(receiverBar, BorderLayout.NORTH);
+        bars.add(autoStartBar, BorderLayout.SOUTH);
         JPanel north = new JPanel(new BorderLayout(0, 8));
         north.setOpaque(false);
-        north.add(autoStartBar, BorderLayout.NORTH);
+        north.add(bars, BorderLayout.NORTH);
         north.add(f.display, BorderLayout.CENTER);
         holdBar.setOpaque(false);
         holdBar.add(holdBtn); holdBar.add(scanBtn); holdBar.add(downBtn); holdBar.add(upBtn); holdBar.add(lockBtn); holdBar.add(lockedBtn); holdBar.add(holdLbl);
@@ -410,6 +431,27 @@ public class MonitorPage extends JPanel {
         RadioSystem s = f.app.current;
         Talkgroup t = s == null || e.talkgroup < 0 ? null : s.find(e.talkgroup);
         CallHistory.append(CallHistory.folder(), CallHistory.fields(e, t, s), msg -> SwingUtilities.invokeLater(() -> f.toast("Call history could not be saved: " + msg)));
+    }
+
+    /** Shows or hides the red receiver warning: one line per tuner that is not working, worded by the engine. */
+    void refreshReceivers() {
+        java.util.List<String> issues = isShowing() ? f.nativeEngine.health().receiverIssues : java.util.List.of();
+        if (!isShowing() && !receiverBar.isVisible()) return;
+        String text = String.join("\n", issues);
+        if (text.equals(receiverShown)) return;
+        receiverShown = text;
+        if (issues.isEmpty()) { receiverBar.setVisible(false); revalidate(); repaint(); return; }
+        StringBuilder html = new StringBuilder("<html>");
+        for (int i = 0; i < issues.size(); i++) {
+            String s = issues.get(i);
+            int c = s.indexOf("): ");
+            String head = c > 0 ? s.substring(0, c + 1) : s, why = c > 0 ? s.substring(c + 3) : "";
+            html.append(i > 0 ? "<br>" : "").append("&#9888; ").append(esc(head)).append(why.isEmpty() ? "" : " is not working: " + esc(why));
+        }
+        receiverLbl.setText(html.append("</html>").toString());
+        receiverBar.setToolTipText(Jargon.html("While a receiver is not working, calls on its frequencies are missed. TrunkDeck restarts its USB stream, then closes and reopens the dongle, by itself; this warning goes away as soon as samples arrive again."));
+        receiverBar.setVisible(true);
+        revalidate(); repaint();
     }
 
     /**

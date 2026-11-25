@@ -371,8 +371,9 @@ public final class NativeEngine {
         house.scheduleAtFixedRate(() -> { try { calls.transmissionTick(System.currentTimeMillis()); } catch (Throwable t) { log("transmission check: " + t); } }, 50, 50, TimeUnit.MILLISECONDS);
         StringBuilder w = new StringBuilder();
         for (Tuner t : tuners) w.append(w.length() > 0 ? "; " : "").append("T").append(t.id).append(t == ccTuner ? (conventional ? " channels " : " control ") : " voice ").append(t.window());
-        log("TrunkDeck engine started (" + m + (conventional ? ", conventional" : "") + "), " + tuners.size() + " tuner(s): " + w);
-        p25monitor.DiagLog.event("sdr", "engine started (" + m + (conventional ? ", conventional" : "") + "), " + tuners.size() + " tuner(s)");
+        String how = m == Mode.RTL ? "live radio" : m == Mode.FILE ? "I/Q file" : "simulated";   // Mode.RTL is any live receiver (RTL-SDR, Airspy, SoapySDR)
+        log("TrunkDeck engine started (" + how + (conventional ? ", conventional" : "") + "), " + tuners.size() + " tuner(s): " + w);
+        p25monitor.DiagLog.event("sdr", "engine started (" + how + (conventional ? ", conventional" : "") + "), " + tuners.size() + " tuner(s)");
     }
 
     void startFile(List<Long> ccs) throws Exception {
@@ -534,21 +535,43 @@ public final class NativeEngine {
     /** Shows a tuner failure on the display, and clears it once the stream is delivering again. */
     void noteTunerProblems() {
         boolean bad = false;
-        String failed = null;
+        String failed = null, silent = null, silentLog = null;
         boolean usb = false;
         for (Tuner t : tuners) {
+            long q = t.src.quietMs();
+            if (q >= SILENT_TUNER_MS && silent == null) {
+                silent = "USB STREAM STOPPED ON T" + t.id + " - NO SAMPLES FOR " + quietFor(q);
+                silentLog = "Tuner T" + t.id + " has sent no samples for " + q / 1000 + " s; TrunkDeck keeps closing and reopening it. If it stays silent, unplug it and plug it back in.";
+            }
             String err = t.src.error();
             if (err == null) continue;
             bad = true;
             if (failed == null) { failed = "Tuner T" + t.id + " error: " + err; usb = err.toLowerCase(java.util.Locale.ROOT).contains("could not be restarted"); }
         }
-        if (bad) {
+        boolean wasTuner = problem != null && (problem.startsWith("USB STREAM STOPPED") || "TUNER ERROR".equals(problem));
+        if (silent != null) {
+            // A dongle that sends nothing stays a problem between restart tries, when its error is briefly cleared.
+            if (problem == null || "NO SYNC".equals(problem) || wasTuner) {
+                if (!wasTuner || !problem.startsWith("USB STREAM STOPPED ON")) { log(silentLog); p25monitor.DiagLog.event("sdr", silentLog); }
+                problem = silent;
+            }
+        } else if (bad) {
             if (problem == null || "NO SYNC".equals(problem)) {
                 problem = usb ? "USB STREAM STOPPED" : "TUNER ERROR";
                 log(failed);
                 p25monitor.DiagLog.event("sdr", failed);
             }
-        } else if ("TUNER ERROR".equals(problem) || "USB STREAM STOPPED".equals(problem)) problem = null;
+        } else if (wasTuner) problem = null;
+    }
+
+    /** A live tuner silent this long is shown as a problem, even while its restarts are still being tried. */
+    static final long SILENT_TUNER_MS = 60_000L;
+
+    static String quietFor(long ms) {
+        long s = ms / 1000;
+        if (s < 120) return s + " S";
+        if (s < 7200) return s / 60 + " MIN";
+        return String.format(java.util.Locale.ROOT, "%.1f H", s / 3600.0);
     }
 
     /**
