@@ -11,6 +11,14 @@ public final class RrAllSystemsTests {
 
     public static void main(String[] a) {
         try { run(); } catch (Throwable t) { t.printStackTrace(); fail++; }
+        try {
+            Map<Integer, Double> lsn = Map.of(1, 451.0125, 3, 451.5125, 5, 452.0125);
+            check(RrImport.dmrRepeaterNumbers(lsn, "capplus").equals(Map.of(1, 451.0125, 2, 451.5125, 3, 452.0125)), "Capacity Plus listed by LSN 1, 3, 5: repeaters 1, 2, 3");
+            Map<Integer, Double> lcn = Map.of(1, 451.0125, 2, 451.5125, 3, 452.0125);
+            check(RrImport.dmrRepeaterNumbers(lcn, "capplus").equals(lcn), "Capacity Plus listed by LCN 1, 2, 3: kept");
+            Map<Integer, Double> lpcn = Map.of(1, 451.0125, 3, 451.5125);
+            check(RrImport.dmrRepeaterNumbers(lpcn, "tier3").equals(lpcn), "Tier III LPCNs are never renumbered");
+        } catch (Throwable t) { t.printStackTrace(); fail++; }
         System.out.println("RrAllSystemsTests: " + pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);
     }

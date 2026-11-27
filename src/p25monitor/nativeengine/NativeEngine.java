@@ -302,15 +302,16 @@ public final class NativeEngine {
         conventional = s.fixedChannels(); parkedDecoders.clear(); scanTuner = null; scanGroups = List.of(); scanIndex = 0; lastScanAt = 0;
         speaker.holdFrequency(0); lastAnalogHeard = 0; lastAnalogAt = 0;
         nxdnSite = s.nxdnTrunk() ? new p25monitor.nxdn.NxdnSite(s::nxdnChannelHz) : null;
+        dmrGuessWarned.clear();
         nxdnVoice.clear(); nxdnLogged.clear();
         type2Digital.clear(); type2Grants = 0;
         if (s.edacs()) log("EDACS: " + p25monitor.edacs.EdacsSite.Mode.of(s.edacsMode).label + " addressing, " + s.nxdnChannels.size() + " LCN" + (s.nxdnChannels.size() == 1 ? "" : "s") + " listed; voice is analog FM or ProVoice as each grant says." + (s.nxdnChannels.isEmpty() ? " No LCN=MHz entries on the Systems page: grants can't be followed until they are added." : "") + " If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         if (s.type2()) log("Motorola Type II (untested): band plan " + s.type2BandPlan() + "; voice is analog FM or P25 as each grant says. If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         if (s.analog()) log("Analog FM conventional (untested): noise squelch level " + s.squelch + (s.channels.stream().anyMatch(c -> s.toneFor(Math.round(c.mhz * 1e6)) > 0) ? " and CTCSS tone squelch" : "") + ". If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         if (s.nxdn()) log("NXDN " + (s.nxdnTrunk() ? "Type-C trunked" : "conventional") + " (untested; NXDN48 and NXDN96 are detected automatically). If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
-        if (s.fusion()) log("Yaesu System Fusion: DN and VW voice (DN tested on a real repeater, VW untested); the caller's callsign is shown on each call. If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
+        if (s.fusion()) log("Yaesu System Fusion: DN and VW voice (DN tested on a real repeater, VW untested); the caller's callsign is shown on each call. Analog FM users on a mixed-mode repeater are played as analog calls (squelch level " + s.squelch + "). If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         if (s.dmr() || s.nxdn()) io.github.dsheirer.compat.Logger.sink = (who, text) -> log(who + ": " + text);
-        if (s.dmr()) log("DMR " + (s.dmrTrunk() ? "trunked (" + s.dmrFlavor + ")" : "conventional") + " (untested). If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
+        if (s.dmr()) log("DMR " + (s.dmrTrunk() ? "trunked (" + s.dmrFlavor + ")" + (s.nxdnChannels.isEmpty() ? ", repeater N is the Nth frequency" : ", " + s.nxdnChannels.size() + " numbered channel" + (s.nxdnChannels.size() == 1 ? "" : "s") + " listed") : "conventional") + " (untested). If something doesn't work, please report it on GitHub Issues (" + p25monitor.sdr.SoapyDriver.ISSUES_URL + ").");
         SpeakerMode sm;
         try { sm = SpeakerMode.valueOf(app.settings.getProperty("native.speaker", "PRIORITY")); } catch (Exception e) { sm = SpeakerMode.PRIORITY; }
         int hold;
@@ -881,26 +882,39 @@ public final class NativeEngine {
         return d;
     }
 
+    /** Tier III channel numbers whose guessed frequency was already pointed out in the log. */
+    final java.util.Set<Integer> dmrGuessWarned = ConcurrentHashMap.newKeySet();
+
     /** A channel decoder whose P25 framer is idle and whose samples feed the DMR receiver. */
     ChannelDecoder dmrDecoder(Tuner t, long f) {
         ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {}, 0);
         int cc = sys == null ? -1 : sys.colorCodeFor(f);
         int slot = sys == null ? 0 : sys.slotFor(f);
-        java.util.List<Long> chans = new java.util.ArrayList<>();
-        if (sys != null) for (double mhz : sys.frequencies()) chans.add(Math.round(mhz * 1e6));
-        long base = chans.isEmpty() ? f : chans.get(0);
+        // Repeaters by the number grants use: the "number=MHz" list, else the listed frequencies in order.
+        java.util.List<Long> chans = sys == null ? new java.util.ArrayList<>() : sys.dmrTrunk() ? sys.dmrRepeaterHz() : new java.util.ArrayList<>();
+        if (sys != null && !sys.dmrTrunk()) for (double mhz : sys.frequencies()) chans.add(Math.round(mhz * 1e6));
+        long base = sys == null || sys.frequencies().isEmpty() ? f : Math.round(sys.frequencies().get(0) * 1e6);
         p25monitor.dmr.DmrTrunk trunk = sys != null && sys.dmrTrunk() ? new p25monitor.dmr.DmrTrunk(p25monitor.dmr.DmrTrunk.flavor(sys.dmrFlavor)) : null;
+        if (trunk != null) { RadioSystem s0 = sys; trunk.table = n -> s0.nxdnChannelHz(n); }
         final long freq = f;
         p25monitor.dmr.DmrDecoder.Listener events = new p25monitor.dmr.DmrDecoder.Listener() {
             public void group(long hz, int sl, int color, int tg, int src, byte[][] ambe) { voice.onDmr(hz, sl, color, tg, src, true, ambe); d.lastFrameAt = System.currentTimeMillis(); }
             public void unit(long hz, int sl, int color, int target, int src) { voice.onDmr(hz, sl, color, target, src, false, new byte[0][]); d.lastFrameAt = System.currentTimeMillis(); }
             public void encrypted(long hz, int sl, int color) { voice.onDmrEncrypted(hz, sl, color); }
             public void end(long hz, int sl) { voice.onDmrEnd(hz, sl); }
-            public void grant(p25monitor.dmr.DmrTrunk.Grant g) { voice.onDmrGrant(g); d.lastFrameAt = System.currentTimeMillis(); }
+            long guessedLogged;
+            public void grant(p25monitor.dmr.DmrTrunk.Grant g) {
+                if (trunk != null && trunk.guessed > guessedLogged) {
+                    guessedLogged = trunk.guessed;
+                    if (dmrGuessWarned.add(g.lcn)) log("DMR Tier III (untested): channel " + g.lcn + " is not in the channel list, so its frequency is a guess (" + mhz(g.hz)
+                            + " MHz). Add it on the Systems page as " + g.lcn + "=<MHz>, from the site's channel list (RadioReference: LCN / LPCN).");
+                }
+                voice.onDmrGrant(g); d.lastFrameAt = System.currentTimeMillis();
+            }
             public void rest(int repeater, int sl, long hz, boolean moved) {
                 long now = System.currentTimeMillis();
                 if (moved) log("DMR " + (sl == 0 ? "free repeater (XPT)" : "rest channel") + " (untested) -> repeater " + repeater + (sl == 0 ? "" : " slot " + sl)
-                        + (hz > 0 ? " " + mhz(hz) + " MHz" : " (not in the frequency list: list every repeater, repeater 1 first)"));
+                        + (hz > 0 ? " " + mhz(hz) + " MHz" : " (not in the channel list: add it as " + repeater + "=<MHz> on the Systems page, or list every repeater, repeater 1 first)"));
                 if (hz > 0) { dmrRestHz = hz; dmrRestAt = now; }
                 d.lastFrameAt = now;
             }
@@ -931,15 +945,20 @@ public final class NativeEngine {
         ChannelDecoder d = new ChannelDecoder(t.decoderRate(), t.decoderCenter(f), f, new P25Framer.Listener() {}, 0);
         final long freq = f;
         double tone = sys == null ? 0 : sys.toneFor(f);
-        d.analog = new p25monitor.analog.FmReceiver(tone, new p25monitor.analog.FmReceiver.Listener() {
+        d.analog = new p25monitor.analog.FmReceiver(tone, analogListener(d, freq));
+        d.analog.setSquelch(sys == null ? p25monitor.analog.FmReceiver.SQUELCH_DEFAULT : sys.squelch);
+        d.anchor = () -> tunerAnchor(t, d, freq);
+        return d;
+    }
+
+    /** Analog FM transmissions on channel {@code freq} into calls (shared by analog systems and mixed-mode Fusion). */
+    p25monitor.analog.FmReceiver.Listener analogListener(ChannelDecoder d, long freq) {
+        return new p25monitor.analog.FmReceiver.Listener() {
             public void start(double toneHz) { if (lockedOut(freq)) return; d.lastFrameAt = System.currentTimeMillis(); voice.onAnalogStart(freq, toneHz); }
             public void tone(double toneHz) { voice.onAnalogTone(freq, toneHz); }
             public void audio(float[] pcm) { if (lockedOut(freq)) return; d.lastFrameAt = System.currentTimeMillis(); voice.onAnalogAudio(freq, pcm); }
             public void end() { voice.onAnalogEnd(freq); }
-        });
-        d.analog.setSquelch(sys == null ? p25monitor.analog.FmReceiver.SQUELCH_DEFAULT : sys.squelch);
-        d.anchor = () -> tunerAnchor(t, d, freq);
-        return d;
+        };
     }
 
     // ------------------------------------------------------------------ Motorola Type II (untested on air)
@@ -1027,6 +1046,11 @@ public final class NativeEngine {
             public void end() { voice.onYsfEnd(freq); }
             public void message(String text) { log(text + " on " + mhz(freq) + " MHz"); }
         });
+        // Mixed-mode (AMS) repeaters also repeat analog FM users, often heard through WIRES-X: play those as analog
+        // calls. The gate keeps the FM receiver quiet while the Fusion decoder is in sync.
+        final p25monitor.ysf.YsfDecoder y = d.ysf;
+        d.analog = new p25monitor.analog.FmReceiver(0, new p25monitor.analog.AmsGate(y::msSinceGoodFrame, analogListener(d, freq)));
+        d.analog.setSquelch(sys == null ? p25monitor.analog.FmReceiver.SQUELCH_DEFAULT : sys.squelch);
         d.anchor = () -> tunerAnchor(t, d, freq);
         return d;
     }

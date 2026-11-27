@@ -140,7 +140,22 @@ public class RadioSystem {
     /** Yaesu System Fusion conventional channels. */
     public boolean fusion() { return FUSION.equalsIgnoreCase(kind); }
     /** Trunked kinds whose voice channels are numbered (number=MHz in the frequency box): NXDN Type-C and EDACS. */
-    public boolean channelNumbers() { return nxdnTrunk() || edacs(); }
+    public boolean channelNumbers() { return nxdnTrunk() || edacs() || dmrTrunk(); }
+
+    /**
+     * DMR trunking: the repeaters by the number grants use (Tier III LPCN; Capacity Plus / Connect Plus / XPT LCN),
+     * counting from 1: entry N-1 is channel N, 0 where none is listed. From the "number=MHz" entries when there are
+     * any, else the listed frequencies in order (repeater N is the Nth frequency).
+     */
+    public List<Long> dmrRepeaterHz() {
+        List<Long> out = new ArrayList<>();
+        if (!nxdnChannels.isEmpty()) {
+            int max = 0;
+            for (int k : nxdnChannels.keySet()) max = Math.max(max, k);
+            for (int n = 1; n <= max; n++) out.add(nxdnChannelHz(n));
+        } else for (double mhz : frequencies()) out.add(Math.round(mhz * 1e6));
+        return out;
+    }
 
     public p25monitor.motorola.Type2BandPlan type2BandPlan() {
         return new p25monitor.motorola.Type2BandPlan(p25monitor.motorola.Type2BandPlan.Kind.of(type2Plan),
@@ -431,6 +446,7 @@ public class RadioSystem {
             p.setProperty("colorCode", String.valueOf(colorCode));
             p.setProperty("timeslot", String.valueOf(timeslot));
         }
+        if (fusion()) p.setProperty("squelch", String.valueOf(squelch));   // analog users on a mixed-mode repeater
         if (analog()) {
             p.setProperty("squelch", String.valueOf(squelch)); p.setProperty("scanDelay", String.valueOf(scanDelay));
             p.setProperty("scanDwell", String.valueOf(scanDwell));

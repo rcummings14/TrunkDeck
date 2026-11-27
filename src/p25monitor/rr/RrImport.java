@@ -104,6 +104,20 @@ public final class RrImport {
 
     public static Family family(TrsDetails d) { return d == null ? Family.P25 : family(d.typeName(), d.flavorName()); }
 
+    /**
+     * DMR trunking numbers from RadioReference. Capacity Plus / Connect Plus / XPT grants name the repeater (LCN), but
+     * a listing may number each repeater by its first LSN (1, 3, 5, ...: LSNs 2N-1 and 2N are repeater N's two
+     * timeslots). When every number is odd, they are LSNs and become repeater numbers. Tier III numbers are LPCNs, kept.
+     */
+    static TreeMap<Integer, Double> dmrRepeaterNumbers(Map<Integer, Double> listed, String flavor) {
+        TreeMap<Integer, Double> out = new TreeMap<>(listed);
+        if ("tier3".equals(flavor) || listed.size() < 2) return out;
+        for (int n : listed.keySet()) if (n % 2 == 0) return out;
+        out.clear();
+        for (var e : listed.entrySet()) out.put((e.getKey() + 1) / 2, e.getValue());
+        return out;
+    }
+
     /** DMR trunking flavour for {@link RadioSystem#dmrFlavor}: capplus, conplus, xpt or tier3. */
     public static String dmrFlavor(String typeName, String flavorName) {
         String t = typeText(typeName, flavorName);
@@ -445,7 +459,8 @@ public final class RrImport {
             for (RadioSystem.Channel c : s.channels) c.nac = "";
         }
         s.nxdnChannels = new TreeMap<>();
-        if ((fam == Family.NXDN || fam == Family.EDACS) && !conv) for (Site x : sites) for (SiteFreq sf : x.freqs()) if (sf.lcn() > 0) s.nxdnChannels.putIfAbsent(sf.lcn(), sf.mhz());
+        if ((fam == Family.NXDN || fam == Family.EDACS || fam == Family.DMR) && !conv) for (Site x : sites) for (SiteFreq sf : x.freqs()) if (sf.lcn() > 0) s.nxdnChannels.putIfAbsent(sf.lcn(), sf.mhz());
+        if (fam == Family.DMR && !conv) s.nxdnChannels = dmrRepeaterNumbers(s.nxdnChannels, s.dmrFlavor);
         if (fam == Family.P25 && !conv && !f.details().sysids().isEmpty()) {
             s.sysId = f.details().sysids().get(0).sysid().trim().toUpperCase(Locale.ROOT);
             s.wacn = f.details().sysids().get(0).wacn().trim().toUpperCase(Locale.ROOT);

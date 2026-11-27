@@ -17,7 +17,10 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
 * Choose the type under **Systems → Kind**:
   * **DMR (conventional):** channels with their colour code and timeslot after a colon (`450.0000:1/2`). A colour code
     for the whole system, and a choice of timeslot 1, timeslot 2 or both.
-  * **DMR trunked:** **Tier III**, **Capacity Plus**, **Connect Plus** or **XPT**.
+  * **DMR trunked:** **Tier III**, **Capacity Plus**, **Connect Plus** or **XPT**. Enter each repeater as `number=MHz`
+    (`1=451.0125, 2=451.5125`): the LPCN on Tier III, the LCN (repeater number) on the others. Capacity Plus LSN pairs
+    as RadioReference lists them work too (`1-2=451.0125`). Plain frequencies without numbers still work: repeater N is
+    then the Nth frequency. Set up from RadioReference brings the numbers in.
   * **NXDN (conventional)** and **NXDN trunked (Type-C):** NXDN48 and NXDN96 are detected automatically. Trunked sites
     that announce their frequencies need only the control channel. For a site that uses channel numbers, add each voice
     channel as `number=MHz` (`37=451.0125`). Changing the Kind from NXDN trunked to another kind removes those entries
@@ -34,7 +37,7 @@ receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *
     DN voice has been tested on a real repeater and decodes cleanly, with the caller's callsign; VW voice is untested.
     DN and VW voice are detected automatically. Each call shows the caller's callsign, the destination and the DG-ID
     (used as the talkgroup, so DG-IDs can be named and muted on the Talkgroups page). Analog FM users on a mixed-mode
-    repeater are not played.
+    (AMS) repeater, often heard through WIRES-X, are played as analog calls (Squelch on the Systems page).
 * DMR, NXDN and Fusion DN voice use the AMBE+2 codec: they need JMBE 2.x, the same as P25 Phase 2.
 * **Set up from RadioReference** imports these system types now. DMR, NXDN and SmartNet / SmartZone systems become the
   matching kind. EDACS systems import as EDACS (see *EDACS and ProVoice*). Other analog trunked systems (LTR, MPT,

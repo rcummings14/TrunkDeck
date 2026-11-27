@@ -128,7 +128,7 @@ public class SystemsPage extends JPanel {
         tuner.putClientProperty("JTextField.placeholderText", "optional - e.g. Airspy 0x26A464DC2B5A7C9F (see Setup & Help \u2192 Tuners)");
         kindBox.addActionListener(e -> {
             int k = kindBox.getSelectedIndex();
-            if ((shownKind == 5 || shownKind == 8) && k != 5 && k != 8) cc.setText(withoutNxdnTable(cc.getText()));   // number=MHz entries only work for NXDN trunked and EDACS
+            if ((shownKind == 3 || shownKind == 5 || shownKind == 8) && k != 3 && k != 5 && k != 8) cc.setText(withoutNxdnTable(cc.getText()));   // number=MHz entries only work for DMR trunking, NXDN trunked and EDACS
             showKind(k);
         });
         dmrFlavor.addActionListener(e -> { if (kindBox.getSelectedIndex() == 3) showKind(3); });
@@ -334,17 +334,19 @@ public class SystemsPage extends JPanel {
         freqLabel.setText(fixed ? "Channels MHz" : "Control channel(s) MHz");
         Jargon.explain(freqLabel, fixed ? "Channels MHz" : "Control channel(s) MHz");
         cc.setToolTipText(freqLabel.getToolTipText());
-        cc.putClientProperty("JTextField.placeholderText", kind == 2 ? "e.g. 450.0000:1/1 Sample" : kind == 4 ? "e.g. 451.0125, 451.0250" : fusion ? "e.g. 147.1650 WV8HC, 444.1750" : analog ? "e.g. 155.2500, 155.3700:100.0 Fire" : kind == 5 ? "e.g. 451.0000, 37=451.0125" : edacs ? "e.g. 851.0125, 1=851.0125, 2=851.2625" : fixed ? "e.g. 155.2500, 155.3700:2D5" : "e.g. 851.0125, 851.5125");
+        cc.putClientProperty("JTextField.placeholderText", kind == 2 ? "e.g. 450.0000:1/1 Sample" : kind == 3 ? "e.g. 1=451.0125, 2=451.5125, 3=452.0125" : kind == 4 ? "e.g. 451.0125, 451.0250" : fusion ? "e.g. 147.1650 WV8HC, 444.1750" : analog ? "e.g. 155.2500, 155.3700:100.0 Fire" : kind == 5 ? "e.g. 451.0000, 37=451.0125" : edacs ? "e.g. 851.0125, 1=851.0125, 2=851.2625" : fixed ? "e.g. 155.2500, 155.3700:2D5" : "e.g. 851.0125, 851.5125");
         freqHelp.setText(helpHtml((analog
                 ? "Analog FM channels, separated by commas, each with an optional name. Add a CTCSS (PL) tone after a colon when one channel uses its own, for example 155.3700:100.0. (untested)"
                 : kind == 4
                 ? "NXDN channels, separated by commas. NXDN48 and NXDN96 are detected automatically. (untested)"
                 : fusion
-                ? "Fusion repeater or simplex output frequencies, separated by commas, each with an optional name. DN and VW voice are detected automatically; analog FM users on a mixed-mode repeater are not played. DN voice tested on a real repeater; VW untested."
+                ? "Fusion repeater or simplex output frequencies, separated by commas, each with an optional name. DN and VW voice are detected automatically. Analog FM users on a mixed-mode (AMS) repeater, often heard through WIRES-X, are played as analog calls (Squelch below). DN voice tested on a real repeater; VW untested."
                 : edacs
                 ? "Control channel(s) first, then every channel of the site as LCN=MHz in the site's order, for example 1=851.0125, 2=851.2625 (RadioReference lists the LCN next to each frequency). Grants name the LCN; voice is analog FM or ProVoice, as each grant says. (untested)"
                 : type2
                 ? "Control channel(s), primary first. Calls are followed from the control channel; their voice is analog FM or P25, as each grant says. (untested)"
+                : kind == 3
+                ? "Each repeater as number=MHz, using the number the system's grants use: the LPCN on Tier III, the LCN (repeater number) on Capacity Plus, Connect Plus and XPT. RadioReference lists it next to each frequency; Capacity Plus LSN pairs work too (1-2=451.0125). Tier III: put the control channel first as a plain frequency if it is not numbered. Plain frequencies without numbers still work: repeater N is then the Nth frequency. (untested)"
                 : kind == 5
                 ? "Control channel(s) first. Sites that announce their frequencies (DFA) need nothing else. For a site that uses channel numbers, add each voice channel as number=MHz, for example 37=451.0125. (untested)"
                 : kind == 2
@@ -380,13 +382,13 @@ public class SystemsPage extends JPanel {
         dmrOpts.removeAll();
         if (kind == 3) dmrOpts.add(dmrFlavor);
         if (kind == 2) dmrOpts.add(dmrSlot);
-        if (analog) dmrOpts.add(squelch);
+        if (analog || fusion) dmrOpts.add(squelch);
         if (type2) { dmrOpts.add(type2Plan); if (obt) dmrOpts.add(obtPlan); }
         if (edacs) dmrOpts.add(edacsMode);
-        dmrLabel.setText(type2 ? "Band plan" : edacs ? "Addressing" : analog ? "Squelch" : kind == 2 ? "Timeslot" : "Trunking");
-        dmrLabel.setVisible(dmr || analog || type2 || edacs);
-        dmrOpts.setVisible(dmr || analog || type2 || edacs);
-        dmrHelp.setVisible(dmr || analog || type2 || edacs);
+        dmrLabel.setText(type2 ? "Band plan" : edacs ? "Addressing" : analog || fusion ? "Squelch" : kind == 2 ? "Timeslot" : "Trunking");
+        dmrLabel.setVisible(dmr || analog || type2 || edacs || fusion);
+        dmrOpts.setVisible(dmr || analog || type2 || edacs || fusion);
+        dmrHelp.setVisible(dmr || analog || type2 || edacs || fusion);
         delayLabel.setVisible(analog);
         delayBox.setVisible(analog);
         delayHelp.setVisible(analog);
@@ -400,9 +402,11 @@ public class SystemsPage extends JPanel {
                        : "Turns the channel numbers in grants into frequencies. Auto picks 800 or 900 MHz from the control channel and checks the 800 MHz variant against the channel number the site announces. (untested)")
                 : analog
                 ? "1 opens on the weakest signals, 10 needs a strong, clean signal. Raise it if static opens the squelch; lower it if weak transmissions are missed. 5 is the default."
+                : fusion
+                ? "For analog FM users on a mixed-mode (AMS) repeater: 1 opens on the weakest signals, 10 needs a strong, clean signal. Fusion digital calls do not use it. Raise it if static is played as analog calls. 5 is the default."
                 : kind == 2
                 ? "Listen to timeslot 1, timeslot 2, or both. (untested)"
-                : "Tier III follows a control-channel grant. Capacity Plus follows the rest channel; XPT follows the free repeater (list every repeater, repeater 1 first: repeater N is the Nth frequency). Connect Plus follows a voice grant. (untested)"));
+                : "Tier III follows a control-channel grant. Capacity Plus follows the rest channel; XPT follows the free repeater. Connect Plus follows a voice grant. Grants name channels by number: list them as number=MHz above. (untested)"));
         String note = kind == 1 ? "P25 conventional has not been tested on a real radio system yet."
                 : kind == 2 ? "DMR conventional has not been tested on a real radio system yet."
                 : kind == 3 ? "DMR trunking (Tier III, Capacity Plus, Connect Plus and XPT) has not been tested on a real radio system yet."
@@ -433,7 +437,7 @@ public class SystemsPage extends JPanel {
         int kind = s.fusion() ? 9 : s.edacs() ? 8 : s.type2() ? 7 : s.analog() ? 6 : s.nxdnTrunk() ? 5 : s.nxdnConventional() ? 4 : s.dmrTrunk() ? 3 : s.dmrConventional() ? 2 : s.conventional() ? 1 : 0;
         kindBox.setSelectedIndex(kind);
         showKind(kind);
-        cc.setText(s.fixedChannels() ? s.channelText() : s.freqText() + nxdnTableText(s));
+        cc.setText(s.fixedChannels() ? s.channelText() : dmrTableOnly(s) ? nxdnTableText(s).replaceFirst("^, ", "") : s.freqText() + nxdnTableText(s));
         dmrFlavor.setSelectedIndex(switch (s.dmrFlavor == null ? "" : s.dmrFlavor) {
             case "capplus" -> 1; case "conplus" -> 2; case "xpt" -> 3; default -> 0; });
         dmrSlot.setSelectedIndex(s.timeslot == 1 ? 1 : s.timeslot == 2 ? 2 : 0);
@@ -460,6 +464,12 @@ public class SystemsPage extends JPanel {
         rrRefresh.setVisible(s.rrSid > 0);
     }
 
+    /** DMR trunking entered as numbered repeaters only (the frequency list is just their frequencies): show only the table. */
+    static boolean dmrTableOnly(RadioSystem s) {
+        return s.dmrTrunk() && !s.nxdnChannels.isEmpty()
+                && new java.util.HashSet<>(s.controlChannelsMHz).equals(new java.util.HashSet<>(s.nxdnChannels.values()));
+    }
+
     /** NXDN Type-C channel table, appended to the control channels as ", 37=451.0125". */
     static String nxdnTableText(RadioSystem s) {
         if (!s.channelNumbers() || s.nxdnChannels.isEmpty()) return "";
@@ -479,12 +489,25 @@ public class SystemsPage extends JPanel {
             int eq = tok.indexOf('=');
             if (eq < 0) { rest.append(tok).append(", "); continue; }
             int ch; double mhz;
-            try { ch = Integer.parseInt(tok.substring(0, eq).trim()); mhz = Double.parseDouble(tok.substring(eq + 1).trim()); }
+            try { ch = channelNumber(tok.substring(0, eq).trim()); mhz = Double.parseDouble(tok.substring(eq + 1).trim()); }
             catch (NumberFormatException ex) { ch = -1; mhz = 0; }
-            if (ch < 1 || ch > 1023 || mhz < 30 || mhz > 1000) throw new NumberFormatException("channel " + tok + " should be number=MHz, for example 37=451.0125");
+            if (ch < 1 || ch > 4095 || mhz < 30 || mhz > 1000) throw new NumberFormatException("channel " + tok + " should be number=MHz, for example 37=451.0125 (DMR Capacity Plus LSNs: 1-2=451.0125)");
             table.put(ch, mhz);
         }
         return rest.toString();
+    }
+
+    /**
+     * A channel number before "=": a plain number, or a DMR LSN pair as RadioReference lists Capacity Plus repeaters
+     * ("1-2", "1/2", "3,4" is split earlier so not here): LSNs 2N-1 and 2N are the two timeslots of repeater N.
+     */
+    static int channelNumber(String t) {
+        String[] p = t.split("[-/]");
+        if (p.length == 1) return Integer.parseInt(p[0].trim());
+        if (p.length != 2) throw new NumberFormatException(t);
+        int a = Integer.parseInt(p[0].trim()), b = Integer.parseInt(p[1].trim());
+        if (b != a + 1 || a % 2 != 1) throw new NumberFormatException(t);
+        return b / 2;
     }
 
     /**
@@ -528,8 +551,10 @@ public class SystemsPage extends JPanel {
                 s.controlChannelsMHz = new ArrayList<>();
             } else {
                 String text = cc.getText();
-                if (kind == 5 || kind == 8) text = splitNxdnTable(text, table);
-                java.util.List<Double> fr = RadioSystem.parseFreqs(text);
+                if (kind == 3 || kind == 5 || kind == 8) text = splitNxdnTable(text, table);
+                java.util.List<Double> fr = text.isBlank() && kind == 3 && !table.isEmpty()
+                        ? new ArrayList<>(new java.util.LinkedHashSet<>(table.values()))   // DMR: only numbered repeaters given, all of them are tried
+                        : RadioSystem.parseFreqs(text);
                 if (fr.isEmpty()) throw new NumberFormatException("enter at least one control channel");
                 s.controlChannelsMHz = fr;
                 s.channels = new ArrayList<>();

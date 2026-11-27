@@ -44,6 +44,20 @@ public final class FusionEngineTests {
             boolean quiet = sym < 4800 || (sym >= d1.length - 4800 && sym < d1.length + 4800) || sym >= all.length - 4800;
             if (quiet) { bb[0][k] = (float) (0.03 * Math.sin(k * 1.7)); bb[1][k] = (float) (0.03 * Math.cos(k * 2.3)); }
         }
+        // then an analog FM user on the mixed-mode repeater: 2.5 s of a 1 kHz tone at 2.5 kHz deviation, then 1 s quiet
+        int fmN = 48_000 * 5 / 2, tail = 48_000;
+        float[][] mixed = {Arrays.copyOf(bb[0], bb[0].length + fmN + tail), Arrays.copyOf(bb[1], bb[1].length + fmN + tail)};
+        Random rnd = new Random(4);
+        double ph = 0;
+        for (int k = 0; k < fmN + tail; k++) {
+            int at = bb[0].length + k;
+            if (k < fmN) {
+                ph += 2 * Math.PI * 2500 * Math.sin(2 * Math.PI * 1000 * k / 48_000.0) / 48_000.0;
+                mixed[0][at] = (float) (0.9 * Math.cos(ph) + 0.02 * rnd.nextGaussian());
+                mixed[1][at] = (float) (0.9 * Math.sin(ph) + 0.02 * rnd.nextGaussian());
+            } else { mixed[0][at] = (float) (0.03 * Math.sin(at * 1.7)); mixed[1][at] = (float) (0.03 * Math.cos(at * 2.3)); }
+        }
+        bb = mixed;
         int up = 5, n = bb[0].length * up;
         Path dir = Files.createTempDirectory("td-ysf");
         Path file = dir.resolve("10-20-30_" + hz + "Hz.wav");
@@ -92,19 +106,26 @@ public final class FusionEngineTests {
                 synchronized (ne) {
                     ActiveCall c = ne.callMap.get("Y" + hz);
                     if (c != null) voice.merge(c.ev.from, (long) c.voiceMs, Math::max);
+                    ActiveCall a = ne.callMap.get("A" + hz);
+                    if (a != null) voice.merge("analog", (long) a.voiceMs, Math::max);
                 }
                 Thread.sleep(20);
             }
             Thread.sleep(1500);
         } finally { ne.stop(); }
-        CallEvent first = null, second = null;
+        CallEvent first = null, second = null, analog = null;
+        int analogCalls = 0;
         synchronized (calls) {
             for (CallEvent e : calls) {
                 if ("KD8ABC".equals(e.from)) first = e;
                 if ("N8FMD".equals(e.from)) second = e;
+                if ("Analog FM".equals(e.protocol)) { analog = e; analogCalls++; }
             }
         }
-        check(calls.size() == 2, "two transmissions, two calls (" + calls.size() + ")");
+        check(calls.size() == 3, "two Fusion transmissions and one analog, three calls (" + calls.size() + ": " + calls.stream().map(e -> e.protocol + " " + e.from).toList() + ")");
+        check(analogCalls == 1 && analog != null && "WV8HC".equals(analog.to), "mixed-mode repeater: the analog FM user is one analog call on the channel, the Fusion calls none (" + analogCalls + ")");
+        long anMs = voice.getOrDefault("analog", 0L);
+        check(anMs >= 2200, "the analog call's audio reached the call from its start: " + anMs + " ms of 2500");
         check(first != null && "Fusion".equals(first.protocol) && "ALL".equals(first.to) && first.talkgroup == 0 && Math.abs(first.frequencyMHz - 147.165) < 1e-6,
                 "DN call: " + (first == null ? "none" : first.from + " -> " + first.to + " DG-ID " + first.talkgroup + ", " + first.details));
         check(first != null && first.details.contains("DN") && first.details.contains("WV8HC"), "DN call details name the mode and the repeater: " + (first == null ? "" : first.details));

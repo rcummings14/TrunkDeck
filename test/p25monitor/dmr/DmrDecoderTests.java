@@ -343,6 +343,17 @@ public final class DmrDecoderTests {
         check("Tier III grant decoded", g != null);
         check("grant TG " + tg + " from " + src + " on LPCN " + lpcn + " timeslot 2 at base + 7 x 12.5 kHz",
                 g != null && g.talkgroup == tg && g.source == src && g.lcn == lpcn && g.slot == 2 && g.hz == base + lpcn * 12_500L && g.group);
+        // with the site's channel list from the Systems page (7=451.3375): the listed frequency, not the guess
+        grants.clear();
+        DmrTrunk listed = new DmrTrunk(DmrTrunk.Flavor.TIER3);
+        listed.table = n -> n == lpcn ? 451_337_500L : 0;
+        rx = new DmrDecoder(base, -1, 0, listed, base, List.of(base), l, 48000);
+        feed(rx, iq);
+        g = grants.isEmpty() ? null : grants.get(0);
+        check("with 7=451.3375 listed, the grant goes to 451.3375 MHz (" + (g == null ? "none" : g.hz) + ")", g != null && g.hz == 451_337_500L && listed.guessed == 0);
+        DmrTrunk none = new DmrTrunk(DmrTrunk.Flavor.TIER3);
+        none.tier3Hz(lpcn, base);
+        check("an unlisted LPCN is counted as a guess (for the log hint)", none.guessed == 1);
     }
 
     /** AMBE+2 frame correction (Golay on C0) and concealment of frames that cannot be corrected. */

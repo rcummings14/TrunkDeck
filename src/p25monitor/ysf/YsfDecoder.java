@@ -68,26 +68,32 @@ public final class YsfDecoder implements C4fmDemod.Sink {
     private final C4fmDemod demod;
     private final byte[] frame = new byte[YsfFrame.BITS];
     private int fill = -1;
-    private long samples, lastGood = -10 * FS;
-    private Call call;
+    // Read without the lock by the status methods below (volatile): the Engine page must never wait for this decoder,
+    // whose sample thread holds its lock while it reports a call to the engine. Waiting there froze TrunkDeck when the
+    // Engine page was opened during a Fusion call (November 25).
+    private volatile long samples, lastGood = -10 * FS;
+    private volatile Call call;
     private boolean announced;
-    private long frames, bad, voiceFrames;
+    private volatile long frames, bad, voiceFrames;
 
     public YsfDecoder(Listener out) {
         this.out = out;
         demod = C4fmDemod.custom(this, YsfFrame.SYNC_DIBITS, true);
     }
 
-    /** True while frames with a good FICH are being received. */
-    public synchronized boolean synced() { return samples - lastGood < HOLD; }
+    /** True while frames with a good FICH are being received. Lock-free, like the other status methods. */
+    public boolean synced() { return samples - lastGood < HOLD; }
+
+    /** Milliseconds of signal since the last frame with a good FICH (large before the first). Lock-free. */
+    public long msSinceGoodFrame() { return (samples - lastGood) * 1000 / FS; }
 
     /** The carrier's offset from the channel centre (Hz, positive = above) while synced, else NaN. */
-    public synchronized double carrierErrorHz() { return synced() ? demod.freqErrorHz : Double.NaN; }
+    public double carrierErrorHz() { return synced() ? demod.freqErrorHz : Double.NaN; }
 
     /** The current transmission's mode ("DN", "VW", …) while synced, else null. */
-    public synchronized String mode() { return synced() && call != null && !call.mode.isEmpty() ? call.mode : null; }
+    public String mode() { Call c = call; String m = c == null ? "" : c.mode; return synced() && !m.isEmpty() ? m : null; }
 
-    public synchronized String status() {
+    public String status() {
         return "fusion " + (synced() ? "synced" : "searching") + " frames=" + frames + " bad FICH=" + bad + " voice frames=" + voiceFrames;
     }
 

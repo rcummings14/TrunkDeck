@@ -19,7 +19,9 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
 * **More kinds of radio system** (all new and **untested** on real systems; please report how they work on
   [GitHub Issues](https://github.com/rcummings14/TrunkDeck/issues)). Choose them under **Kind** on the Systems page:
   * **DMR conventional:** channels with their colour code and timeslot (`450.0000:1/2`), or both timeslots.
-  * **DMR trunked:** Tier III, Capacity Plus, Connect Plus and XPT.
+  * **DMR trunked:** Tier III, Capacity Plus, Connect Plus and XPT. Enter each repeater as `number=MHz`
+    (`1=451.0125, 2=451.5125`): the LPCN on Tier III, the LCN on the others; Capacity Plus LSN pairs work too
+    (`1-2=451.0125`). Plain frequencies still work: repeater N is then the Nth frequency.
   * **NXDN conventional and NXDN Type-C trunked:** NXDN48 and NXDN96 are detected automatically. Sites that use channel
     numbers take `number=MHz` entries (`37=451.0125`). Changing the Kind from NXDN trunked to another kind removes
     those entries and keeps their frequencies. TrunkDeck locks onto NXDN only after two frames in a row, one of them
@@ -31,7 +33,7 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   * **Yaesu System Fusion (conventional):** repeater or simplex frequencies with optional names (`147.1650 WV8HC`).
     DN and VW voice are detected automatically. Each call shows the caller's callsign, the destination and the
     DG-ID (used as the talkgroup, so DG-IDs can be named and muted on the Talkgroups page). Analog FM users on a
-    mixed-mode repeater are not played. Tested only against simulated signals and frames built with MMDVMHost's
+    mixed-mode (AMS) repeater, often heard through WIRES-X, are played as analog calls. Tested only against simulated signals and frames built with MMDVMHost's
     encoder.
   * DMR, NXDN and Fusion DN voice use the AMBE+2 codec, so they need JMBE 2.x, the same as P25 Phase 2.
   * **Set up from RadioReference** now imports these system types too, instead of refusing them.

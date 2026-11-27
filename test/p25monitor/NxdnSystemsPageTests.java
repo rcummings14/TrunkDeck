@@ -29,6 +29,28 @@ public final class NxdnSystemsPageTests {
             String plain = SystemsPage.withoutNxdnTable("150.9200, 151.9100, 1=150.9200, 2=151.9100, 3=152.3375");
             check(plain.equals("150.9200, 151.9100, 152.3375") && RadioSystem.parseChannelText(plain).size() == 3, "switching to conventional drops the number=MHz entries: " + plain);
             check(SystemsPage.withoutNxdnTable("451.0, 37=abc").equals("451.0000, 37=abc"), "a bad entry is left as typed for the usual error message");
+            // DMR trunking: repeaters by number, including Capacity Plus LSN pairs as RadioReference lists them
+            Map<Integer, Double> dt = new TreeMap<>();
+            String drest = SystemsPage.splitNxdnTable("451.0000, 1-2=451.0125, 3/4=451.5125, 5=452.0125", dt);
+            check(RadioSystem.parseFreqs(drest).equals(List.of(451.0)) && dt.equals(Map.of(1, 451.0125, 2, 451.5125, 5, 452.0125)),
+                    "DMR: LSN 1-2 is repeater 1, LSN 3/4 repeater 2, 5= is repeater 5: " + dt);
+            boolean bad = false;
+            try { SystemsPage.splitNxdnTable("2-3=451.0125", new TreeMap<>()); } catch (NumberFormatException e) { bad = e.getMessage().contains("LSN"); }
+            check(bad, "an LSN pair that is not one repeater's two timeslots is refused with a hint");
+            RadioSystem d = new RadioSystem();
+            d.kind = RadioSystem.DMR_TRUNK; d.dmrFlavor = "capplus";
+            d.controlChannelsMHz = new ArrayList<>(new LinkedHashSet<>(dt.values()));
+            d.nxdnChannels.putAll(dt);
+            check(d.channelNumbers() && d.dmrRepeaterHz().equals(List.of(451_012_500L, 451_512_500L, 0L, 0L, 452_012_500L)), "repeater list by number, 0 where none is listed: " + d.dmrRepeaterHz());
+            check(SystemsPage.dmrTableOnly(d), "entered as numbers only: the box shows only the numbered list");
+            java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("dmr-lcn");
+            d.save(dir);
+            RadioSystem back = RadioSystem.load(dir);
+            check(back.dmrTrunk() && back.nxdnChannels.equals(dt) && back.dmrRepeaterHz().equals(d.dmrRepeaterHz()), "saved and loaded, the numbers are kept: " + back.nxdnChannels);
+            RadioSystem plainDmr = new RadioSystem();
+            plainDmr.kind = RadioSystem.DMR_TRUNK;
+            plainDmr.controlChannelsMHz = new ArrayList<>(List.of(451.0125, 451.5125));
+            check(plainDmr.dmrRepeaterHz().equals(List.of(451_012_500L, 451_512_500L)), "without numbers, repeater N is still the Nth frequency");
             // right-click menu: Paste goes through the box's own paste(), the same path as Ctrl+V (table paste)
             int[] pastes = {0};
             javax.swing.JTextField box = new javax.swing.JTextField("155.2500") { @Override public void paste() { pastes[0]++; } };

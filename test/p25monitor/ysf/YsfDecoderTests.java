@@ -9,7 +9,7 @@ public final class YsfDecoderTests {
     static void check(boolean ok, String what) { if (ok) pass++; else fail++; System.out.println((ok ? "  ok    " : "  FAIL  ") + what); }
 
     public static void main(String[] a) {
-        try { run(); destinations(); } catch (Throwable t) { t.printStackTrace(); fail++; }
+        try { run(); destinations(); lockFree(); } catch (Throwable t) { t.printStackTrace(); fail++; }
         System.out.println("YsfDecoderTests: " + pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);
     }
@@ -23,6 +23,29 @@ public final class YsfDecoderTests {
             c.dest = k[0];
             check(k[1].equals(c.to()) && k[2].equals(c.radioId()), k[0] + " -> to " + c.to() + ", radio ID '" + c.radioId() + "'");
         }
+    }
+
+    static void lockFree() throws Exception {
+        System.out.println("status while the decoder is busy");
+        YsfDecoder d = new YsfDecoder(new Heard());
+        String r = whileLocked(d, () -> d.synced() + " " + d.mode() + " " + d.carrierErrorHz() + " " + d.status());
+        check(r != null, "synced / mode / carrier error / status answer while the sample thread holds the decoder (" + r + ")");
+    }
+
+    /**
+     * The status methods must answer while another thread holds the decoder's lock, as its sample thread does while it
+     * reports a call to the engine. Waiting there deadlocked with the Engine page and froze TrunkDeck (November 25).
+     */
+    static String whileLocked(Object lock, java.util.function.Supplier<String> read) throws Exception {
+        java.util.concurrent.CountDownLatch held = new java.util.concurrent.CountDownLatch(1), release = new java.util.concurrent.CountDownLatch(1);
+        Thread t = new Thread(() -> { synchronized (lock) { held.countDown(); try { release.await(); } catch (InterruptedException ignored) {} } });
+        t.setDaemon(true);
+        t.start();
+        held.await();
+        var f = java.util.concurrent.CompletableFuture.supplyAsync(read);
+        try { return f.get(2, java.util.concurrent.TimeUnit.SECONDS); }
+        catch (java.util.concurrent.TimeoutException e) { return null; }
+        finally { release.countDown(); }
     }
 
     /** What a decoder run reported. */

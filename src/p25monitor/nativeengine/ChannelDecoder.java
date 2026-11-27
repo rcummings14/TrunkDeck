@@ -261,7 +261,7 @@ final class ChannelDecoder {
     p25monitor.nxdn.NxdnDecoder nxdn;
     /** Yaesu System Fusion receiver on this same 48 kHz channel. Null unless the system is Fusion. */
     p25monitor.ysf.YsfDecoder ysf;
-    /** Analog FM receiver (squelch, CTCSS) on this same 48 kHz channel. Null unless the system is analog. */
+    /** Analog FM receiver (squelch, CTCSS) on this same 48 kHz channel. Null unless the system is analog, or Fusion (analog users on a mixed-mode repeater). */
     p25monitor.analog.FmReceiver analog;
     /** Motorola Type II control channel receiver on this same 48 kHz channel. Null unless this is a Type II control channel. */
     p25monitor.motorola.Type2Demod type2;
@@ -393,6 +393,7 @@ final class ChannelDecoder {
         if (type2 != null) return "2FSK (Motorola Type II)";
         if (edacs != null) return "2FSK 9600 (EDACS)";
         if (provoice != null && analog == null) return "2FSK 9600 (ProVoice)";
+        if (ysf != null && (analog == null || ysf.synced() || !analog.open())) { String m = ysf.mode(); return "C4FM (Fusion" + (m == null ? "" : " " + m) + ")"; }
         if (analog != null) return "FM (analog)" + (analog.tone() > 0 ? String.format(java.util.Locale.ROOT, " PL %.1f", analog.tone()) : "");
         if (nxdn != null) { String m = nxdn.mode(); return "4FSK (" + (m == null ? "NXDN" : m) + ")"; }
         if (ysf != null) { String m = ysf.mode(); return "C4FM (Fusion" + (m == null ? "" : " " + m) + ")"; }

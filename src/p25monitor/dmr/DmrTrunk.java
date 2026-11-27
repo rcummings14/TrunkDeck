@@ -30,6 +30,8 @@ public final class DmrTrunk {
     public Grant lastGrant;
     /** Tier III LPCN -> downlink frequency, learned from absolute channel parameters. */
     final java.util.concurrent.ConcurrentHashMap<Integer, Long> lpcnHz = new java.util.concurrent.ConcurrentHashMap<>();
+    /** Channel number -> downlink Hz from the user's "number=MHz" list (0 when not listed), or null. */
+    public volatile java.util.function.IntToLongFunction table;
 
     public DmrTrunk(Flavor flavor) { this.flavor = flavor == null ? Flavor.TIER3 : flavor; }
 
@@ -78,9 +80,20 @@ public final class DmrTrunk {
         }
     }
 
-    /** Tier III downlink frequency of an LPCN: learned from an absolute grant, else base + LPCN x 12.5 kHz. */
+    /**
+     * Tier III downlink frequency of an LPCN: learned from an absolute grant, else the user's "number=MHz" list, else
+     * a guess (base + LPCN x 12.5 kHz) that is right only on sites numbered that way. {@link #guessed} counts guesses.
+     */
     public long tier3Hz(int lpcn, long baseHz) {
         Long hz = lpcnHz.get(lpcn);
-        return hz != null ? hz : baseHz + (long) lpcn * 12_500L;
+        if (hz != null) return hz;
+        java.util.function.IntToLongFunction t = table;
+        long listed = t == null ? 0 : t.applyAsLong(lpcn);
+        if (listed > 0) return listed;
+        guessed++;
+        return baseHz + (long) lpcn * 12_500L;
     }
+
+    /** Tier III grants whose frequency had to be guessed (no absolute parameters, LPCN not listed). */
+    public volatile long guessed;
 }

@@ -56,31 +56,37 @@ public final class NxdnDecoder {
 
     private final Listener out;
     private final Lane[] lanes;
-    private Lane owner;
-    private long samples;
+    // Read without the lock by the status methods below (volatile): the display must never wait for a decoder whose
+    // sample thread holds this object's lock while it reports a call to the engine (that froze the Engine page).
+    private volatile Lane owner;
+    private volatile long samples;
     private int callSrc = -1, callDst = -1;
-    private long messages, voiceFrames;
+    private volatile long messages, voiceFrames;
 
     public NxdnDecoder(Listener out) {
         this.out = out;
         lanes = new Lane[]{new Lane(TransmissionMode.M4800, "NXDN48"), new Lane(TransmissionMode.M9600, "NXDN96")};
     }
 
-    /** True while one mode is decoding NXDN frames. */
-    public synchronized boolean synced() { return owner != null && samples - owner.lastValid < HOLD_SAMPLES; }
+    private boolean synced(Lane o) { return o != null && samples - o.lastValid < HOLD_SAMPLES; }
+
+    /** True while one mode is decoding NXDN frames. Lock-free (see the fields). */
+    public boolean synced() { return synced(owner); }
 
     /** "NXDN48" or "NXDN96" while synced, else null. */
-    public synchronized String mode() { return synced() ? owner.name : null; }
+    public String mode() { Lane o = owner; return synced(o) ? o.name : null; }
 
     /** The carrier's offset from the channel centre (Hz, positive = signal above) while synced, else NaN. */
-    public synchronized double carrierErrorHz() {
-        if (!synced()) return Double.NaN;
-        double c = owner.carrierHz;
+    public double carrierErrorHz() {
+        Lane o = owner;
+        if (!synced(o)) return Double.NaN;
+        double c = o.carrierHz;
         return Double.isNaN(c) ? Double.NaN : -c;
     }
 
-    public synchronized String status() {
-        return "nxdn " + (owner == null ? "searching" : owner.name) + " messages=" + messages + " voice frames=" + voiceFrames;
+    public String status() {
+        Lane o = owner;
+        return "nxdn " + (o == null ? "searching" : o.name) + " messages=" + messages + " voice frames=" + voiceFrames;
     }
 
     public synchronized void baseband(float[] i, float[] q, int n) {
@@ -157,7 +163,7 @@ public final class NxdnDecoder {
         /** Samples held back so every block given to the decimators is a whole number of output samples. */
         final float[] holdI, holdQ;
         int held;
-        long lastValid = Long.MIN_VALUE / 2;
+        volatile long lastValid = Long.MIN_VALUE / 2;
         /** The symbol processor's frequency correction (Hz), the opposite sign of the carrier's offset. */
         volatile double carrierHz = Double.NaN;
 

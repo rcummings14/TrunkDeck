@@ -32,8 +32,29 @@ public final class NxdnDecoderTests {
             control(n + " control channel", baud);
         }
         noiseOnly();
+        try {
+            NxdnDecoder d = new NxdnDecoder(new Rec());
+            String r = whileLocked(d, () -> d.synced() + " " + d.mode() + " " + d.carrierErrorHz() + " " + d.status());
+            check("synced / mode / carrier error / status answer while the sample thread holds the decoder (" + r + ")", r != null);
+        } catch (Exception e) { check("lock-free status: " + e, false); }
         System.out.println("NxdnDecoderTests: " + pass + " passed, " + fail + " failed");
         if (fail > 0) System.exit(1);
+    }
+
+    /**
+     * The status methods must answer while another thread holds the decoder's lock, as its sample thread does while it
+     * reports a call to the engine. Waiting there deadlocked with the Engine page and froze TrunkDeck (November 25).
+     */
+    static String whileLocked(Object lock, java.util.function.Supplier<String> read) throws Exception {
+        java.util.concurrent.CountDownLatch held = new java.util.concurrent.CountDownLatch(1), release = new java.util.concurrent.CountDownLatch(1);
+        Thread t = new Thread(() -> { synchronized (lock) { held.countDown(); try { release.await(); } catch (InterruptedException ignored) {} } });
+        t.setDaemon(true);
+        t.start();
+        held.await();
+        var f = java.util.concurrent.CompletableFuture.supplyAsync(read);
+        try { return f.get(2, java.util.concurrent.TimeUnit.SECONDS); }
+        catch (java.util.concurrent.TimeoutException e) { return null; }
+        finally { release.countDown(); }
     }
 
     static final int SRC = 4001, TG = 300, CALLS = 3, SUPERFRAMES = 6;
