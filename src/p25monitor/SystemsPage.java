@@ -10,7 +10,7 @@ public class SystemsPage extends JPanel {
     final MainFrame f;
     final DefaultListModel<RadioSystem> listModel = new DefaultListModel<>();
     final JList<RadioSystem> list = new JList<>(listModel);
-    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)", "DMR (conventional, untested)", "DMR trunked (untested)", "NXDN (conventional, untested)", "NXDN trunked (untested)", "Analog FM (conventional)", "Motorola Type II SmartNet / SmartZone (untested)", "EDACS / ProVoice", "Yaesu System Fusion (conventional)"});
+    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels)", "DMR (conventional, untested)", "DMR trunked (untested)", "NXDN (conventional, untested)", "NXDN trunked (untested)", "Analog FM (conventional)", "Motorola Type II SmartNet / SmartZone (untested)", "EDACS / ProVoice", "Yaesu System Fusion (conventional)"});
     /** EDACS addressing, in {@link p25monitor.edacs.EdacsSite.Mode} order. */
     final JComboBox<p25monitor.edacs.EdacsSite.Mode> edacsMode = new JComboBox<>(p25monitor.edacs.EdacsSite.Mode.values());
     /** Motorola Type II band plan; the last entry uses {@link #obtPlan}. Order matches {@link #TYPE2_PLANS}. */
@@ -407,7 +407,7 @@ public class SystemsPage extends JPanel {
                 : kind == 2
                 ? "Listen to timeslot 1, timeslot 2, or both. (untested)"
                 : "Tier III follows a control-channel grant. Capacity Plus follows the rest channel; XPT follows the free repeater. Connect Plus follows a voice grant. Grants name channels by number: list them as number=MHz above. (untested)"));
-        String note = kind == 1 ? "P25 conventional has not been tested on a real radio system yet."
+        String note = kind == 1 ? "P25 conventional has been tested on a real radio system."
                 : kind == 2 ? "DMR conventional has not been tested on a real radio system yet."
                 : kind == 3 ? "DMR trunking (Tier III, Capacity Plus, Connect Plus and XPT) has not been tested on a real radio system yet."
                 : analog ? "Analog FM, including CTCSS (PL) tone squelch, has been tested on a real radio system."

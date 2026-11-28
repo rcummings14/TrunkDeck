@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TrunkDeck – Free P25 trunked radio scanner for Windows &amp; Linux</title>
-<meta name="description" content="Free, easy P25 trunked radio scanner for Windows and Linux. Decodes, records and streams to Broadcastify, OpenMHz and Rdio Scanner.">
+<meta name="description" content="Free, easy P25 trunked radio scanner for Windows and Linux, now also EDACS, Yaesu System Fusion, analog FM, DMR and NXDN. Decodes, records and streams to Broadcastify, OpenMHz and Rdio Scanner.">
 <meta name="theme-color" content="#000000">
 <meta property="og:title" content="TrunkDeck">
 <meta property="og:description" content="Free, easy P25 trunked radio scanner for Windows and Linux.">
@@ -29,12 +29,12 @@
       <div class="marquee"><span>SCANNING ... SCANNING ... SCANNING ... SCANNING ... SCANNING ... SCANNING ...</span></div>
     </div>
     <h1>Your PC becomes a <span class="glow-a">P25 trunked radio scanner</span>.</h1>
-    <p class="lead">TrunkDeck is a free, easy scanner app for Windows and Linux. It follows a digital trunked radio system, plays and records the calls, and can stream them to Broadcastify, OpenMHz or Rdio Scanner – all from one window, with no other radio software needed.</p>
+    <p class="lead">TrunkDeck is a free, easy scanner app for Windows and Linux. It follows a digital trunked radio system, plays and records the calls, and can stream them to Broadcastify, OpenMHz or Rdio Scanner – all from one window, with no other radio software needed. New in 1.7.5: EDACS, Yaesu System Fusion, analog FM, DMR, NXDN and Motorola Type II systems too.</p>
     <div class="cta">
       <a class="btn primary" href="https://github.com/rcummings14/TrunkDeck/releases/latest">⬇ Download for Windows &amp; Linux</a>
       <a class="btn ghost" href="#tour">▶ Watch the tour</a>
     </div>
-    <p class="small">Free and open source (GPL-3.0 or later) · Version 1.7.4.1 · Windows 10/11 64-bit and popular Linux distributions</p>
+    <p class="small">Free and open source (GPL-3.0 or later) · Version 1.7.5 · Windows 10/11 64-bit and popular Linux distributions</p>
   </div>
 </section>
 
@@ -55,14 +55,24 @@
     <h2>What it does</h2>
     <div class="cards">
       <div class="card"><h3>Built-in decoder</h3><p>Decodes P25 Phase 1 and Phase 2 voice on its own. No SDRTrunk, SDR# or other radio software needed.</p></div>
-      <div class="card"><h3>P25 conventional (untested)</h3><p>Save a system of fixed channels (from RadioReference when it lists them, or by typing the name and the frequencies yourself, with an optional NAC). Press Start the same way as a trunked system. TrunkDeck listens on those channels and decodes the P25 voice. Encrypted calls are skipped. P25 conventional has not been tested on a real radio system yet. If something doesn't work, please <a href="https://github.com/rcummings14/TrunkDeck/issues">report it on GitHub Issues</a>.</p></div>
-      <div class="card"><h3>Works with cheap receivers</h3><p>Use an RTL-SDR dongle or an Airspy. Several dongles can work together to catch more calls.</p></div>
+      <div class="card"><h3>More radio systems (new in 1.7.5)</h3><p>Not just P25: pick the kind of system on the Systems page.</p>
+        <ul class="rx">
+          <li><b>EDACS / ProVoice</b> <span class="tag ok">EDACS tested</span></li>
+          <li><b>Yaesu System Fusion</b>, with analog users on mixed-mode repeaters <span class="tag ok">DN voice tested</span></li>
+          <li><b>Analog FM</b> with CTCSS (PL) tones <span class="tag ok">Tested</span></li>
+          <li><b>DMR</b> conventional, Tier III, Capacity Plus, Connect Plus, XPT <span class="tag warn">Untested</span></li>
+          <li><b>NXDN</b> conventional and Type-C trunked <span class="tag warn">Untested</span></li>
+          <li><b>Motorola Type II</b> SmartNet / SmartZone <span class="tag warn">Untested</span></li>
+        </ul>
+        <p>Untested ones were tried with simulated signals only. If one doesn't work for you, please <a href="https://github.com/rcummings14/TrunkDeck/issues">report it on GitHub Issues</a>.</p></div>
+      <div class="card"><h3>P25 conventional <span class="tag ok">Tested</span></h3><p>Save a system of fixed channels (from RadioReference when it lists them, or by typing the name and the frequencies yourself, with an optional NAC). Press Start the same way as a trunked system. TrunkDeck listens on those channels and decodes the P25 voice. Encrypted calls are skipped. Tested on a real radio system.</p></div>
+      <div class="card"><h3>Works with cheap receivers</h3><p>Use an RTL-SDR dongle or an Airspy. Several dongles can work together to catch more calls. A dongle that stalls or is unplugged comes back by itself, and the Monitor page warns you if one isn't working.</p></div>
       <div class="card"><h3>Share your audio</h3><p>Optional streaming to Broadcastify Calls, Broadcastify Feeds (or any Icecast server), OpenMHz and Rdio Scanner.</p></div>
       <div class="card"><h3>Quick setup from RadioReference</h3><p>Sign in with your RadioReference Premium account, pick your system, and TrunkDeck fills in the channels and talkgroup names.</p></div>
       <div class="card"><h3>Looks like a real scanner</h3><p>A big scanner-style display with colour themes (including an SDS-style look), backlight glow on calls and a scrolling SCANNING ticker.</p></div>
       <div class="card"><h3>Display only mode</h3><p>Shrink the window to just the scanner display – keep it on top while you work. Double-click to get the full window back.</p></div>
       <div class="card"><h3>Hides in the tray</h3><p>Close or minimize to the system tray and keep listening in the background.</p></div>
-      <div class="card"><h3>Tunes itself</h3><p>Measures how far your dongle is off frequency (PPM) and offers a one-click <b>Apply</b> button.</p></div>
+      <div class="card"><h3>Tunes itself</h3><p>Measures how far your dongle is off frequency (PPM) and offers a one-click <b>Apply</b> button. Or calibrate it with a live waterfall on your control channel or a NOAA weather station.</p></div>
       <div class="card"><h3>Your talkgroups, your way</h3><p>Favorite, mute or record talkgroups – one at a time or many at once. Encrypted calls are skipped.</p></div>
       <div class="card"><h3>Every call recorded</h3><p>Recordings of each call, a live call log and an activity graph. Double-click a saved call to play it in TrunkDeck; a live call pauses it.</p></div>
     </div>

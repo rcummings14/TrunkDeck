@@ -301,7 +301,7 @@ public class RadioSystem {
         if (nxdnTrunk()) return "NXDN trunked (untested)";
         if (type2()) return "Motorola Type II (untested)";
         if (edacs()) return "EDACS / ProVoice";
-        if (conventional()) return "Conventional (untested)";
+        if (conventional()) return "Conventional";
         return "Trunked";
     }
 
