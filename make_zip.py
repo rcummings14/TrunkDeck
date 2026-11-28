@@ -87,7 +87,7 @@ def main():
     with open(lin, 'wb') as out:
         with gzip.GzipFile(filename='', mode='wb', fileobj=out, mtime=EPOCH, compresslevel=9) as g: g.write(buf.getvalue())
     verify_linux_archive(lin)
-    with open(os.path.join(dist, 'SHA256SUMS.txt'), 'w') as s:
+    with open(os.path.join(dist, 'SHA256SUMS.txt'), 'w', newline='\n') as s:   # LF, so `sha256sum -c` works on Linux
         for f in (win, lin):
             h = hashlib.sha256(open(f, 'rb').read()).hexdigest(); s.write(f'{h}  {os.path.basename(f)}\n')
             print(f'{os.path.basename(f)}  {os.path.getsize(f)} bytes  sha256 {h}')
