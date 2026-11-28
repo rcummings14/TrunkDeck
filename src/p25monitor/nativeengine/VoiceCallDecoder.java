@@ -680,7 +680,7 @@ final class VoiceCallDecoder {
         synchronized (e) { ActiveCall c = e.callMap.get("Y" + f); if (c != null && !c.ended) e.calls.endCall(c, "end of transmission"); }
     }
 
-    // ------------------------------------------------------------------ analog FM (untested on air)
+    // ------------------------------------------------------------------ analog FM
     /** An analog transmission opened the squelch (and matched the channel's CTCSS tone, when it has one). */
     void onAnalogStart(long f, double tone) {
         if (e.lockedOut(f)) return;
@@ -700,7 +700,7 @@ final class VoiceCallDecoder {
             c.ev = ev;
             e.callMap.put("A" + f, c);
             e.listener.callStarted(ev);
-            e.log("Analog (untested) " + name + toneText(tone).toLowerCase(Locale.ROOT));
+            e.log("Analog " + name + toneText(tone).toLowerCase(Locale.ROOT));
         }
     }
 

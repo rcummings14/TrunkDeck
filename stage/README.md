@@ -1,7 +1,7 @@
 # TrunkDeck 1.7.5 — P25 Phase 1 and Phase 2 trunking monitor (Windows & Linux)
 
 TrunkDeck is a scanner-style dashboard for **P25 trunked radio systems** (Phase 1 or Phase 2 TDMA control channel; Phase 1 and Phase 2 voice).
-New in 1.7.5: EDACS and Yaesu System Fusion DN voice (tested on real systems), and, **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), ProVoice, Fusion VW voice and analog FM systems (see below). Type in a control channel, load your
+New in 1.7.5: EDACS, Yaesu System Fusion DN voice and analog FM (tested on real systems), and, **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), ProVoice and Fusion VW voice (see below). Type in a control channel, load your
 talkgroups from a CSV file, plug in an Airspy R2, an Airspy Mini or one or two RTL-SDR dongles (or, new and untested, an SDRplay, HackRF One, LimeSDR or Ettus USRP), press **START MONITORING**, and watch (and hear) the system
 live: talkgroup, name, frequency, radio ID, call timer, encryption and emergency flags, a control-channel decode meter, an
 activity graph, and a table of **every call that is on the air right now**.
@@ -10,8 +10,8 @@ TrunkDeck decodes everything itself with the **TrunkDeck engine**, its own P25 d
 It talks to your Airspy R2, Airspy Mini and RTL-SDR dongles directly. No other radio program is needed. SDRplay, HackRF, LimeSDR and USRP
 receivers (1.7.0, **untested**) need the free SoapySDR drivers installed - see *Supported receivers*.
 
-**New in 1.7.5 – DMR, NXDN, Motorola Type II, EDACS / ProVoice, Yaesu System Fusion and analog FM (UNTESTED)**
-* **UNTESTED:** apart from EDACS (tested on a real system), these system types are new and **have not been tested on real radio systems**. They were tested with
+**New in 1.7.5 – DMR, NXDN, Motorola Type II, EDACS / ProVoice, Yaesu System Fusion and analog FM (mostly UNTESTED)**
+* **UNTESTED:** apart from EDACS, Fusion DN voice and analog FM (tested on real systems), these system types are new and **have not been tested on real radio systems**. They were tested with
   simulated signals only. If something doesn't work, please report it on **GitHub Issues**
   (<https://github.com/rcummings14/TrunkDeck/issues>) and attach *Copy diagnostics* from the Engine page. P25 is unchanged.
 * Choose the type under **Systems → Kind**:
@@ -765,7 +765,7 @@ own CSV (see *Talkgroup CSV files*).
 * **Mix all calls** plays everything, but the big display doesn't follow individual calls in that mode (the Active calls table does).
 * The LSM/CQPSK (simulcast) demodulator has been tested on public recordings and simulated simulcast, not on a live simulcast site.
 * Unit-to-unit (private) calls, data (PDU) and the HDU are logged but not followed. A terminator's link control is read for a radio name, and the transmission still ends.
-* **DMR, NXDN, Motorola Type II, ProVoice voice and analog FM (1.7.5) are UNTESTED on real radio systems** - only with simulated signals. EDACS has been tested on a real system, and ProVoice frames logged on real systems decode correctly.
+* **DMR, NXDN, Motorola Type II and ProVoice voice (1.7.5) are UNTESTED on real radio systems** - only with simulated signals. EDACS, Fusion DN voice and analog FM have been tested on real systems, and ProVoice frames logged on real systems decode correctly.
   A VHF / UHF Type II system needs its band plan typed in (see *Motorola Type II*).
 * **Encrypted talkgroups can't be heard.** They're still listed, in purple, so you can see the activity.
 * Expect it to decode somewhat worse than mature decoders on weak or fringe signals.

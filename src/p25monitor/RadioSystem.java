@@ -16,7 +16,7 @@ public class RadioSystem {
     public static final String DMR = "dmr", DMR_TRUNK = "dmr-trunk";
     /** NXDN conventional, and NXDN Type-C trunking (NEXEDGE). NXDN48 and NXDN96 are told apart automatically. Untested on air. */
     public static final String NXDN = "nxdn", NXDN_TRUNK = "nxdn-trunk";
-    /** Analog FM conventional channels, with optional CTCSS (PL) tone squelch. Untested on air. */
+    /** Analog FM conventional channels, with optional CTCSS (PL) tone squelch. Tested on a real system. */
     public static final String ANALOG = "analog";
     /** Motorola Type II (SmartNet / SmartZone) trunking: 3600 bit/s control channel, analog FM or P25 voice. Untested on air. */
     public static final String TYPE2 = "type2";
@@ -297,7 +297,7 @@ public class RadioSystem {
         if (dmrTrunk()) return "DMR trunked (untested)";
         if (nxdnConventional()) return "NXDN conventional (untested)";
         if (fusion()) return "Yaesu System Fusion";
-        if (analog()) return "Analog FM (untested)";
+        if (analog()) return "Analog FM";
         if (nxdnTrunk()) return "NXDN trunked (untested)";
         if (type2()) return "Motorola Type II (untested)";
         if (edacs()) return "EDACS / ProVoice";

@@ -3,7 +3,7 @@
 **A scanner-style trunking monitor for Windows and Linux.** TrunkDeck follows a P25 trunked radio system's control
 channel, decodes the voice calls (Phase 1 and Phase 2) with its own built-in engine, plays them, records them, and can
 stream them to Broadcastify, OpenMHz or your own Rdio Scanner server - all from one window, no other radio software needed.
-Also EDACS and Yaesu System Fusion DN voice (tested on real systems), and, new and **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), ProVoice, Fusion VW voice and analog FM systems.
+Also EDACS, Yaesu System Fusion DN voice and analog FM (tested on real systems), and, new and **untested**: DMR, NXDN, Motorola Type II (SmartNet / SmartZone), ProVoice and Fusion VW voice.
 
 ![TrunkDeck main window](docs/screenshots/monitor.png)
 
@@ -33,8 +33,8 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   * **Yaesu System Fusion (conventional):** repeater or simplex frequencies with optional names (`147.1650 WV8HC`).
     DN and VW voice are detected automatically. Each call shows the caller's callsign, the destination and the
     DG-ID (used as the talkgroup, so DG-IDs can be named and muted on the Talkgroups page). Analog FM users on a
-    mixed-mode (AMS) repeater, often heard through WIRES-X, are played as analog calls. Tested only against simulated signals and frames built with MMDVMHost's
-    encoder.
+    mixed-mode (AMS) repeater, often heard through WIRES-X, are played as analog calls. DN voice has been tested on a real repeater; VW voice only against simulated
+    signals and frames built with MMDVMHost's encoder.
   * DMR, NXDN and Fusion DN voice use the AMBE+2 codec, so they need JMBE 2.x, the same as P25 Phase 2.
   * **Set up from RadioReference** now imports these system types too, instead of refusing them.
 * **Motorola Type II SmartNet / SmartZone** (new, **untested**): a new system kind on the Systems page. TrunkDeck
@@ -105,9 +105,9 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   and/or one or more **RTL-SDR** dongles (a control dongle plus roaming voice dongles). Own drivers - no SDR# / SDRTrunk.
   New in 1.7.0 and **untested**: **SDRplay**, **HackRF One**, **LimeSDR** and **Ettus USRP** through SoapySDR - see
   [Supported receivers](#supported-receivers).
-* **Other radio systems** (new in 1.7.5, **untested**): DMR (conventional, Tier III, Capacity Plus, Connect Plus, XPT),
+* **Other radio systems** (new in 1.7.5; EDACS, Fusion DN voice and analog FM tested on real systems, the others **untested**): DMR (conventional, Tier III, Capacity Plus, Connect Plus, XPT),
   NXDN (conventional and Type-C trunking), Motorola Type II SmartNet / SmartZone (analog or P25 voice), Yaesu System
-  Fusion, and analog FM channels with CTCSS, including Hold / Scan / Up / Down on the Monitor page. See [What's new](#whats-new-in-175-beta).
+  Fusion, and analog FM channels with CTCSS, including Hold / Scan / Up / Down on the Monitor page. See [What's new](#whats-new-in-175).
 * **Big scanner display** with colour themes (Full color, SDS-style, amber, ... or your own colours, including the bars
   and the display border), glow, scan lines, backlight on calls, SCANNING ticker.
 * **Control-channel signal meter** (1.7.2): the scanner display shows a signal meter on the control-channel row so you

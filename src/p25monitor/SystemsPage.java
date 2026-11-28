@@ -10,7 +10,7 @@ public class SystemsPage extends JPanel {
     final MainFrame f;
     final DefaultListModel<RadioSystem> listModel = new DefaultListModel<>();
     final JList<RadioSystem> list = new JList<>(listModel);
-    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)", "DMR (conventional, untested)", "DMR trunked (untested)", "NXDN (conventional, untested)", "NXDN trunked (untested)", "Analog FM (conventional, untested)", "Motorola Type II SmartNet / SmartZone (untested)", "EDACS / ProVoice", "Yaesu System Fusion (conventional)"});
+    final JComboBox<String> kindBox = new JComboBox<>(new String[]{"Trunked (control channel)", "Conventional (fixed channels, untested)", "DMR (conventional, untested)", "DMR trunked (untested)", "NXDN (conventional, untested)", "NXDN trunked (untested)", "Analog FM (conventional)", "Motorola Type II SmartNet / SmartZone (untested)", "EDACS / ProVoice", "Yaesu System Fusion (conventional)"});
     /** EDACS addressing, in {@link p25monitor.edacs.EdacsSite.Mode} order. */
     final JComboBox<p25monitor.edacs.EdacsSite.Mode> edacsMode = new JComboBox<>(p25monitor.edacs.EdacsSite.Mode.values());
     /** Motorola Type II band plan; the last entry uses {@link #obtPlan}. Order matches {@link #TYPE2_PLANS}. */
@@ -336,7 +336,7 @@ public class SystemsPage extends JPanel {
         cc.setToolTipText(freqLabel.getToolTipText());
         cc.putClientProperty("JTextField.placeholderText", kind == 2 ? "e.g. 450.0000:1/1 Sample" : kind == 3 ? "e.g. 1=451.0125, 2=451.5125, 3=452.0125" : kind == 4 ? "e.g. 451.0125, 451.0250" : fusion ? "e.g. 147.1650 WV8HC, 444.1750" : analog ? "e.g. 155.2500, 155.3700:100.0 Fire" : kind == 5 ? "e.g. 451.0000, 37=451.0125" : edacs ? "e.g. 851.0125, 1=851.0125, 2=851.2625" : fixed ? "e.g. 155.2500, 155.3700:2D5" : "e.g. 851.0125, 851.5125");
         freqHelp.setText(helpHtml((analog
-                ? "Analog FM channels, separated by commas, each with an optional name. Add a CTCSS (PL) tone after a colon when one channel uses its own, for example 155.3700:100.0. (untested)"
+                ? "Analog FM channels, separated by commas, each with an optional name. Add a CTCSS (PL) tone after a colon when one channel uses its own, for example 155.3700:100.0."
                 : kind == 4
                 ? "NXDN channels, separated by commas. NXDN48 and NXDN96 are detected automatically. (untested)"
                 : fusion
@@ -410,7 +410,7 @@ public class SystemsPage extends JPanel {
         String note = kind == 1 ? "P25 conventional has not been tested on a real radio system yet."
                 : kind == 2 ? "DMR conventional has not been tested on a real radio system yet."
                 : kind == 3 ? "DMR trunking (Tier III, Capacity Plus, Connect Plus and XPT) has not been tested on a real radio system yet."
-                : analog ? "Analog FM with CTCSS has not been tested on a real radio system yet."
+                : analog ? "Analog FM, including CTCSS (PL) tone squelch, has been tested on a real radio system."
                 : kind == 4 ? "NXDN conventional has not been tested on a real radio system yet."
                 : fusion ? "Yaesu System Fusion DN voice has been tested on a real repeater; VW (IMBE) voice has not been tested yet."
                 : kind == 5 ? "NXDN Type-C trunking has not been tested on a real radio system yet."
