@@ -478,7 +478,7 @@ All current calls are decoded and recorded; the **Speaker** box on the Monitor p
   decides which calls get a tuner; it does not reorder the queue. Busy sites with many calls at once will skip a lot - the limit is
   what keeps the speaker close to live.
 
-**Analog FM and P25 conventional: Hold / Scan / Down / Up** (1.7.5; P25 conventional in 1.7.6). While an analog FM or
+**Analog FM and P25 conventional: Hold / Scan / Down / Up** (1.7.5). While an analog FM or
 P25 conventional system is running, these buttons appear under the scanner display on the Monitor page. They are not
 shown for other kinds of system. On P25 conventional they work on channels (frequencies), not talkgroups: to stay on one
 talkgroup, use the speaker's *Hold one talkgroup*.

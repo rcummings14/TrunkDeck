@@ -14,9 +14,9 @@ Also EDACS and Yaesu System Fusion DN voice (tested on real systems), and, new a
 
 If TrunkDeck is useful to you, you can support it here: [https://paypal.me/TrunkDeck](https://paypal.me/TrunkDeck)
 
-## What's new in 1.7.5 beta
+## What's new in 1.7.5
 
-* **More kinds of radio system** (all new and **untested** on real systems; please report how they work on
+* **More kinds of radio system** (new; **untested** on real systems unless marked tested; please report how they work on
   [GitHub Issues](https://github.com/rcummings14/TrunkDeck/issues)). Choose them under **Kind** on the Systems page:
   * **DMR conventional:** channels with their colour code and timeslot (`450.0000:1/2`), or both timeslots.
   * **DMR trunked:** Tier III, Capacity Plus, Connect Plus and XPT. Enter each repeater as `number=MHz`
@@ -60,8 +60,7 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
   for systems that have since moved to a P25 control channel. If the Engine page shows P25 (NAC, WACN, system ID) on
   your control channel but no calls, change the system's Kind to *Trunked (control channel)*.
 * **Hold / Scan / Down / Up / Lockout for analog and P25 conventional** (Monitor page): while an analog FM or P25
-  conventional system is running, these buttons appear under the scanner display. They only show for those systems
-  (P25 conventional is new in 1.7.6).
+  conventional system is running, these buttons appear under the scanner display. They only show for those systems.
   * **Hold** stays on the channel you are hearing (or the last one heard): only that channel plays, and a receiver that
     steps through channel groups stops stepping.
   * **Down** / **Up** step through the channels in the order you entered them, wrapping around, and hold each one.
