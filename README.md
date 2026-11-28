@@ -54,7 +54,8 @@ If TrunkDeck is useful to you, you can support it here: [https://paypal.me/Trunk
     (for example `851.0125, 1=851.0125, 2=851.2625`). Set up from RadioReference fills them in.
   * EDACS has been tested on a real system. ProVoice voice has only been tested against simulated signals; if you
     have a ProVoice site, please report how it works on [GitHub Issues](https://github.com/rcummings14/TrunkDeck/issues).
-  * Protocol facts came from DSD-FME, DSD and mbelib; no code was copied (see [NOTICE.txt](NOTICE.txt)).
+  * The EDACS message decoding comes from DSD-FME (ISC licence); the receiver, error correction and ProVoice
+    decoder are TrunkDeck's own, written from protocol facts in DSD-FME, DSD and mbelib (see [NOTICE.txt](NOTICE.txt)).
 * **RadioReference import:** SmartNet, SmartZone and Type IIi systems now import as Motorola Type II (before, they
   imported as P25). Type I still imports as P25. **Note:** some RadioReference listings still say "Type II SmartZone"
   for systems that have since moved to a P25 control channel. If the Engine page shows P25 (NAC, WACN, system ID) on
@@ -254,15 +255,21 @@ Tests that need them are skipped when they are missing.
 * Broadcastify, OpenMHz, Rdio Scanner, RadioReference, Airspy, RTL-SDR, SDRplay, HackRF, LimeSDR, Ettus and USRP are names of their respective owners;
   TrunkDeck is not affiliated with or endorsed by any of them.
 
-## Credits
+## Contributors & credits
 
-Built by Ray Cummings.  
-Thanks to @phillydjdan for the Display-Only button idea ([Discussion #15](https://github.com/rcummings14/TrunkDeck/discussions/15)) and DMR testing,  
-and @kd8bxp for SDRplay testing, the auto-start idea and the Linux line-ending catch.  
-Thanks to Tim (@Timjnev) for DMR testing and ideas, including the analog Hold / Scan buttons.  
-Thanks to lwvmobile, the author of [DSD-FME](https://github.com/lwvmobile/dsd-fme), and to Ed for their help with EDACS:
-Ed tested it on a real system and sent recordings, and DSD-FME's author helped with the EDACS messages and sent a
-recording of a Phase 2 TDMA control channel.
+Built by Ray Cummings.
+
+**Contributors**
+
+* **lwvmobile** ([@lwvmobile](https://github.com/lwvmobile)), author of [DSD-FME](https://github.com/lwvmobile/dsd-fme):
+  helped with the EDACS control-channel messages (TrunkDeck uses DSD-FME's EDACS message decoding; see
+  [NOTICE.txt](NOTICE.txt)), sent real ProVoice frames to check the ProVoice decoder against, and sent the recording
+  of a Phase 2 TDMA control channel that TrunkDeck's TDMA control-channel support was built and checked on.
+* **Ed** tested EDACS on a real system and sent the recordings the EDACS fixes were found with.
+* **Tim** ([@Timjnev](https://github.com/Timjnev)): DMR testing and ideas, including the analog Hold / Scan buttons.
+* **phillydjdan** ([@phillydjdan](https://github.com/phillydjdan)): the Display-Only idea
+  ([Discussion #15](https://github.com/rcummings14/TrunkDeck/discussions/15)) and DMR testing.
+* **kd8bxp** ([@kd8bxp](https://github.com/kd8bxp)): SDRplay testing, the auto-start idea and the Linux line-ending catch.
 
 ## License
 
